@@ -1,1 +1,1 @@
-web: ts-node-dev src/index.ts
+web: ts-node src/index.ts
