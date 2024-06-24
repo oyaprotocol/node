@@ -21,6 +21,7 @@ export const pool = new Pool({
 
 // Routes
 app.use('/bundle', bundleRouter);
+app.use('/cid', bundleRouter);
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
