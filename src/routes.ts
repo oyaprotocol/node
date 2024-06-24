@@ -1,12 +1,16 @@
 import { Router } from 'express';
 import { saveBundle, getBundle, getAllBundles, saveCID, getCIDsByNonce } from './controllers';
 
-const router = Router();
+const bundleRouter = Router();
+const cidRouter = Router();
 
-router.post('/', saveBundle);
-router.get('/:nonce', getBundle);
-router.get('/', getAllBundles);
-router.post('/cid', saveCID);
-router.get('/cid/:nonce', getCIDsByNonce);
+// Bundle routes
+bundleRouter.post('/', saveBundle);
+bundleRouter.get('/:nonce', getBundle);
+bundleRouter.get('/', getAllBundles);
 
-export { router as bundleRouter };
+// CID routes
+cidRouter.post('/', saveCID);
+cidRouter.get('/:nonce', getCIDsByNonce);
+
+export { bundleRouter, cidRouter };

@@ -2,7 +2,7 @@ import express from 'express';
 import { json } from 'body-parser';
 import dotenv from 'dotenv';
 import { Pool } from 'pg';
-import { bundleRouter } from './routes';
+import { bundleRouter, cidRouter } from './routes';
 
 dotenv.config();
 
@@ -21,7 +21,7 @@ export const pool = new Pool({
 
 // Routes
 app.use('/bundle', bundleRouter);
-app.use('/cid', bundleRouter);
+app.use('/cid', cidRouter);
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
