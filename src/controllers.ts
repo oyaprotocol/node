@@ -35,3 +35,13 @@ export const getBundle = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
+
+export const getAllBundles = async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query('SELECT * FROM bundles');
+    res.status(200).json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
