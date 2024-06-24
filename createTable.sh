@@ -8,13 +8,20 @@ DATABASE_URL=$(heroku config:get DATABASE_URL -a $HEROKU_APP_NAME)
 
 echo "Database URL: $DATABASE_URL"
 
-# Connect to the database and create the table
+# Connect to the database and create the tables
 psql $DATABASE_URL <<EOF
-CREATE TABLE bundles (
+CREATE TABLE IF NOT EXISTS bundles (
   id SERIAL PRIMARY KEY,
   intention JSONB,
   proof JSONB
 );
+
+CREATE TABLE IF NOT EXISTS cids (
+  id SERIAL PRIMARY KEY,
+  cid TEXT NOT NULL,
+  nonce INTEGER NOT NULL,
+  timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
 EOF
 
-echo "Table 'bundles' created successfully."
+echo "Tables 'bundles' and 'cids' created successfully."
