@@ -6,8 +6,8 @@ export const saveBundle = async (req: Request, res: Response) => {
 
   try {
     const result = await pool.query(
-      'INSERT INTO bundles (intention, proof) VALUES ($1, $2) RETURNING *',
-      [intention, proof]
+      'INSERT INTO bundles (intention, proof) VALUES ($1::jsonb, $2::jsonb) RETURNING *',
+      [JSON.stringify(intention), JSON.stringify(proof)]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
