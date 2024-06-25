@@ -12,16 +12,23 @@ export const saveBundle = async (req: Request, res: Response) => {
   }
 
   try {
+    // Stringify the bundle before insertion
+    const bundleString = JSON.stringify(bundle);
+
+    console.log("Stringified bundle for DB:", bundleString);
+
     const result = await pool.query(
       'INSERT INTO bundles (bundle, nonce) VALUES ($1::jsonb, $2) RETURNING *',
-      [bundle, nonce]
+      [bundleString, nonce]
     );
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error("Database insertion error:", err);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
+
 
 export const getBundle = async (req: Request, res: Response) => {
   const { nonce } = req.params;
