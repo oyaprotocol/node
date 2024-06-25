@@ -2,7 +2,15 @@ import { Request, Response } from 'express';
 import { pool } from './index';
 
 export const saveBundle = async (req: Request, res: Response) => {
-  const { bundle, nonce } = req.body;
+  let { bundle, nonce } = req.body;
+
+  if (typeof bundle === 'string') {
+    try {
+      bundle = JSON.parse(bundle);
+    } catch (error) {
+      return res.status(400).json({ error: 'Invalid JSON format for bundle' });
+    }
+  }
 
   if (!bundle || typeof nonce !== 'number') {
     return res.status(400).json({ error: 'Invalid bundle data' });
