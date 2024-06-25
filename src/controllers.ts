@@ -4,6 +4,7 @@ import { pool } from './index';
 export const saveBundle = async (req: Request, res: Response) => {
   let { bundle, nonce } = req.body;
   console.log("bundle", bundle);
+  console.log("type of bundle:", typeof bundle);
   console.log("nonce", nonce);
 
   if (typeof bundle === 'string') {
