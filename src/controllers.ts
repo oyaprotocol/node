@@ -2,16 +2,16 @@ import { Request, Response } from 'express';
 import { pool } from './index';
 
 export const saveBundle = async (req: Request, res: Response) => {
-  const { intention, proof } = req.body;
+  const { bundle, nonce } = req.body;
 
-  if (!intention || !proof) {
+  if (!bundle || typeof nonce !== 'number') {
     return res.status(400).json({ error: 'Invalid bundle data' });
   }
 
   try {
     const result = await pool.query(
-      'INSERT INTO bundles (intention, proof) VALUES ($1::jsonb, $2::jsonb) RETURNING *',
-      [intention, proof]
+      'INSERT INTO bundles (bundle, nonce) VALUES ($1::jsonb, $2) RETURNING *',
+      [bundle, nonce]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {

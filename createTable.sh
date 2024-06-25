@@ -10,12 +10,14 @@ echo "Database URL: $DATABASE_URL"
 
 # Connect to the database and create the tables
 psql $DATABASE_URL <<EOF
+DROP TABLE IF EXISTS bundles;
 CREATE TABLE IF NOT EXISTS bundles (
   id SERIAL PRIMARY KEY,
-  intention JSONB,
-  proof JSONB
+  bundle JSONB,
+  nonce INTEGER NOT NULL
 );
 
+DROP TABLE IF EXISTS cids;
 CREATE TABLE IF NOT EXISTS cids (
   id SERIAL PRIMARY KEY,
   cid TEXT NOT NULL,
