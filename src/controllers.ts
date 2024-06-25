@@ -4,10 +4,14 @@ import { pool } from './index';
 export const saveBundle = async (req: Request, res: Response) => {
   const { intention, proof } = req.body;
 
+  if (!intention || !proof) {
+    return res.status(400).json({ error: 'Invalid bundle data' });
+  }
+
   try {
     const result = await pool.query(
       'INSERT INTO bundles (intention, proof) VALUES ($1::jsonb, $2::jsonb) RETURNING *',
-      [JSON.stringify(intention), JSON.stringify(proof)]
+      [intention, proof]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
