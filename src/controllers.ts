@@ -29,13 +29,12 @@ export const saveBundle = async (req: Request, res: Response) => {
   }
 };
 
-
 export const getBundle = async (req: Request, res: Response) => {
   const { nonce } = req.params;
 
   try {
     const result = await pool.query(
-      'SELECT * FROM bundles WHERE nonce = $1 ORDER BY created_at DESC',
+      'SELECT * FROM bundles WHERE nonce = $1 ORDER BY timestamp DESC',
       [parseInt(nonce)]
     );
 
