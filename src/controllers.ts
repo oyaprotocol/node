@@ -35,7 +35,7 @@ export const getBundle = async (req: Request, res: Response) => {
 
   try {
     const result = await pool.query(
-      'SELECT * FROM bundles WHERE (intention ->> \'nonce\')::int = $1',
+      'SELECT * FROM bundles WHERE nonce = $1 ORDER BY created_at DESC',
       [parseInt(nonce)]
     );
 
@@ -43,7 +43,7 @@ export const getBundle = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Bundle not found' });
     }
 
-    res.status(200).json(result.rows[0]);
+    res.status(200).json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal Server Error' });
