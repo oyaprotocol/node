@@ -51,7 +51,7 @@ export const getBundle = async (req: Request, res: Response) => {
 
 export const getAllBundles = async (req: Request, res: Response) => {
   try {
-    const result = await pool.query('SELECT * FROM bundles');
+    const result = await pool.query('SELECT * FROM bundles ORDER BY timestamp DESC');
     res.status(200).json(result.rows);
   } catch (err) {
     console.error(err);
