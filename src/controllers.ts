@@ -59,7 +59,7 @@ export const getAllBundles = async (req: Request, res: Response) => {
   }
 };
 
-export const getAllBalances = async (req: Request, res: Response) => {
+export const getBalanceForAllTokens = async (req: Request, res: Response) => {
   const { account } = req.params;
 
   try {
