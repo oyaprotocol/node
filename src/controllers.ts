@@ -59,7 +59,6 @@ export const getAllBundles = async (req: Request, res: Response) => {
   }
 };
 
-// TODO: Balance functions
 export const getAllBalances = async (req: Request, res: Response) => {
   const { account } = req.params;
 
