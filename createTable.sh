@@ -1,10 +1,7 @@
 #!/bin/bash
 
-# Set the Heroku app name
-HEROKU_APP_NAME="oya-api"
-
-# Get the database URL from Heroku
-DATABASE_URL=$(heroku config:get DATABASE_URL -a $HEROKU_APP_NAME)
+# Get the database URL from the argument
+DATABASE_URL=$1
 
 echo "Database URL: $DATABASE_URL"
 
