@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { saveBundle, getBundle, getAllBundles, saveCID, getCIDsByNonce, updateBalanceForOneToken } from './controllers';
+import { saveBundle, getBundle, getAllBundles, saveCID, getCIDsByNonce, updateBalanceForOneToken, getBalanceForOneToken, getBalanceForAllTokens } from './controllers';
 
 const bundleRouter = Router();
 const cidRouter = Router();
+const balanceRouter = Router();
 
 // Bundle routes
 bundleRouter.post('/', saveBundle);
