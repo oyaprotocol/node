@@ -25,6 +25,15 @@ CREATE TABLE IF NOT EXISTS cids (
   nonce INTEGER NOT NULL,
   timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+DROP TABLE IF EXISTS balances;
+CREATE TABLE IF NOT EXISTS balances (
+  id SERIAL PRIMARY KEY,
+  account TEXT NOT NULL,
+  token TEXT NOT NULL,
+  balance NUMERIC NOT NULL,
+  timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
 EOF
 
-echo "Tables 'bundles' and 'cids' created successfully."
+echo "Tables 'bundles', 'cids', and 'balances' created successfully."
