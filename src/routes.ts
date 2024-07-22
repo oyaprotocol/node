@@ -19,4 +19,4 @@ balanceRouter.post('/', updateBalanceForOneToken);
 balanceRouter.get('/:account/:token', getBalanceForOneToken);
 balanceRouter.get('/:account', getBalanceForAllTokens);
 
-export { bundleRouter, cidRouter };
+export { bundleRouter, cidRouter, balanceRouter };
