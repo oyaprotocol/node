@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS balances (
   token TEXT NOT NULL,
   balance NUMERIC NOT NULL,
   timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (account, token) -- Add a unique constraint on account and token
+  UNIQUE (account, token)
 );
 EOF
 
