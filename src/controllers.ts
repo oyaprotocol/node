@@ -94,15 +94,32 @@ export const getBalanceForOneToken = async (req: Request, res: Response) => {
   }
 }
 
+// Update balance for a specific token for a given account
 export const updateBalanceForOneToken = async (req: Request, res: Response) => {
   const { account, token, balance } = req.body;
 
   try {
-    const result = await pool.query(
-      'INSERT INTO balances (account, token, balance) VALUES ($1, $2, $3) RETURNING *',
-      [account, token, balance]
+    // Check if the account already has a balance for the token
+    const checkResult = await pool.query(
+      'SELECT * FROM balances WHERE account = $1 AND token = $2',
+      [account, token]
     );
-    res.status(201).json(result.rows[0]);
+
+    if (checkResult.rows.length === 0) {
+      // Insert new balance if it doesn't exist
+      const insertResult = await pool.query(
+        'INSERT INTO balances (account, token, balance) VALUES ($1, $2, $3) RETURNING *',
+        [account, token, balance]
+      );
+      return res.status(201).json(insertResult.rows[0]);
+    } else {
+      // Update existing balance
+      const updateResult = await pool.query(
+        'UPDATE balances SET balance = balance + $1, timestamp = CURRENT_TIMESTAMP WHERE account = $2 AND token = $3 RETURNING *',
+        [balance, account, token]
+      );
+      return res.status(200).json(updateResult.rows[0]);
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal Server Error' });
