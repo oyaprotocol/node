@@ -67,6 +67,7 @@ export const getBalanceForAllTokens = async (req: Request, res: Response) => {
       'SELECT * FROM balances WHERE account = $1 ORDER BY timestamp DESC',
       [account]
     );
+    console.log(result.rows);
     res.status(200).json(result.rows);
   } catch (err) {
     console.error(err);
