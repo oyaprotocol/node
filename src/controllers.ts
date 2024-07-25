@@ -113,20 +113,23 @@ export const updateBalanceForOneToken = async (req: Request, res: Response) => {
         'INSERT INTO balances (account, token, balance) VALUES ($1, $2, $3) RETURNING *',
         [account, token, balance]
       );
+      console.log(`Inserted new balance: ${JSON.stringify(insertResult.rows[0])}`);
       return res.status(201).json(insertResult.rows[0]);
     } else {
       // Update existing balance
       const updateResult = await pool.query(
-        'UPDATE balances SET balance = balance + $1, timestamp = CURRENT_TIMESTAMP WHERE account = $2 AND token = $3 RETURNING *',
+        'UPDATE balances SET balance = $1, timestamp = CURRENT_TIMESTAMP WHERE account = $2 AND token = $3 RETURNING *',
         [balance, account, token]
       );
+      console.log(`Updated existing balance: ${JSON.stringify(updateResult.rows[0])}`);
       return res.status(200).json(updateResult.rows[0]);
     }
   } catch (err) {
-    console.error(err);
+    console.error('Error updating balance:', err);
     res.status(500).json({ error: 'Internal Server Error' });
   }
-}
+};
+
 
 export const saveCID = async (req: Request, res: Response) => {
   const { cid, nonce } = req.body;
