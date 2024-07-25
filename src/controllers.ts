@@ -67,7 +67,7 @@ export const getBalanceForAllTokens = async (req: Request, res: Response) => {
       'SELECT * FROM balances WHERE account = $1 ORDER BY timestamp DESC',
       [account]
     );
-    console.log(result.rows);
+    console.log("Getting all token balances:", result.rows);
     res.status(200).json(result.rows);
   } catch (err) {
     console.error(err);
@@ -83,6 +83,7 @@ export const getBalanceForOneToken = async (req: Request, res: Response) => {
       'SELECT * FROM balances WHERE account = $1 AND token = $2 ORDER BY timestamp DESC',
       [account, token]
     );
+    console.log("Getting balance for one token:", result.rows);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Balance not found' });
@@ -126,7 +127,6 @@ export const updateBalanceForOneToken = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 }
-
 
 export const saveCID = async (req: Request, res: Response) => {
   const { cid, nonce } = req.body;
