@@ -165,3 +165,33 @@ export const getCIDsByNonce = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
+
+export const getAccountNonce = async (req: Request, res: Response) => {
+  const { account } = req.params;
+  try {
+    const result = await pool.query('SELECT nonce FROM nonces WHERE account = $1', [account]);
+    console.log("Getting account nonce:", result.rows);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Nonce not found' });
+    }
+    res.status(200).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
+
+export const setAccountNonce = async (req: Request, res: Response) => {
+  const { account, nonce } = req.body;
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO nonces (account, nonce) VALUES ($1, $2) RETURNING *',
+      [account, nonce]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
