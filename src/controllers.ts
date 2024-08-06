@@ -182,7 +182,8 @@ export const getAccountNonce = async (req: Request, res: Response) => {
 }
 
 export const setAccountNonce = async (req: Request, res: Response) => {
-  const { account, nonce } = req.body;
+  const { account } = req.params;
+  const { nonce } = req.body;
 
   try {
     const result = await pool.query(
