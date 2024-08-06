@@ -21,7 +21,7 @@ balanceRouter.get('/:account/:token', getBalanceForOneToken);
 balanceRouter.get('/:account', getBalanceForAllTokens);
 
 // Account nonce routes
-accountNonceRouter.get('/nonce/:account', getAccountNonce);
-accountNonceRouter.post('/nonce/:account', setAccountNonce);
+accountNonceRouter.get('/:account', getAccountNonce);
+accountNonceRouter.post('/:account', setAccountNonce);
 
 export { bundleRouter, cidRouter, balanceRouter, accountNonceRouter };
