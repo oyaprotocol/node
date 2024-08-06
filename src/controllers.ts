@@ -166,6 +166,7 @@ export const getCIDsByNonce = async (req: Request, res: Response) => {
   }
 };
 
+// Handle GET request to fetch nonce
 export const getAccountNonce = async (req: Request, res: Response) => {
   const { account } = req.params;
   try {
@@ -181,6 +182,7 @@ export const getAccountNonce = async (req: Request, res: Response) => {
   }
 }
 
+// Handle POST request to set nonce
 export const setAccountNonce = async (req: Request, res: Response) => {
   const { account } = req.params;
   const { nonce } = req.body;
