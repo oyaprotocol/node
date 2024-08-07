@@ -189,7 +189,11 @@ export const setAccountNonce = async (req: Request, res: Response) => {
 
   try {
     const result = await pool.query(
-      'INSERT INTO nonces (account, nonce) VALUES ($1, $2) RETURNING *',
+      `INSERT INTO nonces (account, nonce) 
+       VALUES ($1, $2) 
+       ON CONFLICT (account) 
+       DO UPDATE SET nonce = EXCLUDED.nonce 
+       RETURNING *`,
       [account, nonce]
     );
     res.status(201).json(result.rows[0]);
