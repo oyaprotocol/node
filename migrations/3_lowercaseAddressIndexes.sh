@@ -1,10 +1,11 @@
 #!/bin/bash
+# ./migrations/3_lowercaseAddressIndexes.sh --app-name oya-api
 
 APP_NAME=""
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 --app-name heroku-app-name"
+    echo "Usage: $0 --app-name oya-api"
     exit 1
 }
 
