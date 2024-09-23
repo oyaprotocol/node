@@ -12,7 +12,6 @@ export const saveBundle = async (req: Request, res: Response) => {
   }
 
   try {
-    // Stringify the bundle before insertion
     const bundleString = JSON.stringify(bundle);
 
     console.log("Stringified bundle for DB:", bundleString);
@@ -64,7 +63,7 @@ export const getBalanceForAllTokens = async (req: Request, res: Response) => {
 
   try {
     const result = await pool.query(
-      'SELECT * FROM balances WHERE account = $1 ORDER BY timestamp DESC',
+      'SELECT * FROM balances WHERE LOWER(account) = LOWER($1) ORDER BY timestamp DESC',
       [account]
     );
     console.log("Getting all token balances:", result.rows);
@@ -73,14 +72,14 @@ export const getBalanceForAllTokens = async (req: Request, res: Response) => {
     console.error(err);
     res.status(500).json({ error: 'Internal Server Error' });
   }
-}
+};
 
 export const getBalanceForOneToken = async (req: Request, res: Response) => {
   const { account, token } = req.params;
 
   try {
     const result = await pool.query(
-      'SELECT * FROM balances WHERE account = $1 AND token = $2 ORDER BY timestamp DESC',
+      'SELECT * FROM balances WHERE LOWER(account) = LOWER($1) AND LOWER(token) = LOWER($2) ORDER BY timestamp DESC',
       [account, token]
     );
     console.log("Getting balance for one token:", result.rows);
@@ -94,31 +93,28 @@ export const getBalanceForOneToken = async (req: Request, res: Response) => {
     console.error(err);
     res.status(500).json({ error: 'Internal Server Error' });
   }
-}
+};
 
 // Update balance for a specific token for a given account
 export const updateBalanceForOneToken = async (req: Request, res: Response) => {
   const { account, token, balance } = req.body;
 
   try {
-    // Check if the account already has a balance for the token
     const checkResult = await pool.query(
-      'SELECT * FROM balances WHERE account = $1 AND token = $2',
+      'SELECT * FROM balances WHERE LOWER(account) = LOWER($1) AND LOWER(token) = LOWER($2)',
       [account, token]
     );
 
     if (checkResult.rows.length === 0) {
-      // Insert new balance if it doesn't exist
       const insertResult = await pool.query(
-        'INSERT INTO balances (account, token, balance) VALUES ($1, $2, $3) RETURNING *',
+        'INSERT INTO balances (account, token, balance) VALUES (LOWER($1), LOWER($2), $3) RETURNING *',
         [account, token, balance]
       );
       console.log(`Inserted new balance: ${JSON.stringify(insertResult.rows[0])}`);
       return res.status(201).json(insertResult.rows[0]);
     } else {
-      // Update existing balance
       const updateResult = await pool.query(
-        'UPDATE balances SET balance = $1, timestamp = CURRENT_TIMESTAMP WHERE account = $2 AND token = $3 RETURNING *',
+        'UPDATE balances SET balance = $1, timestamp = CURRENT_TIMESTAMP WHERE LOWER(account) = LOWER($2) AND LOWER(token) = LOWER($3) RETURNING *',
         [balance, account, token]
       );
       console.log(`Updated existing balance: ${JSON.stringify(updateResult.rows[0])}`);
@@ -129,7 +125,6 @@ export const updateBalanceForOneToken = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
-
 
 export const saveCID = async (req: Request, res: Response) => {
   const { cid, nonce } = req.body;
@@ -170,7 +165,10 @@ export const getCIDsByNonce = async (req: Request, res: Response) => {
 export const getAccountNonce = async (req: Request, res: Response) => {
   const { account } = req.params;
   try {
-    const result = await pool.query('SELECT nonce FROM nonces WHERE account = $1', [account]);
+    const result = await pool.query(
+      'SELECT nonce FROM nonces WHERE LOWER(account) = LOWER($1)', 
+      [account]
+    );
     console.log("Getting account nonce:", result.rows);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Nonce not found' });
@@ -180,7 +178,7 @@ export const getAccountNonce = async (req: Request, res: Response) => {
     console.error(err);
     res.status(500).json({ error: 'Internal Server Error' });
   }
-}
+};
 
 // Handle POST request to set nonce
 export const setAccountNonce = async (req: Request, res: Response) => {
@@ -190,7 +188,7 @@ export const setAccountNonce = async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `INSERT INTO nonces (account, nonce) 
-       VALUES ($1, $2) 
+       VALUES (LOWER($1), $2) 
        ON CONFLICT (account) 
        DO UPDATE SET nonce = EXCLUDED.nonce 
        RETURNING *`,
@@ -201,4 +199,4 @@ export const setAccountNonce = async (req: Request, res: Response) => {
     console.error(err);
     res.status(500).json({ error: 'Internal Server Error' });
   }
-}
+};
