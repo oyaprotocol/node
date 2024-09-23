@@ -30,4 +30,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_account_nonces ON nonces (LOWER(a
 heroku pg:psql --app "$APP_NAME" -c "
 CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_account_token_balances ON balances (LOWER(account), LOWER(token));"
 
-echo "Case-insensitive unique indexes added successfully."
+# Update all existing account values in 'nonces' to lowercase
+heroku pg:psql --app "$APP_NAME" -c "
+UPDATE nonces SET account = LOWER(account);"
+
+# Update all existing account values in 'balances' to lowercase
+heroku pg:psql --app "$APP_NAME" -c "
+UPDATE balances SET account = LOWER(account), token = LOWER(token);"
+
+echo "Case-insensitive unique indexes added and existing accounts updated to lowercase."

@@ -189,7 +189,7 @@ export const setAccountNonce = async (req: Request, res: Response) => {
     const result = await pool.query(
       `INSERT INTO nonces (account, nonce) 
        VALUES (LOWER($1), $2) 
-       ON CONFLICT (account) 
+       ON CONFLICT (LOWER(account)) 
        DO UPDATE SET nonce = EXCLUDED.nonce 
        RETURNING *`,
       [account, nonce]
@@ -200,3 +200,4 @@ export const setAccountNonce = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
+
