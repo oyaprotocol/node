@@ -1,3 +1,5 @@
+// Need to add authorization to routes, so that only the bundler can call POST routes.
+
 import { Router } from 'express';
 import { 
   saveBundle, 
