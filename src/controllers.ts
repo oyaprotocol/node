@@ -95,7 +95,6 @@ export const getBalanceForOneToken = async (req: Request, res: Response) => {
   }
 };
 
-// Update balance for a specific token for a given account
 export const updateBalanceForOneToken = async (req: Request, res: Response) => {
   const { account, token, balance } = req.body;
 
