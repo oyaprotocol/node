@@ -25,18 +25,18 @@ fi
 
 # Add the case-insensitive unique index for the 'nonces' table
 heroku pg:psql --app "$APP_NAME" -c "
-CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_account_nonces ON nonces (LOWER(account));"
+CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_vault_nonces ON nonces (LOWER(vault));"
 
 # Add the case-insensitive unique index for the 'balances' table
 heroku pg:psql --app "$APP_NAME" -c "
-CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_account_token_balances ON balances (LOWER(account), LOWER(token));"
+CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_vault_token_balances ON balances (LOWER(vault), LOWER(token));"
 
-# Update all existing account values in 'nonces' to lowercase
+# Update all existing vault values in 'nonces' to lowercase
 heroku pg:psql --app "$APP_NAME" -c "
-UPDATE nonces SET account = LOWER(account);"
+UPDATE nonces SET vault = LOWER(vault);"
 
-# Update all existing account values in 'balances' to lowercase
+# Update all existing vault values in 'balances' to lowercase
 heroku pg:psql --app "$APP_NAME" -c "
-UPDATE balances SET account = LOWER(account), token = LOWER(token);"
+UPDATE balances SET vault = LOWER(vault), token = LOWER(token);"
 
-echo "Case-insensitive unique indexes added and existing accounts updated to lowercase."
+echo "Case-insensitive unique indexes added and existing vaults updated to lowercase."

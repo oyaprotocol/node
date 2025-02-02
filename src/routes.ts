@@ -1,28 +1,28 @@
-// Need to add authorization to routes, so that only the bundler can call POST routes.
+// Need to add authorization to routes, so that only the blockr can call POST routes.
 
 import { Router } from 'express';
 import { 
-  saveBundle, 
-  getBundle, 
-  getAllBundles, 
+  saveBlock, 
+  getBlock, 
+  getAllBlocks, 
   saveCID, 
   getCIDsByNonce, 
   updateBalanceForOneToken, 
   getBalanceForOneToken, 
   getBalanceForAllTokens, 
-  getAccountNonce, 
-  setAccountNonce 
+  getVaultNonce, 
+  setVaultNonce 
 } from './controllers';
 
-const bundleRouter = Router();
+const blockRouter = Router();
 const cidRouter = Router();
 const balanceRouter = Router();
-const accountNonceRouter = Router();
+const vaultNonceRouter = Router();
 
-// Bundle routes
-bundleRouter.post('/', saveBundle);
-bundleRouter.get('/:nonce', getBundle);
-bundleRouter.get('/', getAllBundles);
+// Block routes
+blockRouter.post('/', saveBlock);
+blockRouter.get('/:nonce', getBlock);
+blockRouter.get('/', getAllBlocks);
 
 // CID routes
 cidRouter.post('/', saveCID);
@@ -30,11 +30,11 @@ cidRouter.get('/:nonce', getCIDsByNonce);
 
 // Balance routes
 balanceRouter.post('/', updateBalanceForOneToken);
-balanceRouter.get('/:account/:token', getBalanceForOneToken);
-balanceRouter.get('/:account', getBalanceForAllTokens);
+balanceRouter.get('/:vault/:token', getBalanceForOneToken);
+balanceRouter.get('/:vault', getBalanceForAllTokens);
 
-// Account nonce routes
-accountNonceRouter.get('/:account', getAccountNonce);
-accountNonceRouter.post('/:account', setAccountNonce);
+// Vault nonce routes
+vaultNonceRouter.get('/:vault', getVaultNonce);
+vaultNonceRouter.post('/:vault', setVaultNonce);
 
-export { bundleRouter, cidRouter, balanceRouter, accountNonceRouter };
+export { blockRouter, cidRouter, balanceRouter, vaultNonceRouter };

@@ -9,9 +9,9 @@ import { app } from '../src/index'; // Import your Express app
 before(async () => {
   // Create tables for testing
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS bundles (
+    CREATE TABLE IF NOT EXISTS blocks (
       id SERIAL PRIMARY KEY,
-      bundle JSONB NOT NULL,
+      block JSONB NOT NULL,
       nonce INT NOT NULL,
       timestamp TIMESTAMPTZ DEFAULT NOW()
     )
@@ -19,7 +19,7 @@ before(async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS balances (
       id SERIAL PRIMARY KEY,
-      account TEXT NOT NULL,
+      vault TEXT NOT NULL,
       token TEXT NOT NULL,
       balance NUMERIC NOT NULL,
       timestamp TIMESTAMPTZ DEFAULT NOW()
@@ -36,7 +36,7 @@ before(async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS nonces (
       id SERIAL PRIMARY KEY,
-      account TEXT NOT NULL,
+      vault TEXT NOT NULL,
       nonce INT NOT NULL,
       timestamp TIMESTAMPTZ DEFAULT NOW()
     )
@@ -46,7 +46,7 @@ before(async () => {
 // Clean up the test environment
 after(async () => {
   // Drop tables after testing
-  await pool.query('DROP TABLE IF EXISTS bundles');
+  await pool.query('DROP TABLE IF EXISTS blocks');
   await pool.query('DROP TABLE IF EXISTS balances');
   await pool.query('DROP TABLE IF EXISTS cids');
   await pool.query('DROP TABLE IF EXISTS nonces');
@@ -54,55 +54,55 @@ after(async () => {
 
 describe('API Tests', () => {
 
-  describe('POST /bundle', () => {
-    it('should save a bundle', async () => {
+  describe('POST /block', () => {
+    it('should save a block', async () => {
       const res = await request(app)
-        .post('/bundle')
+        .post('/block')
         .send({
-          bundle: { some: 'data' },
+          block: { some: 'data' },
           nonce: 1
         });
       expect(res.status).to.equal(201);
-      expect(res.body).to.have.property('bundle');
+      expect(res.body).to.have.property('block');
       expect(res.body).to.have.property('nonce', 1);
     });
 
     it('should return 400 for invalid data', async () => {
       const res = await request(app)
-        .post('/bundle')
+        .post('/block')
         .send({
-          bundle: null,
+          block: null,
           nonce: 'invalid'
         });
       expect(res.status).to.equal(400);
     });
   });
 
-  describe('GET /bundle/:nonce', () => {
-    it('should get a bundle by nonce', async () => {
-      await pool.query('INSERT INTO bundles (bundle, nonce) VALUES ($1, $2)', [JSON.stringify({ some: 'data' }), 1]);
+  describe('GET /block/:nonce', () => {
+    it('should get a block by nonce', async () => {
+      await pool.query('INSERT INTO blocks (block, nonce) VALUES ($1, $2)', [JSON.stringify({ some: 'data' }), 1]);
 
       const res = await request(app)
-        .get('/bundle/1')
+        .get('/block/1')
         .send();
       expect(res.status).to.equal(200);
       expect(res.body).to.be.an('array');
-      expect(res.body[0]).to.have.property('bundle');
+      expect(res.body[0]).to.have.property('block');
       expect(res.body[0]).to.have.property('nonce', 1);
     });
 
-    it('should return 404 for non-existing bundle', async () => {
+    it('should return 404 for non-existing block', async () => {
       const res = await request(app)
-        .get('/bundle/999')
+        .get('/block/999')
         .send();
       expect(res.status).to.equal(404);
     });
   });
 
-  describe('GET /bundle', () => {
-    it('should get all bundles', async () => {
+  describe('GET /block', () => {
+    it('should get all blocks', async () => {
       const res = await request(app)
-        .get('/bundle')
+        .get('/block')
         .send();
       expect(res.status).to.equal(200);
       expect(res.body).to.be.an('array');
@@ -144,65 +144,65 @@ describe('API Tests', () => {
     });
   });
 
-  describe('GET /balance/:account', () => {
-    it('should get balances for an account', async () => {
-      await pool.query('INSERT INTO balances (account, token, balance) VALUES ($1, $2, $3)', ['account1', 'token1', 100]);
+  describe('GET /balance/:vault', () => {
+    it('should get balances for an vault', async () => {
+      await pool.query('INSERT INTO balances (vault, token, balance) VALUES ($1, $2, $3)', ['vault1', 'token1', 100]);
 
       const res = await request(app)
-        .get('/balance/account1')
+        .get('/balance/vault1')
         .send();
       expect(res.status).to.equal(200);
       expect(res.body).to.be.an('array');
-      expect(res.body[0]).to.have.property('account', 'account1');
+      expect(res.body[0]).to.have.property('vault', 'vault1');
       expect(res.body[0]).to.have.property('token', 'token1');
       expect(res.body[0]).to.have.property('balance', '100'); // balance is returned as a string from numeric type
     });
   });
 
-  describe('GET /balance/:account/:token', () => {
-    it('should get balance for an account and token', async () => {
-      await pool.query('INSERT INTO balances (account, token, balance) VALUES ($1, $2, $3)', ['account1', 'token1', 100]);
+  describe('GET /balance/:vault/:token', () => {
+    it('should get balance for an vault and token', async () => {
+      await pool.query('INSERT INTO balances (vault, token, balance) VALUES ($1, $2, $3)', ['vault1', 'token1', 100]);
 
       const res = await request(app)
-        .get('/balance/account1/token1')
+        .get('/balance/vault1/token1')
         .send();
       expect(res.status).to.equal(200);
       expect(res.body).to.be.an('array');
-      expect(res.body[0]).to.have.property('account', 'account1');
+      expect(res.body[0]).to.have.property('vault', 'vault1');
       expect(res.body[0]).to.have.property('token', 'token1');
       expect(res.body[0]).to.have.property('balance', '100'); // balance is returned as a string from numeric type
     });
 
     it('should return 404 for non-existing balance', async () => {
       const res = await request(app)
-        .get('/balance/account1/nonexistenttoken')
+        .get('/balance/vault1/nonexistenttoken')
         .send();
       expect(res.status).to.equal(404);
     });
   });
 
   describe('POST /balance', () => {
-    it('should update balance for an account and token', async () => {
+    it('should update balance for an vault and token', async () => {
       const res = await request(app)
         .post('/balance')
         .send({
-          account: 'account1',
+          vault: 'vault1',
           token: 'token1',
           balance: 200
         });
       expect(res.status).to.equal(201);
-      expect(res.body).to.have.property('account', 'account1');
+      expect(res.body).to.have.property('vault', 'vault1');
       expect(res.body).to.have.property('token', 'token1');
       expect(res.body).to.have.property('balance', '200'); // balance is returned as a string from numeric type
     });
   });
 
-  describe('GET /nonce/:account', () => {
-    it('should get nonce for an account', async () => {
-      await pool.query('INSERT INTO nonces (account, nonce) VALUES ($1, $2)', ['account1', 1]);
+  describe('GET /nonce/:vault', () => {
+    it('should get nonce for an vault', async () => {
+      await pool.query('INSERT INTO nonces (vault, nonce) VALUES ($1, $2)', ['vault1', 1]);
 
       const res = await request(app)
-        .get('/nonce/account1')
+        .get('/nonce/vault1')
         .send();
       expect(res.status).to.equal(200);
       expect(res.body).to.have.property('nonce', 1);
@@ -210,22 +210,22 @@ describe('API Tests', () => {
 
     it('should return 404 for non-existing nonce', async () => {
       const res = await request(app)
-        .get('/nonce/nonexistentaccount')
+        .get('/nonce/nonexistentvault')
         .send();
       expect(res.status).to.equal(404);
     });
   });
 
   describe('POST /nonce', () => {
-    it('should set nonce for an account', async () => {
+    it('should set nonce for an vault', async () => {
       const res = await request(app)
         .post('/nonce')
         .send({
-          account: 'account1',
+          vault: 'vault1',
           nonce: 2
         });
       expect(res.status).to.equal(201);
-      expect(res.body).to.have.property('account', 'account1');
+      expect(res.body).to.have.property('vault', 'vault1');
       expect(res.body).to.have.property('nonce', 2);
     });
   });

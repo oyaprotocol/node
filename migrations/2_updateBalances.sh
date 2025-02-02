@@ -27,11 +27,11 @@ heroku pg:psql --app "$APP_NAME" <<EOF
 DROP TABLE IF EXISTS balances;
 CREATE TABLE IF NOT EXISTS balances (
   id SERIAL PRIMARY KEY,
-  account TEXT NOT NULL,
+  vault TEXT NOT NULL,
   token TEXT NOT NULL,
   balance NUMERIC(78, 18) NOT NULL,
   timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (account, token)
+  UNIQUE (vault, token)
 );
 EOF
 

@@ -24,10 +24,10 @@ fi
 
 # Connect to the Heroku database and create the tables
 heroku pg:psql --app "$APP_NAME" <<EOF
-DROP TABLE IF EXISTS bundles;
-CREATE TABLE IF NOT EXISTS bundles (
+DROP TABLE IF EXISTS blocks;
+CREATE TABLE IF NOT EXISTS blocks (
   id SERIAL PRIMARY KEY,
-  bundle JSONB,
+  block JSONB,
   nonce INTEGER NOT NULL,
   timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
@@ -43,21 +43,21 @@ CREATE TABLE IF NOT EXISTS cids (
 DROP TABLE IF EXISTS balances;
 CREATE TABLE IF NOT EXISTS balances (
   id SERIAL PRIMARY KEY,
-  account TEXT NOT NULL,
+  vault TEXT NOT NULL,
   token TEXT NOT NULL,
   balance NUMERIC NOT NULL,
   timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (account, token)
+  UNIQUE (vault, token)
 );
 
 DROP TABLE IF EXISTS nonces;
 CREATE TABLE IF NOT EXISTS nonces (
   id SERIAL PRIMARY KEY,
-  account TEXT NOT NULL,
+  vault TEXT NOT NULL,
   nonce INTEGER NOT NULL,
   timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (account)
+  UNIQUE (vault)
 );
 EOF
 
-echo "Tables 'bundles', 'cids', 'balances', and 'nonces' created successfully."
+echo "Tables 'blocks', 'cids', 'balances', and 'nonces' created successfully."
