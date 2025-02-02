@@ -1,13 +1,13 @@
 import axios from 'axios';
 import { ethers, parseUnits, verifyMessage } from 'ethers';
-import { Alchemy } from 'alchemy-sdk';
+import { Alchemy, Wallet, Network } from 'alchemy-sdk';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Constants (from your oya-node code)
+// Constants (from your original oya-node code)
 const BUNDLER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
 const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
 const OYA_REWARD_AMOUNT = parseUnits('1', 18); // 1 Oya token
@@ -17,18 +17,20 @@ let cachedIntentions: any[] = [];
 
 let mainnetAlchemy: Alchemy;
 let sepoliaAlchemy: Alchemy;
-let wallet: ethers.Wallet;
+let wallet: Wallet;
 let blockTrackerContract: ethers.Contract;
 
 // Variables for Helia/IPFS – will be initialized in setupHelia()
-let s: any; // our helper for adding data to IPFS
+let s: any; // helper for adding data to IPFS
 
 // Initialize wallet and contract on module load.
-initializeWalletAndContract().then(() => {
-  console.log("Block proposer initialization complete. Ready to handle proposals.");
-}).catch((error) => {
-  console.error("Initialization failed:", error);
-});
+initializeWalletAndContract()
+  .then(() => {
+    console.log("Block proposer initialization complete. Ready to handle proposals.");
+  })
+  .catch((error) => {
+    console.error("Initialization failed:", error);
+  });
 
 /**
  * Creates an instance of the BlockTracker contract.
@@ -36,28 +38,31 @@ initializeWalletAndContract().then(() => {
 function buildBlockTrackerContract(): ethers.Contract {
   const abiPath = path.join(__dirname, 'abi', 'BlockTracker.json');
   const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
+  // Here we pass sepoliaAlchemy as the provider (the Alchemy instance is used directly, as in your original code)
   const contract = new ethers.Contract(process.env.BUNDLE_TRACKER_ADDRESS as string, contractABI, sepoliaAlchemy);
   return contract.connect(wallet);
 }
 
 /**
- * Creates and returns Alchemy instances (mainnet and Sepolia) and a wallet.
+ * Creates and returns Alchemy instances (mainnet and Sepolia) and an Alchemy Wallet.
  */
 async function buildAlchemyInstances() {
+  // Create Alchemy instance for Ethereum mainnet using the Network enum.
   const mainnet = new Alchemy({
     apiKey: process.env.ALCHEMY_API_KEY as string,
-    network: "eth-mainnet",
+    network: Network.ETH_MAINNET,
   });
+  // Create Alchemy instance for the Sepolia network using the Network enum.
   const sepolia = new Alchemy({
     apiKey: process.env.ALCHEMY_API_KEY as string,
-    network: "eth-sepolia",
+    network: Network.ETH_SEPOLIA,
   });
 
-  // Make a dummy call to ensure the mainnet instance is ready.
+  // Ensure that the mainnet instance is fully initialized.
   await mainnet.core.getTokenMetadata("0x04Fa0d235C4abf4BcF4787aF4CF447DE572eF828");
 
-  // Create a wallet with the Sepolia provider.
-  const walletInstance = new ethers.Wallet(process.env.TEST_PRIVATE_KEY as string, sepolia);
+  // Create a wallet using the Sepolia Alchemy instance.
+  const walletInstance = new Wallet(process.env.TEST_PRIVATE_KEY as string, sepolia);
 
   return { mainnetAlchemy: mainnet, sepoliaAlchemy: sepolia, wallet: walletInstance };
 }
@@ -132,9 +137,18 @@ async function getLatestNonce(): Promise<number> {
 async function getTokenDecimals(tokenAddress: string): Promise<bigint> {
   try {
     if (tokenAddress === "0x0000000000000000000000000000000000000000") {
-      return 18n;
+      return 18n; // Default for ETH, for example.
     }
     const tokenMetadata = await mainnetAlchemy.core.getTokenMetadata(tokenAddress);
+    // Check if decimals is null or undefined.
+    if (tokenMetadata.decimals === null || tokenMetadata.decimals === undefined) {
+      console.error("Token metadata decimals is missing for token:", tokenAddress);
+      // Option 1: Throw an error.
+      throw new Error("Token decimals missing");
+      
+      // Option 2 (alternative): Return a default value, e.g.:
+      // return 18n;
+    }
     return BigInt(tokenMetadata.decimals);
   } catch (error) {
     console.error(`Failed to get token metadata for ${tokenAddress}:`, error);
@@ -526,3 +540,12 @@ async function updateBalances(from: string, to: string, token: string, amount: s
     throw new Error("Balance update failed");
   }
 }
+
+module.exports = {
+  handleIntention,
+  createAndPublishBlock,
+  _getCachedIntentions: () => cachedIntentions,
+  _clearCachedIntentions: () => {
+    cachedIntentions = [];
+  },
+};

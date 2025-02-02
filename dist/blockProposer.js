@@ -34,10 +34,10 @@ const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
-// Constants (from your oya-node code)
+// Constants (from your original oya-node code)
 const BUNDLER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
 const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
-const OYA_REWARD_AMOUNT = ethers_1.ethers.parseUnits('1', 18); // 1 Oya token
+const OYA_REWARD_AMOUNT = (0, ethers_1.parseUnits)('1', 18); // 1 Oya token
 // Global variables
 let cachedIntentions = [];
 let mainnetAlchemy;
@@ -45,11 +45,13 @@ let sepoliaAlchemy;
 let wallet;
 let blockTrackerContract;
 // Variables for Helia/IPFS – will be initialized in setupHelia()
-let s; // our helper for adding data to IPFS
+let s; // helper for adding data to IPFS
 // Initialize wallet and contract on module load.
-initializeWalletAndContract().then(() => {
+initializeWalletAndContract()
+    .then(() => {
     console.log("Block proposer initialization complete. Ready to handle proposals.");
-}).catch((error) => {
+})
+    .catch((error) => {
     console.error("Initialization failed:", error);
 });
 /**
@@ -58,25 +60,28 @@ initializeWalletAndContract().then(() => {
 function buildBlockTrackerContract() {
     const abiPath = path_1.default.join(__dirname, 'abi', 'BlockTracker.json');
     const contractABI = JSON.parse(fs_1.default.readFileSync(abiPath, 'utf8'));
+    // Here we pass sepoliaAlchemy as the provider (the Alchemy instance is used directly, as in your original code)
     const contract = new ethers_1.ethers.Contract(process.env.BUNDLE_TRACKER_ADDRESS, contractABI, sepoliaAlchemy);
     return contract.connect(wallet);
 }
 /**
- * Creates and returns Alchemy instances (mainnet and Sepolia) and a wallet.
+ * Creates and returns Alchemy instances (mainnet and Sepolia) and an Alchemy Wallet.
  */
 async function buildAlchemyInstances() {
+    // Create Alchemy instance for Ethereum mainnet using the Network enum.
     const mainnet = new alchemy_sdk_1.Alchemy({
         apiKey: process.env.ALCHEMY_API_KEY,
-        network: "eth-mainnet",
+        network: alchemy_sdk_1.Network.ETH_MAINNET,
     });
+    // Create Alchemy instance for the Sepolia network using the Network enum.
     const sepolia = new alchemy_sdk_1.Alchemy({
         apiKey: process.env.ALCHEMY_API_KEY,
-        network: "eth-sepolia",
+        network: alchemy_sdk_1.Network.ETH_SEPOLIA,
     });
-    // Make a dummy call to ensure the mainnet instance is ready.
+    // Ensure that the mainnet instance is fully initialized.
     await mainnet.core.getTokenMetadata("0x04Fa0d235C4abf4BcF4787aF4CF447DE572eF828");
-    // Create a wallet with the Sepolia provider.
-    const walletInstance = new ethers_1.ethers.Wallet(process.env.TEST_PRIVATE_KEY, sepolia);
+    // Create a wallet using the Sepolia Alchemy instance.
+    const walletInstance = new alchemy_sdk_1.Wallet(process.env.TEST_PRIVATE_KEY, sepolia);
     return { mainnetAlchemy: mainnet, sepoliaAlchemy: sepolia, wallet: walletInstance };
 }
 /**
@@ -146,9 +151,17 @@ async function getLatestNonce() {
 async function getTokenDecimals(tokenAddress) {
     try {
         if (tokenAddress === "0x0000000000000000000000000000000000000000") {
-            return 18n;
+            return 18n; // Default for ETH, for example.
         }
         const tokenMetadata = await mainnetAlchemy.core.getTokenMetadata(tokenAddress);
+        // Check if decimals is null or undefined.
+        if (tokenMetadata.decimals === null || tokenMetadata.decimals === undefined) {
+            console.error("Token metadata decimals is missing for token:", tokenAddress);
+            // Option 1: Throw an error.
+            throw new Error("Token decimals missing");
+            // Option 2 (alternative): Return a default value, e.g.:
+            // return 18n;
+        }
         return BigInt(tokenMetadata.decimals);
     }
     catch (error) {
@@ -161,7 +174,7 @@ async function getTokenDecimals(tokenAddress) {
  */
 async function handleIntention(intention, signature, from) {
     await initializeVault(from);
-    const signerAddress = ethers_1.ethers.verifyMessage(JSON.stringify(intention), signature);
+    const signerAddress = (0, ethers_1.verifyMessage)(JSON.stringify(intention), signature);
     if (signerAddress !== from) {
         console.log("Signature verification failed");
         throw new Error("Signature verification failed");
@@ -170,11 +183,11 @@ async function handleIntention(intention, signature, from) {
     if (intention.action_type === "transfer" || intention.action_type === "swap") {
         const tokenAddress = intention.from_token_address;
         const sentTokenDecimals = await getTokenDecimals(tokenAddress);
-        const amountSent = ethers_1.ethers.parseUnits(intention.amount_sent, Number(sentTokenDecimals));
+        const amountSent = (0, ethers_1.parseUnits)(intention.amount_sent, Number(sentTokenDecimals));
         let amountReceived;
         if (intention.amount_received) {
             const receivedTokenDecimals = await getTokenDecimals(intention.to_token_address);
-            amountReceived = ethers_1.ethers.parseUnits(intention.amount_received, Number(receivedTokenDecimals));
+            amountReceived = (0, ethers_1.parseUnits)(intention.amount_received, Number(receivedTokenDecimals));
         }
         // Check that the sender has enough balance.
         const response = await axios_1.default.get(`${process.env.OYA_API_BASE_URL}/balance/${from}/${tokenAddress}`, {
@@ -259,9 +272,9 @@ async function initializeVault(vault) {
  * Initializes the balances for a given vault.
  */
 async function initializeBalancesForVault(vault) {
-    const initialBalance18 = ethers_1.ethers.parseUnits('10000', 18);
-    const initialBalance6 = ethers_1.ethers.parseUnits('1000000', 6);
-    const initialOyaBalance = ethers_1.ethers.parseUnits('111', 18);
+    const initialBalance18 = (0, ethers_1.parseUnits)('10000', 18);
+    const initialBalance6 = (0, ethers_1.parseUnits)('1000000', 6);
+    const initialOyaBalance = (0, ethers_1.parseUnits)('111', 18);
     const supportedTokens18 = [];
     const supportedTokens6 = ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"];
     const oyaTokens = ["0x0000000000000000000000000000000000000001"];
@@ -331,7 +344,7 @@ async function publishBlock(data, signature, from) {
     if (from !== BUNDLER_ADDRESS) {
         throw new Error("Unauthorized: Only the blockProposer can publish new blocks.");
     }
-    const signerAddress = ethers_1.ethers.verifyMessage(data, signature);
+    const signerAddress = (0, ethers_1.verifyMessage)(data, signature);
     if (signerAddress !== from) {
         throw new Error("Signature verification failed");
     }
@@ -445,7 +458,7 @@ async function updateBalances(from, to, token, amount) {
         const amountBigInt = BigInt(amount);
         let fromBalance;
         if (from.toLowerCase() === BUNDLER_ADDRESS.toLowerCase()) {
-            const largeBalance = ethers_1.ethers.parseUnits('1000000000000', 18);
+            const largeBalance = (0, ethers_1.parseUnits)('1000000000000', 18);
             try {
                 await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/balance`, { vault: from, token, balance: largeBalance.toString() }, { headers: { 'Content-Type': 'application/json' } });
                 console.log(`Block proposer balance updated to a large amount for token ${token}`);
@@ -497,3 +510,11 @@ async function updateBalances(from, to, token, amount) {
         throw new Error("Balance update failed");
     }
 }
+module.exports = {
+    handleIntention,
+    createAndPublishBlock,
+    _getCachedIntentions: () => cachedIntentions,
+    _clearCachedIntentions: () => {
+        cachedIntentions = [];
+    },
+};
