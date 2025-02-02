@@ -9,6 +9,7 @@ const body_parser_1 = require("body-parser");
 const dotenv_1 = __importDefault(require("dotenv"));
 const pg_1 = require("pg");
 const routes_1 = require("./routes");
+const blockProposer_1 = require("./blockProposer");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 exports.app = app;
@@ -34,7 +35,7 @@ app.post('/intention', async (req, res) => {
             throw new Error('Missing required fields');
         }
         console.log('Received signed intention:', intention, signature, from);
-        const response = await handleIntention(intention, signature, from);
+        const response = await (0, blockProposer_1.handleIntention)(intention, signature, from);
         res.status(200).json(response);
     }
     catch (error) {
@@ -45,7 +46,7 @@ app.post('/intention', async (req, res) => {
 // Every 10 seconds, try to publish a new block if there are cached intentions.
 setInterval(async () => {
     try {
-        await createAndPublishBlock();
+        await (0, blockProposer_1.createAndPublishBlock)();
     }
     catch (error) {
         console.error('Error creating and publishing block:', error);

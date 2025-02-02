@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { ethers, parseUnits, verifyMessage } from 'ethers';
+import { ethers } from 'ethers';
+import { parseUnits, verifyMessage } from 'ethers/lib/utils';
 import { Alchemy, Wallet, Network } from 'alchemy-sdk';
 import fs from 'fs';
 import path from 'path';

@@ -3,6 +3,7 @@ import { json } from 'body-parser';
 import dotenv from 'dotenv';
 import { Pool } from 'pg';
 import { blockRouter, cidRouter, balanceRouter, vaultNonceRouter } from './routes';
+import { handleIntention, createAndPublishBlock } from './blockProposer';
 
 dotenv.config();
 
