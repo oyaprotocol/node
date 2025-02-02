@@ -29,6 +29,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleIntention = exports.createAndPublishBlock = void 0;
 const axios_1 = __importDefault(require("axios"));
 const ethers_1 = require("ethers");
+const utils_1 = require("ethers/lib/utils");
 const alchemy_sdk_1 = require("alchemy-sdk");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -37,7 +38,7 @@ dotenv_1.default.config();
 // Constants (from your original oya-node code)
 const BUNDLER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
 const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
-const OYA_REWARD_AMOUNT = (0, ethers_1.parseUnits)('1', 18); // 1 Oya token
+const OYA_REWARD_AMOUNT = (0, utils_1.parseUnits)('1', 18); // 1 Oya token (BigNumber)
 // Global variables
 let cachedIntentions = [];
 let mainnetAlchemy;
@@ -57,11 +58,12 @@ initializeWalletAndContract()
 /**
  * Creates an instance of the BlockTracker contract.
  */
-function buildBlockTrackerContract() {
+async function buildBlockTrackerContract() {
     const abiPath = path_1.default.join(__dirname, 'abi', 'BlockTracker.json');
     const contractABI = JSON.parse(fs_1.default.readFileSync(abiPath, 'utf8'));
-    // Here we pass sepoliaAlchemy as the provider (the Alchemy instance is used directly, as in your original code)
-    const contract = new ethers_1.ethers.Contract(process.env.BUNDLE_TRACKER_ADDRESS, contractABI, sepoliaAlchemy);
+    // Await the provider from sepoliaAlchemy.
+    const provider = await sepoliaAlchemy.config.getProvider();
+    const contract = new ethers_1.ethers.Contract(process.env.BUNDLE_TRACKER_ADDRESS, contractABI, provider);
     return contract.connect(wallet);
 }
 /**
@@ -112,7 +114,8 @@ async function createAndPublishBlock() {
         rewards: rewardAddresses.map((address) => ({
             vault: address,
             token: OYA_TOKEN_ADDRESS,
-            amount: OYA_REWARD_AMOUNT.toString(),
+            // Convert OYA_REWARD_AMOUNT to bigint then to string.
+            amount: BigInt(OYA_REWARD_AMOUNT.toString()).toString(),
         })),
     };
     // Sign the block object.
@@ -151,16 +154,12 @@ async function getLatestNonce() {
 async function getTokenDecimals(tokenAddress) {
     try {
         if (tokenAddress === "0x0000000000000000000000000000000000000000") {
-            return 18n; // Default for ETH, for example.
+            return 18n;
         }
         const tokenMetadata = await mainnetAlchemy.core.getTokenMetadata(tokenAddress);
-        // Check if decimals is null or undefined.
         if (tokenMetadata.decimals === null || tokenMetadata.decimals === undefined) {
             console.error("Token metadata decimals is missing for token:", tokenAddress);
-            // Option 1: Throw an error.
             throw new Error("Token decimals missing");
-            // Option 2 (alternative): Return a default value, e.g.:
-            // return 18n;
         }
         return BigInt(tokenMetadata.decimals);
     }
@@ -174,7 +173,7 @@ async function getTokenDecimals(tokenAddress) {
  */
 async function handleIntention(intention, signature, from) {
     await initializeVault(from);
-    const signerAddress = (0, ethers_1.verifyMessage)(JSON.stringify(intention), signature);
+    const signerAddress = (0, utils_1.verifyMessage)(JSON.stringify(intention), signature);
     if (signerAddress !== from) {
         console.log("Signature verification failed");
         throw new Error("Signature verification failed");
@@ -183,22 +182,26 @@ async function handleIntention(intention, signature, from) {
     if (intention.action_type === "transfer" || intention.action_type === "swap") {
         const tokenAddress = intention.from_token_address;
         const sentTokenDecimals = await getTokenDecimals(tokenAddress);
-        const amountSent = (0, ethers_1.parseUnits)(intention.amount_sent, Number(sentTokenDecimals));
+        const amountSent = (0, utils_1.parseUnits)(intention.amount_sent, Number(sentTokenDecimals));
         let amountReceived;
         if (intention.amount_received) {
             const receivedTokenDecimals = await getTokenDecimals(intention.to_token_address);
-            amountReceived = (0, ethers_1.parseUnits)(intention.amount_received, Number(receivedTokenDecimals));
+            amountReceived = (0, utils_1.parseUnits)(intention.amount_received, Number(receivedTokenDecimals));
         }
-        // Check that the sender has enough balance.
+        // Convert amountSent to bigint for comparison.
+        const amountSentBigInt = BigInt(amountSent.toString());
         const response = await axios_1.default.get(`${process.env.OYA_API_BASE_URL}/balance/${from}/${tokenAddress}`, {
             headers: { 'Content-Type': 'application/json' },
         });
         let currentBalance = response.data.length > 0 ? BigInt(response.data[0].balance) : 0n;
-        if (currentBalance < amountSent) {
+        if (currentBalance < amountSentBigInt) {
             console.error(`Insufficient balance. Current: ${currentBalance.toString()}, Required: ${amountSent.toString()}`);
             throw new Error('Insufficient balance');
         }
         if (intention.action_type === "swap") {
+            if (amountReceived === undefined) {
+                throw new Error("Missing amountReceived for swap");
+            }
             const swapInput = {
                 token: intention.from_token_address,
                 chainId: intention.from_token_chainid,
@@ -272,9 +275,9 @@ async function initializeVault(vault) {
  * Initializes the balances for a given vault.
  */
 async function initializeBalancesForVault(vault) {
-    const initialBalance18 = (0, ethers_1.parseUnits)('10000', 18);
-    const initialBalance6 = (0, ethers_1.parseUnits)('1000000', 6);
-    const initialOyaBalance = (0, ethers_1.parseUnits)('111', 18);
+    const initialBalance18 = (0, utils_1.parseUnits)('10000', 18);
+    const initialBalance6 = (0, utils_1.parseUnits)('1000000', 6);
+    const initialOyaBalance = (0, utils_1.parseUnits)('111', 18);
     const supportedTokens18 = [];
     const supportedTokens6 = ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"];
     const oyaTokens = ["0x0000000000000000000000000000000000000001"];
@@ -297,7 +300,7 @@ async function initializeWalletAndContract() {
     mainnetAlchemy = mainAlchemy;
     sepoliaAlchemy = sepAlchemy;
     wallet = walletInstance;
-    blockTrackerContract = buildBlockTrackerContract();
+    blockTrackerContract = await buildBlockTrackerContract();
 }
 /**
  * Mints rewards (1 Oya token) to the specified addresses.
@@ -321,7 +324,7 @@ async function mintRewards(addresses) {
                     throw error;
                 }
             }
-            const newBalance = currentBalance + OYA_REWARD_AMOUNT;
+            const newBalance = currentBalance + BigInt(OYA_REWARD_AMOUNT.toString());
             await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/balance`, { vault: address, token: OYA_TOKEN_ADDRESS, balance: newBalance.toString() }, { headers: { 'Content-Type': 'application/json' } });
         }
     }
@@ -344,7 +347,7 @@ async function publishBlock(data, signature, from) {
     if (from !== BUNDLER_ADDRESS) {
         throw new Error("Unauthorized: Only the blockProposer can publish new blocks.");
     }
-    const signerAddress = (0, ethers_1.verifyMessage)(data, signature);
+    const signerAddress = (0, utils_1.verifyMessage)(data, signature);
     if (signerAddress !== from) {
         throw new Error("Signature verification failed");
     }
@@ -372,7 +375,6 @@ async function publishBlock(data, signature, from) {
         console.error("Invalid block data structure:", blockData);
         throw new Error("Invalid block data structure");
     }
-    // Notify API endpoints.
     try {
         await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/block`, blockData, {
             headers: { 'Content-Type': 'application/json' },
@@ -391,7 +393,6 @@ async function publishBlock(data, signature, from) {
         console.error("Failed to send CID to Oya API:", error);
         throw new Error("API request failed");
     }
-    // Process balance updates.
     try {
         for (const execution of blockData.block) {
             if (!Array.isArray(execution.proof)) {
@@ -458,7 +459,7 @@ async function updateBalances(from, to, token, amount) {
         const amountBigInt = BigInt(amount);
         let fromBalance;
         if (from.toLowerCase() === BUNDLER_ADDRESS.toLowerCase()) {
-            const largeBalance = (0, ethers_1.parseUnits)('1000000000000', 18);
+            const largeBalance = (0, utils_1.parseUnits)('1000000000000', 18);
             try {
                 await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/balance`, { vault: from, token, balance: largeBalance.toString() }, { headers: { 'Content-Type': 'application/json' } });
                 console.log(`Block proposer balance updated to a large amount for token ${token}`);

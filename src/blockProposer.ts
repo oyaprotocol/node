@@ -11,7 +11,7 @@ dotenv.config();
 // Constants (from your original oya-node code)
 const BUNDLER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
 const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
-const OYA_REWARD_AMOUNT = parseUnits('1', 18); // 1 Oya token
+const OYA_REWARD_AMOUNT = parseUnits('1', 18); // 1 Oya token (BigNumber)
 
 // Global variables
 let cachedIntentions: any[] = [];
@@ -36,11 +36,16 @@ initializeWalletAndContract()
 /**
  * Creates an instance of the BlockTracker contract.
  */
-function buildBlockTrackerContract(): ethers.Contract {
+async function buildBlockTrackerContract(): Promise<ethers.Contract> {
   const abiPath = path.join(__dirname, 'abi', 'BlockTracker.json');
   const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
-  // Here we pass sepoliaAlchemy as the provider (the Alchemy instance is used directly, as in your original code)
-  const contract = new ethers.Contract(process.env.BUNDLE_TRACKER_ADDRESS as string, contractABI, sepoliaAlchemy);
+  // Await the provider from sepoliaAlchemy.
+  const provider = await sepoliaAlchemy.config.getProvider();
+  const contract = new ethers.Contract(
+    process.env.BUNDLE_TRACKER_ADDRESS as string,
+    contractABI,
+    provider
+  );
   return contract.connect(wallet);
 }
 
@@ -58,13 +63,10 @@ async function buildAlchemyInstances() {
     apiKey: process.env.ALCHEMY_API_KEY as string,
     network: Network.ETH_SEPOLIA,
   });
-
   // Ensure that the mainnet instance is fully initialized.
   await mainnet.core.getTokenMetadata("0x04Fa0d235C4abf4BcF4787aF4CF447DE572eF828");
-
   // Create a wallet using the Sepolia Alchemy instance.
   const walletInstance = new Wallet(process.env.TEST_PRIVATE_KEY as string, sepolia);
-
   return { mainnetAlchemy: mainnet, sepoliaAlchemy: sepolia, wallet: walletInstance };
 }
 
@@ -76,7 +78,6 @@ export async function createAndPublishBlock() {
     console.log("No intentions to block.");
     return;
   }
-
   let nonce: number;
   try {
     nonce = await getLatestNonce();
@@ -84,25 +85,22 @@ export async function createAndPublishBlock() {
     console.error("Failed to get latest nonce:", error);
     return;
   }
-
   // Flatten cached intentions into a block array.
   const block = cachedIntentions.map(({ execution }) => execution).flat();
-
   // Collect all unique reward addresses from proofs.
   const rewardAddresses = [
     ...new Set(block.flatMap((execution: any) => execution.proof.map((proof: any) => proof.from))),
   ];
-
   const blockObject = {
     block: block,
     nonce: nonce,
     rewards: rewardAddresses.map((address: string) => ({
       vault: address,
       token: OYA_TOKEN_ADDRESS,
-      amount: OYA_REWARD_AMOUNT.toString(),
+      // Convert OYA_REWARD_AMOUNT to bigint then to string.
+      amount: BigInt(OYA_REWARD_AMOUNT.toString()).toString(),
     })),
   };
-
   // Sign the block object.
   const blockProposerSignature = await wallet.signMessage(JSON.stringify(blockObject));
   try {
@@ -112,7 +110,6 @@ export async function createAndPublishBlock() {
     cachedIntentions = [];
     return;
   }
-
   // Clear the cached intentions after publishing.
   cachedIntentions = [];
 }
@@ -138,17 +135,12 @@ async function getLatestNonce(): Promise<number> {
 async function getTokenDecimals(tokenAddress: string): Promise<bigint> {
   try {
     if (tokenAddress === "0x0000000000000000000000000000000000000000") {
-      return 18n; // Default for ETH, for example.
+      return 18n;
     }
     const tokenMetadata = await mainnetAlchemy.core.getTokenMetadata(tokenAddress);
-    // Check if decimals is null or undefined.
     if (tokenMetadata.decimals === null || tokenMetadata.decimals === undefined) {
       console.error("Token metadata decimals is missing for token:", tokenAddress);
-      // Option 1: Throw an error.
       throw new Error("Token decimals missing");
-      
-      // Option 2 (alternative): Return a default value, e.g.:
-      // return 18n;
     }
     return BigInt(tokenMetadata.decimals);
   } catch (error) {
@@ -167,7 +159,6 @@ export async function handleIntention(intention: any, signature: string, from: s
     console.log("Signature verification failed");
     throw new Error("Signature verification failed");
   }
-
   const proof: any[] = [];
   if (intention.action_type === "transfer" || intention.action_type === "swap") {
     const tokenAddress = intention.from_token_address;
@@ -178,18 +169,20 @@ export async function handleIntention(intention: any, signature: string, from: s
       const receivedTokenDecimals = await getTokenDecimals(intention.to_token_address);
       amountReceived = parseUnits(intention.amount_received, Number(receivedTokenDecimals));
     }
-
-    // Check that the sender has enough balance.
+    // Convert amountSent to bigint for comparison.
+    const amountSentBigInt = BigInt(amountSent.toString());
     const response = await axios.get(`${process.env.OYA_API_BASE_URL}/balance/${from}/${tokenAddress}`, {
       headers: { 'Content-Type': 'application/json' },
     });
     let currentBalance = response.data.length > 0 ? BigInt(response.data[0].balance) : 0n;
-    if (currentBalance < amountSent) {
+    if (currentBalance < amountSentBigInt) {
       console.error(`Insufficient balance. Current: ${currentBalance.toString()}, Required: ${amountSent.toString()}`);
       throw new Error('Insufficient balance');
     }
-
     if (intention.action_type === "swap") {
+      if (amountReceived === undefined) {
+        throw new Error("Missing amountReceived for swap");
+      }
       const swapInput = {
         token: intention.from_token_address,
         chainId: intention.from_token_chainid,
@@ -222,7 +215,6 @@ export async function handleIntention(intention: any, signature: string, from: s
   } else {
     console.error("Unexpected action_type:", intention.action_type);
   }
-
   const executionObject = {
     execution: [
       {
@@ -231,7 +223,6 @@ export async function handleIntention(intention: any, signature: string, from: s
       },
     ],
   };
-
   cachedIntentions.push(executionObject);
   return executionObject;
 }
@@ -268,7 +259,6 @@ async function initializeBalancesForVault(vault: string) {
   const supportedTokens18: string[] = [];
   const supportedTokens6: string[] = ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"];
   const oyaTokens: string[] = ["0x0000000000000000000000000000000000000001"];
-
   for (const token of supportedTokens18) {
     await axios.post(
       `${process.env.OYA_API_BASE_URL}/balance`,
@@ -276,7 +266,6 @@ async function initializeBalancesForVault(vault: string) {
       { headers: { 'Content-Type': 'application/json' } }
     );
   }
-
   for (const token of supportedTokens6) {
     await axios.post(
       `${process.env.OYA_API_BASE_URL}/balance`,
@@ -284,7 +273,6 @@ async function initializeBalancesForVault(vault: string) {
       { headers: { 'Content-Type': 'application/json' } }
     );
   }
-
   for (const token of oyaTokens) {
     await axios.post(
       `${process.env.OYA_API_BASE_URL}/balance`,
@@ -303,7 +291,7 @@ async function initializeWalletAndContract() {
   mainnetAlchemy = mainAlchemy;
   sepoliaAlchemy = sepAlchemy;
   wallet = walletInstance;
-  blockTrackerContract = buildBlockTrackerContract();
+  blockTrackerContract = await buildBlockTrackerContract();
 }
 
 /**
@@ -326,7 +314,7 @@ async function mintRewards(addresses: string[]) {
           throw error;
         }
       }
-      const newBalance = currentBalance + OYA_REWARD_AMOUNT;
+      const newBalance = currentBalance + BigInt(OYA_REWARD_AMOUNT.toString());
       await axios.post(
         `${process.env.OYA_API_BASE_URL}/balance`,
         { vault: address, token: OYA_TOKEN_ADDRESS, balance: newBalance.toString() },
@@ -353,16 +341,13 @@ async function publishBlock(data: string, signature: string, from: string) {
   if (from !== BUNDLER_ADDRESS) {
     throw new Error("Unauthorized: Only the blockProposer can publish new blocks.");
   }
-
   const signerAddress = verifyMessage(data, signature);
   if (signerAddress !== from) {
     throw new Error("Signature verification failed");
   }
-
   const cid = await s.add(data);
   const cidToString = cid.toString();
   console.log('Block published to IPFS, CID:', cidToString);
-
   try {
     const tx = await blockTrackerContract.proposeBlock(cidToString);
     await sepoliaAlchemy.transact.waitForTransaction(tx.hash);
@@ -371,7 +356,6 @@ async function publishBlock(data: string, signature: string, from: string) {
     console.error("Failed to propose block:", error);
     throw new Error("Blockchain transaction failed");
   }
-
   let blockData: any;
   try {
     blockData = JSON.parse(data);
@@ -379,13 +363,10 @@ async function publishBlock(data: string, signature: string, from: string) {
     console.error("Failed to parse block data:", error);
     throw new Error("Invalid block data");
   }
-
   if (!Array.isArray(blockData.block)) {
     console.error("Invalid block data structure:", blockData);
     throw new Error("Invalid block data structure");
   }
-
-  // Notify API endpoints.
   try {
     await axios.post(`${process.env.OYA_API_BASE_URL}/block`, blockData, {
       headers: { 'Content-Type': 'application/json' },
@@ -395,7 +376,6 @@ async function publishBlock(data: string, signature: string, from: string) {
     console.error("Failed to send block data to Oya API:", error);
     throw new Error("API request failed");
   }
-
   try {
     await axios.post(
       `${process.env.OYA_API_BASE_URL}/cid`,
@@ -407,8 +387,6 @@ async function publishBlock(data: string, signature: string, from: string) {
     console.error("Failed to send CID to Oya API:", error);
     throw new Error("API request failed");
   }
-
-  // Process balance updates.
   try {
     for (const execution of blockData.block) {
       if (!Array.isArray(execution.proof)) {
@@ -424,7 +402,6 @@ async function publishBlock(data: string, signature: string, from: string) {
     console.error("Failed to update balances:", error);
     throw new Error("Balance update failed");
   }
-
   try {
     await mintRewards(blockData.rewards.map((reward: any) => reward.vault));
     console.log('Rewards minted successfully');
@@ -432,7 +409,6 @@ async function publishBlock(data: string, signature: string, from: string) {
     console.error("Failed to mint rewards:", error);
     throw new Error("Minting rewards failed");
   }
-
   try {
     for (const execution of blockData.block) {
       const vaultNonce = execution.intention.nonce;
@@ -447,7 +423,6 @@ async function publishBlock(data: string, signature: string, from: string) {
     console.error(`Failed to set nonce for vaults in the block:`, error);
     throw new Error("Nonce update failed");
   }
-
   return cid;
 }
 
