@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ethers } from 'ethers';
+import { ethers, parseUnits, verifyMessage } from 'ethers';
 import { Alchemy } from 'alchemy-sdk';
 import fs from 'fs';
 import path from 'path';
@@ -10,7 +10,7 @@ dotenv.config();
 // Constants (from your oya-node code)
 const BUNDLER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
 const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
-const OYA_REWARD_AMOUNT = ethers.parseUnits('1', 18); // 1 Oya token
+const OYA_REWARD_AMOUNT = parseUnits('1', 18); // 1 Oya token
 
 // Global variables
 let cachedIntentions: any[] = [];
@@ -147,7 +147,7 @@ async function getTokenDecimals(tokenAddress: string): Promise<bigint> {
  */
 export async function handleIntention(intention: any, signature: string, from: string): Promise<any> {
   await initializeVault(from);
-  const signerAddress = ethers.verifyMessage(JSON.stringify(intention), signature);
+  const signerAddress = verifyMessage(JSON.stringify(intention), signature);
   if (signerAddress !== from) {
     console.log("Signature verification failed");
     throw new Error("Signature verification failed");
@@ -157,11 +157,11 @@ export async function handleIntention(intention: any, signature: string, from: s
   if (intention.action_type === "transfer" || intention.action_type === "swap") {
     const tokenAddress = intention.from_token_address;
     const sentTokenDecimals = await getTokenDecimals(tokenAddress);
-    const amountSent = ethers.parseUnits(intention.amount_sent, Number(sentTokenDecimals));
+    const amountSent = parseUnits(intention.amount_sent, Number(sentTokenDecimals));
     let amountReceived;
     if (intention.amount_received) {
       const receivedTokenDecimals = await getTokenDecimals(intention.to_token_address);
-      amountReceived = ethers.parseUnits(intention.amount_received, Number(receivedTokenDecimals));
+      amountReceived = parseUnits(intention.amount_received, Number(receivedTokenDecimals));
     }
 
     // Check that the sender has enough balance.
@@ -247,9 +247,9 @@ async function initializeVault(vault: string) {
  * Initializes the balances for a given vault.
  */
 async function initializeBalancesForVault(vault: string) {
-  const initialBalance18 = ethers.parseUnits('10000', 18);
-  const initialBalance6 = ethers.parseUnits('1000000', 6);
-  const initialOyaBalance = ethers.parseUnits('111', 18);
+  const initialBalance18 = parseUnits('10000', 18);
+  const initialBalance6 = parseUnits('1000000', 6);
+  const initialOyaBalance = parseUnits('111', 18);
   const supportedTokens18: string[] = [];
   const supportedTokens6: string[] = ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"];
   const oyaTokens: string[] = ["0x0000000000000000000000000000000000000001"];
@@ -339,7 +339,7 @@ async function publishBlock(data: string, signature: string, from: string) {
     throw new Error("Unauthorized: Only the blockProposer can publish new blocks.");
   }
 
-  const signerAddress = ethers.verifyMessage(data, signature);
+  const signerAddress = verifyMessage(data, signature);
   if (signerAddress !== from) {
     throw new Error("Signature verification failed");
   }
@@ -467,7 +467,7 @@ async function updateBalances(from: string, to: string, token: string, amount: s
     const amountBigInt = BigInt(amount);
     let fromBalance: bigint;
     if (from.toLowerCase() === BUNDLER_ADDRESS.toLowerCase()) {
-      const largeBalance = ethers.parseUnits('1000000000000', 18);
+      const largeBalance = parseUnits('1000000000000', 18);
       try {
         await axios.post(
           `${process.env.OYA_API_BASE_URL}/balance`,
