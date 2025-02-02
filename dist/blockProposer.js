@@ -1,0 +1,499 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.handleIntention = exports.createAndPublishBlock = void 0;
+const axios_1 = __importDefault(require("axios"));
+const ethers_1 = require("ethers");
+const alchemy_sdk_1 = require("alchemy-sdk");
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
+// Constants (from your oya-node code)
+const BUNDLER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
+const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
+const OYA_REWARD_AMOUNT = ethers_1.ethers.parseUnits('1', 18); // 1 Oya token
+// Global variables
+let cachedIntentions = [];
+let mainnetAlchemy;
+let sepoliaAlchemy;
+let wallet;
+let blockTrackerContract;
+// Variables for Helia/IPFS – will be initialized in setupHelia()
+let s; // our helper for adding data to IPFS
+// Initialize wallet and contract on module load.
+initializeWalletAndContract().then(() => {
+    console.log("Block proposer initialization complete. Ready to handle proposals.");
+}).catch((error) => {
+    console.error("Initialization failed:", error);
+});
+/**
+ * Creates an instance of the BlockTracker contract.
+ */
+function buildBlockTrackerContract() {
+    const abiPath = path_1.default.join(__dirname, 'abi', 'BlockTracker.json');
+    const contractABI = JSON.parse(fs_1.default.readFileSync(abiPath, 'utf8'));
+    const contract = new ethers_1.ethers.Contract(process.env.BUNDLE_TRACKER_ADDRESS, contractABI, sepoliaAlchemy);
+    return contract.connect(wallet);
+}
+/**
+ * Creates and returns Alchemy instances (mainnet and Sepolia) and a wallet.
+ */
+async function buildAlchemyInstances() {
+    const mainnet = new alchemy_sdk_1.Alchemy({
+        apiKey: process.env.ALCHEMY_API_KEY,
+        network: "eth-mainnet",
+    });
+    const sepolia = new alchemy_sdk_1.Alchemy({
+        apiKey: process.env.ALCHEMY_API_KEY,
+        network: "eth-sepolia",
+    });
+    // Make a dummy call to ensure the mainnet instance is ready.
+    await mainnet.core.getTokenMetadata("0x04Fa0d235C4abf4BcF4787aF4CF447DE572eF828");
+    // Create a wallet with the Sepolia provider.
+    const walletInstance = new ethers_1.ethers.Wallet(process.env.TEST_PRIVATE_KEY, sepolia);
+    return { mainnetAlchemy: mainnet, sepoliaAlchemy: sepolia, wallet: walletInstance };
+}
+/**
+ * Called periodically to publish a block if any intentions have been cached.
+ */
+async function createAndPublishBlock() {
+    if (cachedIntentions.length === 0) {
+        console.log("No intentions to block.");
+        return;
+    }
+    let nonce;
+    try {
+        nonce = await getLatestNonce();
+    }
+    catch (error) {
+        console.error("Failed to get latest nonce:", error);
+        return;
+    }
+    // Flatten cached intentions into a block array.
+    const block = cachedIntentions.map(({ execution }) => execution).flat();
+    // Collect all unique reward addresses from proofs.
+    const rewardAddresses = [
+        ...new Set(block.flatMap((execution) => execution.proof.map((proof) => proof.from))),
+    ];
+    const blockObject = {
+        block: block,
+        nonce: nonce,
+        rewards: rewardAddresses.map((address) => ({
+            vault: address,
+            token: OYA_TOKEN_ADDRESS,
+            amount: OYA_REWARD_AMOUNT.toString(),
+        })),
+    };
+    // Sign the block object.
+    const blockProposerSignature = await wallet.signMessage(JSON.stringify(blockObject));
+    try {
+        await publishBlock(JSON.stringify(blockObject), blockProposerSignature, BUNDLER_ADDRESS);
+    }
+    catch (error) {
+        console.error("Failed to publish block:", error);
+        cachedIntentions = [];
+        return;
+    }
+    // Clear the cached intentions after publishing.
+    cachedIntentions = [];
+}
+exports.createAndPublishBlock = createAndPublishBlock;
+/**
+ * Returns the latest nonce from the API.
+ */
+async function getLatestNonce() {
+    try {
+        const response = await axios_1.default.get(`${process.env.OYA_API_BASE_URL}/block`);
+        const blocks = response.data;
+        if (blocks.length === 0)
+            return 0;
+        return blocks[0].nonce + 1;
+    }
+    catch (error) {
+        console.error("Failed to fetch blocks from Oya API:", error);
+        throw new Error("API request failed");
+    }
+}
+/**
+ * Helper to retrieve the token decimals.
+ */
+async function getTokenDecimals(tokenAddress) {
+    try {
+        if (tokenAddress === "0x0000000000000000000000000000000000000000") {
+            return 18n;
+        }
+        const tokenMetadata = await mainnetAlchemy.core.getTokenMetadata(tokenAddress);
+        return BigInt(tokenMetadata.decimals);
+    }
+    catch (error) {
+        console.error(`Failed to get token metadata for ${tokenAddress}:`, error);
+        throw new Error("Failed to retrieve token decimals");
+    }
+}
+/**
+ * Processes an incoming intention.
+ */
+async function handleIntention(intention, signature, from) {
+    await initializeVault(from);
+    const signerAddress = ethers_1.ethers.verifyMessage(JSON.stringify(intention), signature);
+    if (signerAddress !== from) {
+        console.log("Signature verification failed");
+        throw new Error("Signature verification failed");
+    }
+    const proof = [];
+    if (intention.action_type === "transfer" || intention.action_type === "swap") {
+        const tokenAddress = intention.from_token_address;
+        const sentTokenDecimals = await getTokenDecimals(tokenAddress);
+        const amountSent = ethers_1.ethers.parseUnits(intention.amount_sent, Number(sentTokenDecimals));
+        let amountReceived;
+        if (intention.amount_received) {
+            const receivedTokenDecimals = await getTokenDecimals(intention.to_token_address);
+            amountReceived = ethers_1.ethers.parseUnits(intention.amount_received, Number(receivedTokenDecimals));
+        }
+        // Check that the sender has enough balance.
+        const response = await axios_1.default.get(`${process.env.OYA_API_BASE_URL}/balance/${from}/${tokenAddress}`, {
+            headers: { 'Content-Type': 'application/json' },
+        });
+        let currentBalance = response.data.length > 0 ? BigInt(response.data[0].balance) : 0n;
+        if (currentBalance < amountSent) {
+            console.error(`Insufficient balance. Current: ${currentBalance.toString()}, Required: ${amountSent.toString()}`);
+            throw new Error('Insufficient balance');
+        }
+        if (intention.action_type === "swap") {
+            const swapInput = {
+                token: intention.from_token_address,
+                chainId: intention.from_token_chainid,
+                from: intention.from,
+                to: BUNDLER_ADDRESS,
+                amount: amountSent.toString(),
+                tokenId: 0,
+            };
+            proof.push(swapInput);
+            const swapOutput = {
+                token: intention.to_token_address,
+                chainId: intention.to_token_chainid,
+                from: BUNDLER_ADDRESS,
+                to: intention.from,
+                amount: amountReceived.toString(),
+                tokenId: 0,
+            };
+            proof.push(swapOutput);
+        }
+        else {
+            const transfer = {
+                token: intention.from_token_address,
+                chainId: intention.from_token_chainid,
+                from: intention.from,
+                to: intention.to,
+                amount: amountSent.toString(),
+                tokenId: 0,
+            };
+            proof.push(transfer);
+        }
+    }
+    else {
+        console.error("Unexpected action_type:", intention.action_type);
+    }
+    const executionObject = {
+        execution: [
+            {
+                intention: intention,
+                proof: proof,
+            },
+        ],
+    };
+    cachedIntentions.push(executionObject);
+    return executionObject;
+}
+exports.handleIntention = handleIntention;
+/**
+ * Ensures that a vault (by address) is initialized in the API.
+ */
+async function initializeVault(vault) {
+    try {
+        const url = `${process.env.OYA_API_BASE_URL}/balance/${vault}`;
+        const response = await axios_1.default.get(url, {
+            headers: { 'Content-Type': 'application/json' },
+        });
+        if (response.data.length === 0) {
+            await initializeBalancesForVault(vault);
+        }
+    }
+    catch (error) {
+        if (error.response && error.response.status === 404) {
+            await initializeBalancesForVault(vault);
+        }
+        else {
+            console.error(`Failed to initialize vault ${vault}:`, error);
+            throw new Error("Vault initialization failed");
+        }
+    }
+}
+/**
+ * Initializes the balances for a given vault.
+ */
+async function initializeBalancesForVault(vault) {
+    const initialBalance18 = ethers_1.ethers.parseUnits('10000', 18);
+    const initialBalance6 = ethers_1.ethers.parseUnits('1000000', 6);
+    const initialOyaBalance = ethers_1.ethers.parseUnits('111', 18);
+    const supportedTokens18 = [];
+    const supportedTokens6 = ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"];
+    const oyaTokens = ["0x0000000000000000000000000000000000000001"];
+    for (const token of supportedTokens18) {
+        await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/balance`, { vault, token, balance: initialBalance18.toString() }, { headers: { 'Content-Type': 'application/json' } });
+    }
+    for (const token of supportedTokens6) {
+        await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/balance`, { vault, token, balance: initialBalance6.toString() }, { headers: { 'Content-Type': 'application/json' } });
+    }
+    for (const token of oyaTokens) {
+        await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/balance`, { vault, token, balance: initialOyaBalance.toString() }, { headers: { 'Content-Type': 'application/json' } });
+    }
+    console.log(`Vault ${vault} initialized with test tokens`);
+}
+/**
+ * Initializes the wallet and blockchain contract.
+ */
+async function initializeWalletAndContract() {
+    const { mainnetAlchemy: mainAlchemy, sepoliaAlchemy: sepAlchemy, wallet: walletInstance } = await buildAlchemyInstances();
+    mainnetAlchemy = mainAlchemy;
+    sepoliaAlchemy = sepAlchemy;
+    wallet = walletInstance;
+    blockTrackerContract = buildBlockTrackerContract();
+}
+/**
+ * Mints rewards (1 Oya token) to the specified addresses.
+ */
+async function mintRewards(addresses) {
+    try {
+        for (const address of addresses) {
+            await initializeVault(address);
+            let currentBalance;
+            try {
+                const response = await axios_1.default.get(`${process.env.OYA_API_BASE_URL}/balance/${address}/${OYA_TOKEN_ADDRESS}`, {
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                currentBalance = response.data.length > 0 ? BigInt(response.data[0].balance) : 0n;
+            }
+            catch (error) {
+                if (error.response && error.response.status === 404) {
+                    currentBalance = 0n;
+                }
+                else {
+                    throw error;
+                }
+            }
+            const newBalance = currentBalance + OYA_REWARD_AMOUNT;
+            await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/balance`, { vault: address, token: OYA_TOKEN_ADDRESS, balance: newBalance.toString() }, { headers: { 'Content-Type': 'application/json' } });
+        }
+    }
+    catch (error) {
+        console.error("Failed to mint rewards:", error);
+        throw new Error("Minting rewards failed");
+    }
+}
+/**
+ * Publishes a block. This function:
+ *  1. Ensures Helia/IPFS is set up.
+ *  2. Signs and verifies the block.
+ *  3. Uploads block data to IPFS.
+ *  4. Calls the blockchain contract.
+ *  5. Notifies the API (by calling /block, /cid, etc.).
+ *  6. Processes balance updates and nonce changes.
+ */
+async function publishBlock(data, signature, from) {
+    await ensureHeliaSetup();
+    if (from !== BUNDLER_ADDRESS) {
+        throw new Error("Unauthorized: Only the blockProposer can publish new blocks.");
+    }
+    const signerAddress = ethers_1.ethers.verifyMessage(data, signature);
+    if (signerAddress !== from) {
+        throw new Error("Signature verification failed");
+    }
+    const cid = await s.add(data);
+    const cidToString = cid.toString();
+    console.log('Block published to IPFS, CID:', cidToString);
+    try {
+        const tx = await blockTrackerContract.proposeBlock(cidToString);
+        await sepoliaAlchemy.transact.waitForTransaction(tx.hash);
+        console.log('Blockchain transaction successful');
+    }
+    catch (error) {
+        console.error("Failed to propose block:", error);
+        throw new Error("Blockchain transaction failed");
+    }
+    let blockData;
+    try {
+        blockData = JSON.parse(data);
+    }
+    catch (error) {
+        console.error("Failed to parse block data:", error);
+        throw new Error("Invalid block data");
+    }
+    if (!Array.isArray(blockData.block)) {
+        console.error("Invalid block data structure:", blockData);
+        throw new Error("Invalid block data structure");
+    }
+    // Notify API endpoints.
+    try {
+        await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/block`, blockData, {
+            headers: { 'Content-Type': 'application/json' },
+        });
+        console.log('Block data sent to Oya API');
+    }
+    catch (error) {
+        console.error("Failed to send block data to Oya API:", error);
+        throw new Error("API request failed");
+    }
+    try {
+        await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/cid`, { cid: cidToString, nonce: blockData.nonce }, { headers: { 'Content-Type': 'application/json' } });
+        console.log('CID sent to Oya API');
+    }
+    catch (error) {
+        console.error("Failed to send CID to Oya API:", error);
+        throw new Error("API request failed");
+    }
+    // Process balance updates.
+    try {
+        for (const execution of blockData.block) {
+            if (!Array.isArray(execution.proof)) {
+                console.error("Invalid proof structure in execution:", execution);
+                throw new Error("Invalid proof structure");
+            }
+            for (const proof of execution.proof) {
+                await updateBalances(proof.from, proof.to, proof.token, proof.amount);
+            }
+        }
+        console.log('Balances updated successfully');
+    }
+    catch (error) {
+        console.error("Failed to update balances:", error);
+        throw new Error("Balance update failed");
+    }
+    try {
+        await mintRewards(blockData.rewards.map((reward) => reward.vault));
+        console.log('Rewards minted successfully');
+    }
+    catch (error) {
+        console.error("Failed to mint rewards:", error);
+        throw new Error("Minting rewards failed");
+    }
+    try {
+        for (const execution of blockData.block) {
+            const vaultNonce = execution.intention.nonce;
+            const vault = execution.intention.from;
+            await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/nonce/${vault}`, { nonce: vaultNonce }, { headers: { 'Content-Type': 'application/json' } });
+        }
+    }
+    catch (error) {
+        console.error(`Failed to set nonce for vaults in the block:`, error);
+        throw new Error("Nonce update failed");
+    }
+    return cid;
+}
+/**
+ * Sets up Helia/IPFS if it has not been initialized already.
+ */
+async function ensureHeliaSetup() {
+    if (!s) {
+        await setupHelia();
+    }
+}
+/**
+ * Dynamically imports and initializes Helia and the strings helper.
+ */
+async function setupHelia() {
+    const heliaModule = await Promise.resolve().then(() => __importStar(require('helia')));
+    const { createHelia } = heliaModule;
+    const stringsModule = await Promise.resolve().then(() => __importStar(require('@helia/strings')));
+    const { strings } = stringsModule;
+    const heliaNode = await createHelia();
+    s = strings(heliaNode);
+}
+/**
+ * Updates balances for a given transfer.
+ */
+async function updateBalances(from, to, token, amount) {
+    try {
+        await initializeVault(from);
+        await initializeVault(to);
+        const amountBigInt = BigInt(amount);
+        let fromBalance;
+        if (from.toLowerCase() === BUNDLER_ADDRESS.toLowerCase()) {
+            const largeBalance = ethers_1.ethers.parseUnits('1000000000000', 18);
+            try {
+                await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/balance`, { vault: from, token, balance: largeBalance.toString() }, { headers: { 'Content-Type': 'application/json' } });
+                console.log(`Block proposer balance updated to a large amount for token ${token}`);
+            }
+            catch (error) {
+                if (error.response && error.response.status === 404) {
+                    console.log(`Initializing block proposer vault for token ${token}`);
+                    await initializeBalancesForVault(from);
+                }
+                else {
+                    console.error("Failed to update block proposer balance:", error);
+                    throw new Error("Balance update failed for block proposer");
+                }
+            }
+        }
+        const fromResponse = await axios_1.default.get(`${process.env.OYA_API_BASE_URL}/balance/${from}/${token}`, {
+            headers: { 'Content-Type': 'application/json' },
+        });
+        fromBalance = fromResponse.data.length > 0 ? BigInt(fromResponse.data[0].balance) : 0n;
+        let toBalance;
+        try {
+            const toResponse = await axios_1.default.get(`${process.env.OYA_API_BASE_URL}/balance/${to}/${token}`, {
+                headers: { 'Content-Type': 'application/json' },
+            });
+            toBalance = toResponse.data.length > 0 ? BigInt(toResponse.data[0].balance) : 0n;
+        }
+        catch (error) {
+            if (error.response && error.response.status === 404) {
+                toBalance = 0n;
+            }
+            else {
+                console.error("Failed to retrieve 'to' vault balance:", error);
+                throw new Error("Balance retrieval failed for 'to' vault");
+            }
+        }
+        const newFromBalance = fromBalance - amountBigInt;
+        const newToBalance = toBalance + amountBigInt;
+        if (newFromBalance < 0n) {
+            throw new Error('Insufficient balance in from vault');
+        }
+        console.log(`New balance for from vault (${from}): ${newFromBalance.toString()}`);
+        console.log(`New balance for to vault (${to}): ${newToBalance.toString()}`);
+        await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/balance`, { vault: from, token, balance: newFromBalance.toString() }, { headers: { 'Content-Type': 'application/json' } });
+        await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/balance`, { vault: to, token, balance: newToBalance.toString() }, { headers: { 'Content-Type': 'application/json' } });
+        console.log(`Balances updated: from ${from} to ${to} for token ${token} amount ${amount}`);
+    }
+    catch (error) {
+        console.error("Failed to update balances:", error);
+        throw new Error("Balance update failed");
+    }
+}
