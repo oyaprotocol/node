@@ -91,7 +91,7 @@ async function buildAlchemyInstances() {
  */
 async function createAndPublishBlock() {
     if (cachedIntentions.length === 0) {
-        console.log("No intentions to block.");
+        console.log("No intentions to propose.");
         return;
     }
     let nonce;
