@@ -7,6 +7,17 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+/**
+ * Define a custom interface for the BlockTracker contract.
+ * Based on the ABI, proposeBlock takes a single string argument and returns a ContractTransaction.
+ */
+export interface BlockTrackerContract extends ethers.BaseContract {
+  proposeBlock(
+    _blockData: string,
+    overrides?: ethers.Overrides
+  ): Promise<ethers.ContractTransaction>;
+}
+
 // Constants (from your original oya-node code)
 const BUNDLER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
 const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
@@ -18,7 +29,7 @@ let cachedIntentions: any[] = [];
 let mainnetAlchemy: Alchemy;
 let sepoliaAlchemy: Alchemy;
 let wallet: Wallet;
-let blockTrackerContract: ethers.BaseContract;  // <-- Changed type here
+let blockTrackerContract: BlockTrackerContract; // now typed as our custom interface
 
 // Variables for Helia/IPFS – will be initialized in setupHelia()
 let s: any; // helper for adding data to IPFS
@@ -35,7 +46,7 @@ initializeWalletAndContract()
 /**
  * Creates an instance of the BlockTracker contract.
  */
-async function buildBlockTrackerContract(): Promise<ethers.BaseContract> {  // <-- Changed return type here
+async function buildBlockTrackerContract(): Promise<BlockTrackerContract> {
   const abiPath = path.join(__dirname, 'abi', 'BlockTracker.json');
   const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
   // Await and cast the provider from sepoliaAlchemy.
@@ -45,8 +56,8 @@ async function buildBlockTrackerContract(): Promise<ethers.BaseContract> {  // <
     contractABI,
     provider
   );
-  // Cast the wallet so it satisfies the ContractRunner interface.
-  return contract.connect(wallet as unknown as ethers.ContractRunner);
+  // Connect the wallet (casting to ContractRunner) and then cast to our custom interface.
+  return contract.connect(wallet as unknown as ethers.ContractRunner) as BlockTrackerContract;
 }
 
 /**
