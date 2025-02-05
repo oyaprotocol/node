@@ -18,7 +18,7 @@ let cachedIntentions: any[] = [];
 let mainnetAlchemy: Alchemy;
 let sepoliaAlchemy: Alchemy;
 let wallet: Wallet;
-let blockTrackerContract: ethers.Contract;
+let blockTrackerContract: ethers.BaseContract;  // <-- Changed type here
 
 // Variables for Helia/IPFS – will be initialized in setupHelia()
 let s: any; // helper for adding data to IPFS
@@ -35,7 +35,7 @@ initializeWalletAndContract()
 /**
  * Creates an instance of the BlockTracker contract.
  */
-async function buildBlockTrackerContract(): Promise<ethers.Contract> {
+async function buildBlockTrackerContract(): Promise<ethers.BaseContract> {  // <-- Changed return type here
   const abiPath = path.join(__dirname, 'abi', 'BlockTracker.json');
   const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
   // Await and cast the provider from sepoliaAlchemy.
