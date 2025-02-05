@@ -359,7 +359,7 @@ async function publishBlock(data: string, signature: string, from: string) {
   console.log('Block published to IPFS, CID:', cidToString);
   try {
     const tx = await blockTrackerContract.proposeBlock(cidToString);
-    await sepoliaAlchemy.transact.waitForTransaction(tx.hash);
+    await sepoliaAlchemy.transact.waitForTransaction((tx as any).hash);
     console.log('Blockchain transaction successful');
   } catch (error) {
     console.error("Failed to propose block:", error);
