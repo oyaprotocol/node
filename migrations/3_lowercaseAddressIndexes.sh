@@ -24,19 +24,19 @@ if [ -z "$APP_NAME" ]; then
 fi
 
 # Add the case-insensitive unique index for the 'nonces' table
-heroku pg:psql --app "$APP_NAME" -c "
+heroku pg:psql --app "$APP_NAME" DATABASE_URL -c "
 CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_vault_nonces ON nonces (LOWER(vault));"
 
 # Add the case-insensitive unique index for the 'balances' table
-heroku pg:psql --app "$APP_NAME" -c "
+heroku pg:psql --app "$APP_NAME" DATABASE_URL -c "
 CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_vault_token_balances ON balances (LOWER(vault), LOWER(token));"
 
 # Update all existing vault values in 'nonces' to lowercase
-heroku pg:psql --app "$APP_NAME" -c "
+heroku pg:psql --app "$APP_NAME" DATABASE_URL -c "
 UPDATE nonces SET vault = LOWER(vault);"
 
 # Update all existing vault values in 'balances' to lowercase
-heroku pg:psql --app "$APP_NAME" -c "
+heroku pg:psql --app "$APP_NAME" DATABASE_URL -c "
 UPDATE balances SET vault = LOWER(vault), token = LOWER(token);"
 
 echo "Case-insensitive unique indexes added and existing vaults updated to lowercase."

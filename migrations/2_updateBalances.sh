@@ -23,7 +23,8 @@ if [ -z "$APP_NAME" ]; then
 fi
 
 # Connect to the Heroku database and update the balances table
-heroku pg:psql --app "$APP_NAME" <<EOF
+heroku pg:psql --app "$APP_NAME" DATABASE_URL <<EOF
+
 DROP TABLE IF EXISTS balances;
 CREATE TABLE IF NOT EXISTS balances (
   id SERIAL PRIMARY KEY,
