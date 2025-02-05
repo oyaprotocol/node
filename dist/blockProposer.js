@@ -276,7 +276,7 @@ async function initializeBalancesForVault(vault) {
     const initialBalance18 = (0, ethers_1.parseUnits)('10000', 18);
     const initialBalance6 = (0, ethers_1.parseUnits)('1000000', 6);
     const initialOyaBalance = (0, ethers_1.parseUnits)('111', 18);
-    const supportedTokens18 = [];
+    const supportedTokens18 = ["0x0000000000000000000000000000000000000000"];
     const supportedTokens6 = ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"];
     const oyaTokens = ["0x0000000000000000000000000000000000000001"];
     for (const token of supportedTokens18) {

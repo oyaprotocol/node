@@ -265,7 +265,7 @@ async function initializeBalancesForVault(vault: string) {
   const initialBalance18 = parseUnits('10000', 18);
   const initialBalance6 = parseUnits('1000000', 6);
   const initialOyaBalance = parseUnits('111', 18);
-  const supportedTokens18: string[] = [];
+  const supportedTokens18: string[] = ["0x0000000000000000000000000000000000000000"];
   const supportedTokens6: string[] = ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"];
   const oyaTokens: string[] = ["0x0000000000000000000000000000000000000001"];
   for (const token of supportedTokens18) {
