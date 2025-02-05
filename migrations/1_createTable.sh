@@ -22,8 +22,10 @@ if [ -z "$APP_NAME" ]; then
     usage
 fi
 
-# Connect to the Heroku database and create the tables
-heroku pg:psql --app "$APP_NAME" <<EOF
+# Connect to the Heroku database and create the tables.
+# Note the empty line immediately after <<EOF and explicit reference to DATABASE_URL.
+heroku pg:psql --app "$APP_NAME" DATABASE_URL <<EOF
+
 DROP TABLE IF EXISTS blocks;
 CREATE TABLE IF NOT EXISTS blocks (
   id SERIAL PRIMARY KEY,
