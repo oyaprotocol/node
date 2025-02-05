@@ -1,6 +1,5 @@
 import axios from 'axios';
-import { ethers } from 'ethers';
-import { parseUnits, verifyMessage } from 'ethers/lib/utils';
+import { ethers, parseUnits, verifyMessage } from 'ethers';
 import { Alchemy, Wallet, Network } from 'alchemy-sdk';
 import fs from 'fs';
 import path from 'path';
@@ -39,14 +38,15 @@ initializeWalletAndContract()
 async function buildBlockTrackerContract(): Promise<ethers.Contract> {
   const abiPath = path.join(__dirname, 'abi', 'BlockTracker.json');
   const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
-  // Await the provider from sepoliaAlchemy.
-  const provider = await sepoliaAlchemy.config.getProvider();
+  // Await and cast the provider from sepoliaAlchemy.
+  const provider = (await sepoliaAlchemy.config.getProvider()) as unknown as ethers.Provider;
   const contract = new ethers.Contract(
     process.env.BUNDLE_TRACKER_ADDRESS as string,
     contractABI,
     provider
   );
-  return contract.connect(wallet);
+  // Cast the wallet so it satisfies the ContractRunner interface.
+  return contract.connect(wallet as unknown as ethers.ContractRunner);
 }
 
 /**
@@ -75,7 +75,7 @@ async function buildAlchemyInstances() {
  */
 export async function createAndPublishBlock() {
   if (cachedIntentions.length === 0) {
-    console.log("No intentions to propose.");
+    console.log("No intentions to block.");
     return;
   }
   let nonce: number;
@@ -97,7 +97,6 @@ export async function createAndPublishBlock() {
     rewards: rewardAddresses.map((address: string) => ({
       vault: address,
       token: OYA_TOKEN_ADDRESS,
-      // Convert OYA_REWARD_AMOUNT to bigint then to string.
       amount: BigInt(OYA_REWARD_AMOUNT.toString()).toString(),
     })),
   };
@@ -169,7 +168,6 @@ export async function handleIntention(intention: any, signature: string, from: s
       const receivedTokenDecimals = await getTokenDecimals(intention.to_token_address);
       amountReceived = parseUnits(intention.amount_received, Number(receivedTokenDecimals));
     }
-    // Convert amountSent to bigint for comparison.
     const amountSentBigInt = BigInt(amountSent.toString());
     const response = await axios.get(`${process.env.OYA_API_BASE_URL}/balance/${from}/${tokenAddress}`, {
       headers: { 'Content-Type': 'application/json' },
