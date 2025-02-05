@@ -29,7 +29,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleIntention = exports.createAndPublishBlock = void 0;
 const axios_1 = __importDefault(require("axios"));
 const ethers_1 = require("ethers");
-const utils_1 = require("ethers/lib/utils");
 const alchemy_sdk_1 = require("alchemy-sdk");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -38,13 +37,13 @@ dotenv_1.default.config();
 // Constants (from your original oya-node code)
 const BUNDLER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
 const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
-const OYA_REWARD_AMOUNT = (0, utils_1.parseUnits)('1', 18); // 1 Oya token (BigNumber)
+const OYA_REWARD_AMOUNT = (0, ethers_1.parseUnits)('1', 18); // 1 Oya token (BigNumber)
 // Global variables
 let cachedIntentions = [];
 let mainnetAlchemy;
 let sepoliaAlchemy;
 let wallet;
-let blockTrackerContract;
+let blockTrackerContract; // now typed as our custom interface
 // Variables for Helia/IPFS – will be initialized in setupHelia()
 let s; // helper for adding data to IPFS
 // Initialize wallet and contract on module load.
@@ -61,9 +60,10 @@ initializeWalletAndContract()
 async function buildBlockTrackerContract() {
     const abiPath = path_1.default.join(__dirname, 'abi', 'BlockTracker.json');
     const contractABI = JSON.parse(fs_1.default.readFileSync(abiPath, 'utf8'));
-    // Await the provider from sepoliaAlchemy.
-    const provider = await sepoliaAlchemy.config.getProvider();
-    const contract = new ethers_1.ethers.Contract(process.env.BUNDLE_TRACKER_ADDRESS, contractABI, provider);
+    // Await and cast the provider from sepoliaAlchemy.
+    const provider = (await sepoliaAlchemy.config.getProvider());
+    const contract = new ethers_1.ethers.Contract(process.env.BLOCK_TRACKER_ADDRESS, contractABI, provider);
+    // Connect the wallet (casting to ContractRunner) and then cast to our custom interface.
     return contract.connect(wallet);
 }
 /**
@@ -91,7 +91,7 @@ async function buildAlchemyInstances() {
  */
 async function createAndPublishBlock() {
     if (cachedIntentions.length === 0) {
-        console.log("No intentions to propose.");
+        console.log("No intentions to block.");
         return;
     }
     let nonce;
@@ -114,7 +114,6 @@ async function createAndPublishBlock() {
         rewards: rewardAddresses.map((address) => ({
             vault: address,
             token: OYA_TOKEN_ADDRESS,
-            // Convert OYA_REWARD_AMOUNT to bigint then to string.
             amount: BigInt(OYA_REWARD_AMOUNT.toString()).toString(),
         })),
     };
@@ -173,7 +172,7 @@ async function getTokenDecimals(tokenAddress) {
  */
 async function handleIntention(intention, signature, from) {
     await initializeVault(from);
-    const signerAddress = (0, utils_1.verifyMessage)(JSON.stringify(intention), signature);
+    const signerAddress = (0, ethers_1.verifyMessage)(JSON.stringify(intention), signature);
     if (signerAddress !== from) {
         console.log("Signature verification failed");
         throw new Error("Signature verification failed");
@@ -182,13 +181,12 @@ async function handleIntention(intention, signature, from) {
     if (intention.action_type === "transfer" || intention.action_type === "swap") {
         const tokenAddress = intention.from_token_address;
         const sentTokenDecimals = await getTokenDecimals(tokenAddress);
-        const amountSent = (0, utils_1.parseUnits)(intention.amount_sent, Number(sentTokenDecimals));
+        const amountSent = (0, ethers_1.parseUnits)(intention.amount_sent, Number(sentTokenDecimals));
         let amountReceived;
         if (intention.amount_received) {
             const receivedTokenDecimals = await getTokenDecimals(intention.to_token_address);
-            amountReceived = (0, utils_1.parseUnits)(intention.amount_received, Number(receivedTokenDecimals));
+            amountReceived = (0, ethers_1.parseUnits)(intention.amount_received, Number(receivedTokenDecimals));
         }
-        // Convert amountSent to bigint for comparison.
         const amountSentBigInt = BigInt(amountSent.toString());
         const response = await axios_1.default.get(`${process.env.OYA_API_BASE_URL}/balance/${from}/${tokenAddress}`, {
             headers: { 'Content-Type': 'application/json' },
@@ -275,9 +273,9 @@ async function initializeVault(vault) {
  * Initializes the balances for a given vault.
  */
 async function initializeBalancesForVault(vault) {
-    const initialBalance18 = (0, utils_1.parseUnits)('10000', 18);
-    const initialBalance6 = (0, utils_1.parseUnits)('1000000', 6);
-    const initialOyaBalance = (0, utils_1.parseUnits)('111', 18);
+    const initialBalance18 = (0, ethers_1.parseUnits)('10000', 18);
+    const initialBalance6 = (0, ethers_1.parseUnits)('1000000', 6);
+    const initialOyaBalance = (0, ethers_1.parseUnits)('111', 18);
     const supportedTokens18 = [];
     const supportedTokens6 = ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"];
     const oyaTokens = ["0x0000000000000000000000000000000000000001"];
@@ -347,7 +345,7 @@ async function publishBlock(data, signature, from) {
     if (from !== BUNDLER_ADDRESS) {
         throw new Error("Unauthorized: Only the blockProposer can publish new blocks.");
     }
-    const signerAddress = (0, utils_1.verifyMessage)(data, signature);
+    const signerAddress = (0, ethers_1.verifyMessage)(data, signature);
     if (signerAddress !== from) {
         throw new Error("Signature verification failed");
     }
@@ -459,7 +457,7 @@ async function updateBalances(from, to, token, amount) {
         const amountBigInt = BigInt(amount);
         let fromBalance;
         if (from.toLowerCase() === BUNDLER_ADDRESS.toLowerCase()) {
-            const largeBalance = (0, utils_1.parseUnits)('1000000000000', 18);
+            const largeBalance = (0, ethers_1.parseUnits)('1000000000000', 18);
             try {
                 await axios_1.default.post(`${process.env.OYA_API_BASE_URL}/balance`, { vault: from, token, balance: largeBalance.toString() }, { headers: { 'Content-Type': 'application/json' } });
                 console.log(`Block proposer balance updated to a large amount for token ${token}`);

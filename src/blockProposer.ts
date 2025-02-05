@@ -52,7 +52,7 @@ async function buildBlockTrackerContract(): Promise<BlockTrackerContract> {
   // Await and cast the provider from sepoliaAlchemy.
   const provider = (await sepoliaAlchemy.config.getProvider()) as unknown as ethers.Provider;
   const contract = new ethers.Contract(
-    process.env.BUNDLE_TRACKER_ADDRESS as string,
+    process.env.BLOCK_TRACKER_ADDRESS as string,
     contractABI,
     provider
   );
