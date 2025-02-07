@@ -1,32 +1,25 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.app = exports.pool = void 0;
-const express_1 = __importDefault(require("express"));
-const body_parser_1 = require("body-parser");
-const dotenv_1 = __importDefault(require("dotenv"));
-const pg_1 = require("pg");
-const routes_1 = require("./routes");
-const blockProposer_1 = require("./blockProposer");
-dotenv_1.default.config();
-const app = (0, express_1.default)();
-exports.app = app;
+import express from 'express';
+import { json } from 'body-parser';
+import dotenv from 'dotenv';
+import { Pool } from 'pg';
+import { blockRouter, cidRouter, balanceRouter, vaultNonceRouter } from './routes.js';
+import { handleIntention, createAndPublishBlock } from './blockProposer.js';
+dotenv.config();
+const app = express();
 const port = process.env.PORT || 3000;
-app.use((0, body_parser_1.json)());
+app.use(json());
 // Database connection
-exports.pool = new pg_1.Pool({
+export const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
         rejectUnauthorized: false
     }
 });
 // Routes
-app.use('/block', routes_1.blockRouter);
-app.use('/cid', routes_1.cidRouter);
-app.use('/balance', routes_1.balanceRouter);
-app.use('/nonce', routes_1.vaultNonceRouter);
+app.use('/block', blockRouter);
+app.use('/cid', cidRouter);
+app.use('/balance', balanceRouter);
+app.use('/nonce', vaultNonceRouter);
 // This endpoint receives an intention (with signature and from) and passes it to the block proposer logic.
 app.post('/intention', async (req, res) => {
     try {
@@ -35,7 +28,7 @@ app.post('/intention', async (req, res) => {
             throw new Error('Missing required fields');
         }
         console.log('Received signed intention:', intention, signature, from);
-        const response = await (0, blockProposer_1.handleIntention)(intention, signature, from);
+        const response = await handleIntention(intention, signature, from);
         res.status(200).json(response);
     }
     catch (error) {
@@ -46,7 +39,7 @@ app.post('/intention', async (req, res) => {
 // Every 10 seconds, try to publish a new block if there are cached intentions.
 setInterval(async () => {
     try {
-        await (0, blockProposer_1.createAndPublishBlock)();
+        await createAndPublishBlock();
     }
     catch (error) {
         console.error('Error creating and publishing block:', error);
@@ -55,3 +48,4 @@ setInterval(async () => {
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });
+export { app };
