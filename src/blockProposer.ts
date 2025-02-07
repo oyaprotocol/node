@@ -9,6 +9,15 @@ import { pool } from './index';
 dotenv.config();
 
 /**
+ * Helper function to safely convert a string to a BigInt.
+ * This function removes any fractional part (if present) before converting.
+ */
+function safeBigInt(value: string): bigint {
+  const integerPart = value.split('.')[0];
+  return BigInt(integerPart);
+}
+
+/**
  * Define a custom interface for the BlockTracker contract.
  * Based on the ABI, proposeBlock takes a single string argument and returns a ContractTransaction.
  */
@@ -127,7 +136,9 @@ async function getBalance(vault: string, token: string): Promise<bigint> {
     'SELECT balance FROM balances WHERE LOWER(vault) = LOWER($1) AND LOWER(token) = LOWER($2) ORDER BY timestamp DESC LIMIT 1',
     [vault, token]
   );
-  return result.rows.length ? BigInt(result.rows[0].balance) : 0n;
+  if (result.rows.length === 0) return 0n;
+  // Use safeBigInt to remove any fractional part before conversion.
+  return safeBigInt(result.rows[0].balance.toString());
 }
 
 /**
@@ -209,7 +220,8 @@ async function mintRewards(addresses: string[]) {
   for (const address of addresses) {
     await initializeVault(address);
     const currentBalance = await getBalance(address, OYA_TOKEN_ADDRESS);
-    const newBalance = currentBalance + BigInt(OYA_REWARD_AMOUNT.toString());
+    // Use safeBigInt in case the BigNumber string includes decimals.
+    const newBalance = currentBalance + safeBigInt(OYA_REWARD_AMOUNT.toString());
     await updateBalance(address, OYA_TOKEN_ADDRESS, newBalance);
   }
 }
@@ -346,11 +358,12 @@ async function setupHelia() {
 async function updateBalances(from: string, to: string, token: string, amount: string) {
   await initializeVault(from);
   await initializeVault(to);
-  const amountBigInt = BigInt(amount);
+  // Clean the amount string in case it includes a fractional part.
+  const amountBigInt = safeBigInt(amount);
   // If the "from" address is the block proposer, update its balance to a large value.
   if (from.toLowerCase() === BUNDLER_ADDRESS.toLowerCase()) {
     const largeBalance = parseUnits('1000000000000', 18);
-    await updateBalance(from, token, largeBalance);
+    await updateBalance(from, token, safeBigInt(largeBalance.toString()));
     console.log(`Block proposer balance updated to a large amount for token ${token}`);
   }
   const fromBalance = await getBalance(from, token);
@@ -387,7 +400,7 @@ export async function handleIntention(intention: any, signature: string, from: s
       const receivedTokenDecimals = await getTokenDecimals(intention.to_token_address);
       amountReceived = parseUnits(intention.amount_received, Number(receivedTokenDecimals));
     }
-    const amountSentBigInt = BigInt(amountSent.toString());
+    const amountSentBigInt = safeBigInt(amountSent.toString());
     // Instead of an external API call, we retrieve the current balance directly.
     const currentBalance = await getBalance(from, tokenAddress);
     if (currentBalance < amountSentBigInt) {
@@ -469,7 +482,7 @@ export async function createAndPublishBlock() {
     rewards: rewardAddresses.map((address: string) => ({
       vault: address,
       token: OYA_TOKEN_ADDRESS,
-      amount: BigInt(OYA_REWARD_AMOUNT.toString()).toString(),
+      amount: safeBigInt(OYA_REWARD_AMOUNT.toString()).toString(),
     })),
   };
   // Sign the block object.
