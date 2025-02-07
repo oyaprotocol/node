@@ -314,7 +314,7 @@ async function updateBalances(from, to, token, amount) {
 /**
  * Processes an incoming intention.
  */
-export async function handleIntention(intention, signature, from) {
+async function handleIntention(intention, signature, from) {
     await initializeVault(from);
     const signerAddress = verifyMessage(JSON.stringify(intention), signature);
     if (signerAddress !== from) {
@@ -390,7 +390,7 @@ export async function handleIntention(intention, signature, from) {
 /**
  * Called periodically to publish a block if any intentions have been cached.
  */
-export async function createAndPublishBlock() {
+async function createAndPublishBlock() {
     if (cachedIntentions.length === 0) {
         console.log("No intentions to propose.");
         return;
@@ -441,11 +441,8 @@ async function initializeWalletAndContract() {
     wallet = walletInstance;
     blockTrackerContract = await buildBlockTrackerContract();
 }
-module.exports = {
-    handleIntention,
-    createAndPublishBlock,
-    _getCachedIntentions: () => cachedIntentions,
-    _clearCachedIntentions: () => {
-        cachedIntentions = [];
-    },
+const _getCachedIntentions = () => cachedIntentions;
+const _clearCachedIntentions = () => {
+    cachedIntentions = [];
 };
+export { handleIntention, createAndPublishBlock, _getCachedIntentions, _clearCachedIntentions };
