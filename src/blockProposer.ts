@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 // Instead of axios calls to OYA_API_BASE_URL, we import the shared DB pool
-import { pool } from './index';
+import { pool } from './index.js';
 
 dotenv.config();
 

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { pool } from './index';
+import { pool } from './index.js';
 
 export const saveBlock = async (req: Request, res: Response) => {
   const { block, nonce } = req.body;

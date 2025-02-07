@@ -12,7 +12,7 @@ import {
   getBalanceForAllTokens, 
   getVaultNonce, 
   setVaultNonce 
-} from './controllers';
+} from './controllers.js';
 
 const blockRouter = Router();
 const cidRouter = Router();

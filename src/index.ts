@@ -2,8 +2,8 @@ import express from 'express';
 import { json } from 'body-parser';
 import dotenv from 'dotenv';
 import { Pool } from 'pg';
-import { blockRouter, cidRouter, balanceRouter, vaultNonceRouter } from './routes';
-import { handleIntention, createAndPublishBlock } from './blockProposer';
+import { blockRouter, cidRouter, balanceRouter, vaultNonceRouter } from './routes.js';
+import { handleIntention, createAndPublishBlock } from './blockProposer.js';
 
 dotenv.config();
 
