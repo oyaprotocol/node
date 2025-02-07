@@ -1,7 +1,5 @@
 import { ethers, parseUnits, verifyMessage } from 'ethers';
 import { Alchemy, Wallet, Network } from 'alchemy-sdk';
-import { createHelia } from 'helia';
-import { strings } from '@helia/strings';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -346,6 +344,9 @@ async function ensureHeliaSetup() {
  * Dynamically imports and initializes Helia and the strings helper.
  */
 async function setupHelia() {
+  // Note the explicit subpath.
+  const { createHelia } = await import('helia/dist/index.min.js');
+  const { strings } = await import('@helia/strings');
   const heliaNode = await createHelia();
   s = strings(heliaNode);
 }
