@@ -1,6 +1,6 @@
-# OYA-API
+# oya-fullnode
 
-OYA-API is a Node.js–based full node for a natural language blockchain. It allows nodes to both propose new blocks (containing signed, natural language intentions) and verify blocks from other proposers. In addition, the API exposes endpoints for querying the blockchain’s current state—including blocks, CIDs, balances, and vault nonces.
+oya-fullnode is a Node.js–based full node for a natural language blockchain. It allows nodes to both propose new blocks (containing signed, natural language intentions) and verify blocks from other proposers. In addition, the API exposes endpoints for querying the blockchain’s current state—including blocks, CIDs, balances, and vault nonces.
 
 ## Table of Contents
 
@@ -52,8 +52,8 @@ OYA-API is a Node.js–based full node for a natural language blockchain. It all
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/yourusername/oya-api.git
-   cd oya-api
+   git clone https://github.com/yourusername/oya-fullnode.git
+   cd oya-fullnode
    ```
 
 2. **Install dependencies:**

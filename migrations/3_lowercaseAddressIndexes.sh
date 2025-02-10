@@ -1,11 +1,11 @@
 #!/bin/bash
-# ./migrations/3_lowercaseAddressIndexes.sh --app-name oya-api
+# ./migrations/3_lowercaseAddressIndexes.sh --app-name oya-fullnode
 
 APP_NAME=""
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 --app-name oya-api"
+    echo "Usage: $0 --app-name oya-fullnode"
     exit 1
 }
 

@@ -4,7 +4,7 @@ APP_NAME=""
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 --app-name oya-api"
+    echo "Usage: $0 --app-name oya-fullnode"
     exit 1
 }
 
