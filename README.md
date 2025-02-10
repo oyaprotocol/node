@@ -1,6 +1,6 @@
 # oya-fullnode
 
-oya-fullnode is a Node.js–based full node for a natural language blockchain. It allows nodes to both propose new blocks (containing signed, natural language intentions) and verify blocks from other proposers. In addition, the API exposes endpoints for querying the blockchain’s current state—including blocks, CIDs, balances, and vault nonces.
+oya-fullnode is a Node.js–based full node for the Oya natural language blockchain. It allows nodes to both propose new blocks (containing signed, natural language intentions) and verify blocks from other proposers. In addition, the API exposes endpoints for querying the blockchain’s current state—including blocks, CIDs, balances, and vault nonces.
 
 ## Table of Contents
 
@@ -22,7 +22,7 @@ oya-fullnode is a Node.js–based full node for a natural language blockchain. I
 
 - **Natural Language Blockchain Node:** Accepts signed intentions in natural language.
 - **Block Proposer:** Caches incoming intentions and periodically bundles them into a block.
-- **Blockchain Contract Integration:** Interacts with a blockchain smart contract via ethers.js.
+- **Blockchain Contract Integration:** Interacts with the [BlockTracker](https://github.com/pemulis/oya-onchain?tab=readme-ov-file#blocktracker) smart contract via ethers.js.
 - **IPFS Storage:** Uses Helia to upload block data to IPFS.
 - **Robust API Endpoints:** Exposes endpoints for blocks, CIDs, balances, and nonces.
 - **PostgreSQL Backend:** Uses PostgreSQL for persisting blockchain state, including blocks, balances, and nonces.
@@ -35,7 +35,7 @@ oya-fullnode is a Node.js–based full node for a natural language blockchain. I
 - **Block Proposer Logic:** Implemented in `blockProposer.ts`, this module:
   - Processes incoming intentions from the `/intention` endpoint.
   - Caches intentions and bundles them into a block every 10 seconds.
-  - Signs the block, uploads it to IPFS via Helia, interacts with the blockchain contract, and updates the database accordingly.
+  - Signs the block, uploads it to IPFS via Helia, interacts with the BlockTracker contract, and updates the database accordingly.
 - **Database:** PostgreSQL is used for persistent storage. Migration scripts (e.g., `migrations/1_createTable.sh`) set up the required tables.
 
 ## Prerequisites
@@ -73,9 +73,6 @@ oya-fullnode is a Node.js–based full node for a natural language blockchain. I
 Create a `.env` file (or use your preferred configuration method) in the project root with the following variables:
 
 ```ini
-# The port on which the server will run
-PORT=3000
-
 # PostgreSQL database connection string
 DATABASE_URL=postgres://username:password@host:port/database
 
@@ -84,6 +81,7 @@ ALCHEMY_API_KEY=your_alchemy_api_key
 
 # Deployed BlockTracker contract address
 BLOCK_TRACKER_ADDRESS=your_block_tracker_contract_address
+(This will be 0xd4af8d53a8fccacd1dc8abe8ddf7dfbc4b81546c on Sepolia.)
 
 # Private key used by the block proposer for signing blocks (ensure this is kept secure)
 TEST_PRIVATE_KEY=your_private_key
