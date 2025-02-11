@@ -29,7 +29,7 @@ heroku pg:psql --app "$APP_NAME" DATABASE_URL <<EOF
 DROP TABLE IF EXISTS blocks;
 CREATE TABLE IF NOT EXISTS blocks (
   id SERIAL PRIMARY KEY,
-  block JSONB,
+  block BYTEA NOT NULL,
   nonce INTEGER NOT NULL,
   proposer TEXT NOT NULL,
   signature TEXT NOT NULL,
