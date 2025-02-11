@@ -7,6 +7,10 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { pool } from './index.js';
 import { fileURLToPath } from 'url';
+import zlib from 'zlib';
+import { promisify } from 'util';
+
+const gzip = promisify(zlib.gzip);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -210,9 +214,19 @@ async function publishBlock(data: string, signature: string, from: string) {
   if (signerAddress !== from) {
     throw new Error("Signature verification failed");
   }
-  const cid = await s.add(data);
+  
+  let compressedData: Buffer;
+  try {
+    compressedData = await gzip(data);
+  } catch (error) {
+    console.error("Compression failed:", error);
+    throw new Error("Block data compression failed");
+  }
+  
+  const cid = await s.add(compressedData);
   const cidToString = cid.toString();
   console.log('Block published to IPFS, CID:', cidToString);
+  
   try {
     const tx = await blockTrackerContract.proposeBlock(cidToString);
     await sepoliaAlchemy.transact.waitForTransaction((tx as any).hash);
@@ -221,6 +235,7 @@ async function publishBlock(data: string, signature: string, from: string) {
     console.error("Failed to propose block:", error);
     throw new Error("Blockchain transaction failed");
   }
+  
   let blockData: any;
   try {
     blockData = JSON.parse(data);
