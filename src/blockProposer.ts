@@ -29,7 +29,7 @@ export interface BlockTrackerContract extends ethers.BaseContract {
   ): Promise<ethers.ContractTransaction>;
 }
 
-const BUNDLER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
+const PROPOSER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
 const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
 const OYA_REWARD_AMOUNT = parseUnits('1', 18);
 
@@ -207,7 +207,7 @@ async function saveBlockData(blockData: any, cidToString: string) {
 
 async function publishBlock(data: string, signature: string, from: string) {
   await ensureHeliaSetup();
-  if (from !== BUNDLER_ADDRESS) {
+  if (from !== PROPOSER_ADDRESS) {
     throw new Error("Unauthorized: Only the blockProposer can publish new blocks.");
   }
   const signerAddress = verifyMessage(data, signature);
@@ -293,7 +293,7 @@ async function updateBalances(from: string, to: string, token: string, amount: s
   await initializeVault(from);
   await initializeVault(to);
   const amountBigInt = safeBigInt(amount);
-  if (from.toLowerCase() === BUNDLER_ADDRESS.toLowerCase()) {
+  if (from.toLowerCase() === PROPOSER_ADDRESS.toLowerCase()) {
     const largeBalance = parseUnits('1000000000000', 18);
     await updateBalance(from, token, safeBigInt(largeBalance.toString()));
     console.log(`Block proposer balance updated to a large amount for token ${token}`);
@@ -343,7 +343,7 @@ async function handleIntention(intention: any, signature: string, from: string):
         token: intention.from_token_address,
         chainId: intention.from_token_chainid,
         from: intention.from,
-        to: BUNDLER_ADDRESS,
+        to: PROPOSER_ADDRESS,
         amount: amountSent.toString(),
         tokenId: 0,
       };
@@ -351,7 +351,7 @@ async function handleIntention(intention: any, signature: string, from: string):
       const swapOutput = {
         token: intention.to_token_address,
         chainId: intention.to_token_chainid,
-        from: BUNDLER_ADDRESS,
+        from: PROPOSER_ADDRESS,
         to: intention.from,
         amount: amountReceived.toString(),
         tokenId: 0,
@@ -410,7 +410,7 @@ async function createAndPublishBlock() {
   };
   const blockProposerSignature = await wallet.signMessage(JSON.stringify(blockObject));
   try {
-    await publishBlock(JSON.stringify(blockObject), blockProposerSignature, BUNDLER_ADDRESS);
+    await publishBlock(JSON.stringify(blockObject), blockProposerSignature, PROPOSER_ADDRESS);
   } catch (error) {
     console.error("Failed to publish block:", error);
     cachedIntentions = [];
