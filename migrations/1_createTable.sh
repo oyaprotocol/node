@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS blocks (
   id SERIAL PRIMARY KEY,
   block JSONB,
   nonce INTEGER NOT NULL,
+  proposer TEXT NOT NULL,
+  signature TEXT NOT NULL,
+  ipfs_cid TEXT,
   timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -39,6 +42,7 @@ CREATE TABLE IF NOT EXISTS cids (
   id SERIAL PRIMARY KEY,
   cid TEXT NOT NULL,
   nonce INTEGER NOT NULL,
+  proposer TEXT NOT NULL,
   timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -60,6 +64,12 @@ CREATE TABLE IF NOT EXISTS nonces (
   timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (vault)
 );
+
+CREATE TABLE IF NOT EXISTS proposers (
+  id SERIAL PRIMARY KEY,
+  proposer TEXT NOT NULL UNIQUE,
+  last_seen TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
 EOF
 
-echo "Tables 'blocks', 'cids', 'balances', and 'nonces' created successfully."
+echo "Tables 'blocks', 'cids', 'balances', 'nonces', and 'proposers' created successfully."
