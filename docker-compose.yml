@@ -1,0 +1,29 @@
+version: "3.9"
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # These variables will be used locally; in production, set them via Heroku config vars.
+      - DATABASE_URL=postgres://postgres:password@db:5432/oya_fullnode
+      - ALCHEMY_API_KEY=your_alchemy_api_key
+      - BLOCK_TRACKER_ADDRESS=your_block_tracker_contract_address
+      - TEST_PRIVATE_KEY=your_private_key
+    depends_on:
+      - db
+    volumes:
+      - .:/usr/src/app
+  db:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: oya_fullnode
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
