@@ -1,6 +1,6 @@
-# oya-fullnode
+# node
 
-oya-fullnode is a Node.js–based full node for the Oya natural language blockchain. It allows nodes to both propose new blocks (containing signed, natural language intentions) and verify blocks from other proposers. In addition, the API exposes endpoints for querying the blockchain’s current state—including blocks, CIDs, balances, and vault nonces.
+node is a Node.js–based full node for the Oya natural language blockchain. It allows nodes to both propose new blocks (containing signed, natural language intentions) and verify blocks from other proposers. In addition, the API exposes endpoints for querying the blockchain’s current state—including blocks, CIDs, balances, and vault nonces.
 
 ## Table of Contents
 
@@ -46,14 +46,15 @@ oya-fullnode is a Node.js–based full node for the Oya natural language blockch
 - **Alchemy API Key:** For interacting with Ethereum networks
 - **Blockchain Contract:** A deployed BlockTracker contract (its address must be provided)
 - **IPFS (Helia):** Used internally to store block data
+- **Docker:** Installed and configured for building and running containers
 
 ## Installation
 
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/yourusername/oya-fullnode.git
-   cd oya-fullnode
+   git clone https://github.com/oyaprotocol/node.git
+   cd node
    ```
 
 2. **Install dependencies:**
@@ -109,19 +110,70 @@ Alternatively, execute the SQL commands manually in your PostgreSQL instance.
 
 ## Running the Application
 
-After setting up your environment and database, you can start the server:
+### Using Node Directly
 
-1. **Start the server locally:**
+After setting up your environment and database, you can start the server locally with:
 
-   ```bash
-   npm run start
-   ```
+```bash
+npm run start
+```
 
-   The server listens on the port specified in your `.env` file (default is `3000`).
+The server listens on the port specified in your `.env` file (default is `3000`).
 
-2. **Process Flow:**
-   - The server mounts routes (e.g., `/block`, `/cid`, `/balance`, `/nonce`) and exposes an additional `/intention` endpoint.
-   - Every 10 seconds, the application attempts to publish a new block if there are cached intentions.
+### Using Docker Locally
+
+A sample **multi-stage Dockerfile** is provided to build the application for production:
+
+```
+# Stage 1: Build Stage
+FROM node:18-alpine AS builder
+
+WORKDIR /usr/src/app
+
+# Copy package files and install all dependencies (including devDependencies)
+COPY package*.json ./
+RUN apk add --no-cache python3 make g++ && ln -sf python3 /usr/bin/python
+RUN npm install   # Install both production and devDependencies
+
+# Copy source code and build the application
+COPY . .
+RUN npm run build
+
+# Stage 2: Production Stage
+FROM node:18-alpine
+
+WORKDIR /usr/src/app
+
+# Copy package files and install production dependencies only
+COPY package*.json ./
+RUN apk add --no-cache python3 make g++ && ln -sf python3 /usr/bin/python
+RUN npm install --production
+
+# Copy the compiled output from the builder stage
+COPY --from=builder /usr/src/app/dist ./dist
+
+# Expose the port and set environment variable
+EXPOSE 3000
+ENV NODE_ENV=production
+
+CMD [ "node", "dist/index.js" ]
+```
+
+To build and run the container locally:
+
+1. **Build the image:**
+
+```
+docker buildx build --platform linux/amd64 --no-cache -t node .
+```
+
+2. **Run the container:**
+
+```
+docker buildx build --platform linux/amd64 --no-cache -t node .
+```
+
+Your application will now be accessible on `http://localhost:3000`.
 
 ## API Endpoints
 
@@ -189,14 +241,60 @@ Tests are written using Mocha, Chai, and ts-mocha, and are located in the `test`
 
 ## Deployment
 
-For deploying on Heroku:
+The application is fully containerized using Docker, which allows you to deploy it anywhere that supports Docker (e.g., Heroku, AWS, Google Cloud, or on your local server). Below are instructions for deploying the application on Heroku using Docker as an example.
 
-1. Ensure that your environment variables are set correctly on the platform.
-2. The included `Procfile` specifies the start command:
+### Deploying on Heroku (Example)
 
-   ```Procfile
-   web: npm run start
+1. **Log in to the Heroku Container Registry:**
+
+   ```bash
+   heroku container:login
    ```
+
+2. **Build and Push the Docker Image:**
+
+Use Docker Buildx to build your image for the `linux/amd64` architecture, disable provenance attestation to ensure a single‑architecture manifest, and push the image directly to Heroku's registry:
+
+```
+docker buildx build --platform linux/amd64 --provenance=false --push -t registry.heroku.com/your-heroku-app/web:latest .
+```
+
+Alternatively, you can disable provenance by setting an environment variable before building:
+
+```
+export BUILDX_NO_DEFAULT_ATTESTATIONS=1
+docker buildx build --platform linux/amd64 --push -t registry.heroku.com/your-heroku-app/web:latest .
+```
+
+3. **Release the Container on Heroku:***
+
+```
+heroku container:release web --app your-heroku-app
+```
+
+4. **Verify the Deployment:**
+
+* Check Running Dynos:
+
+```
+heroku ps --app your-heroku-app
+```
+
+* View Logs:
+
+```
+heroku logs --tail --app your-heroku-app
+```
+
+### Other Deployment Options
+
+Since the application is containerized, you can also deploy it to any hosting provider that supports Docker. For example:
+
+* **Local Deployment with Docker Compose:** Create a docker-compose.yml file to bring up your application along with its dependencies (such as PostgreSQL).
+
+* **Cloud Platforms (AWS, Google Cloud, DigitalOcean, etc.):** Use orchestration tools (e.g., Kubernetes or Docker Swarm) or managed container services (such as AWS Fargate or Google Cloud Run) to deploy your Docker image.
+
+Follow these instructions to deploy your application using Docker, ensuring a portable deployment strategy that works across multiple environments.
 
 ## Contributing
 
