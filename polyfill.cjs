@@ -1,4 +1,4 @@
-import { JSDOM } from 'jsdom';
+const { JSDOM } = require('jsdom');
 const { window } = new JSDOM();
 globalThis.CustomEvent = window.CustomEvent;
-console.log("CustomEvent polyfill via jsdom applied.");
+console.log("CustomEvent polyfill via jsdom applied (CommonJS).");
