@@ -201,9 +201,10 @@ async function saveBlockData(blockData: any, cidToString: string, blockProposerS
   );
   console.log('Block data saved to DB');
 
+  // Also insert into the cids table, now including the proposer
   await pool.query(
-    'INSERT INTO cids (cid, nonce) VALUES ($1, $2)',
-    [cidToString, blockData.nonce]
+    'INSERT INTO cids (cid, nonce, proposer) VALUES ($1, $2, $3)',
+    [cidToString, blockData.nonce, PROPOSER_ADDRESS]
   );
   console.log('CID saved to DB');
 
@@ -254,7 +255,7 @@ async function publishBlock(data: string, signature: string, from: string) {
     const tx = await blockTrackerContract.proposeBlock(cidToString);
     await sepoliaAlchemy.transact.waitForTransaction((tx as any).hash);
     console.log('Blockchain transaction successful');
-    // Save the proposer data after successful blockchain transaction
+    // Save proposer data after successful blockchain transaction.
     await saveProposerData(PROPOSER_ADDRESS);
   } catch (error) {
     console.error("Failed to propose block:", error);
