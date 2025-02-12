@@ -4,7 +4,7 @@ APP_NAME=""
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 --app-name oya-fullnode"
+    echo "Usage: $0 --app-name oya-api"
     exit 1
 }
 
@@ -26,6 +26,7 @@ echo "Creating tables..."
 heroku pg:psql --app "$APP_NAME" DATABASE_URL <<EOF
 -- Drop existing tables if any
 DROP TABLE IF EXISTS blocks;
+DROP TABLE IF EXISTS bundles;
 DROP TABLE IF EXISTS cids;
 DROP TABLE IF EXISTS balances;
 DROP TABLE IF EXISTS nonces;

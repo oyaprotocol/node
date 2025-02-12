@@ -180,9 +180,11 @@ async function mintRewards(addresses: string[]) {
 }
 
 async function saveBlockData(blockData: any, cidToString: string) {
+  // Convert the block (e.g. the result of JSON.stringify) to a Buffer.
+  const blockBuffer = Buffer.from(JSON.stringify(blockData.block), 'utf8');
   await pool.query(
-    'INSERT INTO blocks (block, nonce) VALUES ($1::jsonb, $2)',
-    [JSON.stringify(blockData.block), blockData.nonce]
+    'INSERT INTO blocks (block, nonce) VALUES ($1, $2)',
+    [blockBuffer, blockData.nonce]
   );
   console.log('Block data saved to DB');
 
