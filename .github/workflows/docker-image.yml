@@ -3,7 +3,7 @@ name: Deploy to Heroku
 on:
   push:
     branches:
-      - main  # or your desired branch
+      - main  # Change this to your desired branch
 
 jobs:
   build-and-deploy:
@@ -15,6 +15,10 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+
+      - name: Install Heroku CLI
+        run: |
+          curl https://cli-assets.heroku.com/install.sh | sh
 
       - name: Log in to Heroku Container Registry
         run: heroku container:login
