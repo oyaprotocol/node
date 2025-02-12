@@ -4,20 +4,25 @@ FROM node:18-alpine
 # Set the working directory.
 WORKDIR /usr/src/app
 
-# Copy package files and install dependencies.
+# Copy package files.
 COPY package*.json ./
+
+# Install build dependencies required for native modules.
+RUN apk add --no-cache python3 make g++ && ln -sf python3 /usr/bin/python
+
+# Install production dependencies.
 RUN npm install --production
 
 # Copy the rest of the application.
 COPY . .
 
-# Build the application (if using TypeScript).
+# Build the application (assuming you're using TypeScript).
 RUN npm run build
 
-# Expose the port your app listens on.
+# Expose the port that the app listens on.
 EXPOSE 3000
 
-# Set default environment variables (overridable by Heroku and docker-compose).
+# Set environment variables.
 ENV NODE_ENV=production
 
 # Start the application.
