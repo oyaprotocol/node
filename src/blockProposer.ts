@@ -1,7 +1,7 @@
 import { ethers, parseUnits, verifyMessage } from 'ethers';
 import { Alchemy, Wallet, Network } from 'alchemy-sdk';
-import { createHelia } from 'helia'
-import { strings } from '@helia/strings'
+import { createHelia } from 'helia';
+import { strings } from '@helia/strings';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -207,17 +207,27 @@ async function saveBlockData(blockData: any, cidToString: string) {
 
 async function publishBlock(data: string, signature: string, from: string) {
   await ensureHeliaSetup();
+
+  // Log the data before verification (print length only to avoid flooding logs)
+  console.log("Publishing block. Data length (before compression):", data.length);
+
   if (from !== PROPOSER_ADDRESS) {
     throw new Error("Unauthorized: Only the blockProposer can publish new blocks.");
   }
+  
   const signerAddress = verifyMessage(data, signature);
+  console.log("Recovered signer address:", signerAddress);
   if (signerAddress !== from) {
+    console.error("Expected signer:", from, "but got:", signerAddress);
     throw new Error("Signature verification failed");
   }
   
   let compressedData: Buffer;
   try {
+    // Log before compression
+    console.log("Starting compression of block data...");
     compressedData = await gzip(data);
+    console.log("Compression successful. Compressed data length:", compressedData.length);
   } catch (error) {
     console.error("Compression failed:", error);
     throw new Error("Block data compression failed");
@@ -239,6 +249,7 @@ async function publishBlock(data: string, signature: string, from: string) {
   let blockData: any;
   try {
     blockData = JSON.parse(data);
+    console.log("Block data parsed successfully");
   } catch (error) {
     console.error("Failed to parse block data:", error);
     throw new Error("Invalid block data");
@@ -314,9 +325,14 @@ async function updateBalances(from: string, to: string, token: string, amount: s
 
 async function handleIntention(intention: any, signature: string, from: string): Promise<any> {
   await initializeVault(from);
+  // Log the raw intention object and signature for debugging
+  console.log("Handling intention. Raw intention:", JSON.stringify(intention));
+  console.log("Received signature:", signature);
+  
   const signerAddress = verifyMessage(JSON.stringify(intention), signature);
+  console.log("Recovered signer address from intention:", signerAddress);
   if (signerAddress !== from) {
-    console.log("Signature verification failed");
+    console.log("Signature verification failed. Expected:", from, "Got:", signerAddress);
     throw new Error("Signature verification failed");
   }
   const proof: any[] = [];
@@ -331,6 +347,7 @@ async function handleIntention(intention: any, signature: string, from: string):
     }
     const amountSentBigInt = safeBigInt(amountSent.toString());
     const currentBalance = await getBalance(from, tokenAddress);
+    console.log(`Current balance for ${from} and token ${tokenAddress}: ${currentBalance.toString()}`);
     if (currentBalance < amountSentBigInt) {
       console.error(`Insufficient balance. Current: ${currentBalance.toString()}, Required: ${amountSent.toString()}`);
       throw new Error('Insufficient balance');
@@ -380,6 +397,7 @@ async function handleIntention(intention: any, signature: string, from: string):
     ],
   };
   cachedIntentions.push(executionObject);
+  console.log("Cached intention added. Total cached intentions:", cachedIntentions.length);
   return executionObject;
 }
 
@@ -391,6 +409,7 @@ async function createAndPublishBlock() {
   let nonce: number;
   try {
     nonce = await getLatestNonce();
+    console.log("Latest nonce retrieved:", nonce);
   } catch (error) {
     console.error("Failed to get latest nonce:", error);
     return;
@@ -408,9 +427,12 @@ async function createAndPublishBlock() {
       amount: safeBigInt(OYA_REWARD_AMOUNT.toString()).toString(),
     })),
   };
+  console.log("Block object to be signed:", JSON.stringify(blockObject));
   const blockProposerSignature = await wallet.signMessage(JSON.stringify(blockObject));
+  console.log("Generated block proposer signature:", blockProposerSignature);
   try {
     await publishBlock(JSON.stringify(blockObject), blockProposerSignature, PROPOSER_ADDRESS);
+    console.log("Block published successfully");
   } catch (error) {
     console.error("Failed to publish block:", error);
     cachedIntentions = [];
