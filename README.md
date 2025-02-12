@@ -294,8 +294,6 @@ Since the application is containerized, you can also deploy it to any hosting pr
 
 * **Cloud Platforms (AWS, Google Cloud, DigitalOcean, etc.):** Use orchestration tools (e.g., Kubernetes or Docker Swarm) or managed container services (such as AWS Fargate or Google Cloud Run) to deploy your Docker image.
 
-Follow these instructions to deploy your application using Docker, ensuring a portable deployment strategy that works across multiple environments.
-
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request with your changes. When contributing, please ensure your code adheres to the project's style guidelines and passes all tests.
