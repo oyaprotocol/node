@@ -179,12 +179,25 @@ async function mintRewards(addresses: string[]) {
   }
 }
 
-async function saveBlockData(blockData: any, cidToString: string) {
-  // Convert the block (e.g. the result of JSON.stringify) to a Buffer.
+// New function to save proposer data to the "proposers" table.
+async function saveProposerData(proposer: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO proposers (proposer, last_seen)
+     VALUES (LOWER($1), CURRENT_TIMESTAMP)
+     ON CONFLICT (proposer)
+     DO UPDATE SET last_seen = EXCLUDED.last_seen`,
+    [proposer]
+  );
+  console.log(`Proposer data saved/updated for ${proposer}`);
+}
+
+async function saveBlockData(blockData: any, cidToString: string, blockProposerSignature: string) {
+  // Convert the block (JSON) to a Buffer for the BYTEA column
   const blockBuffer = Buffer.from(JSON.stringify(blockData.block), 'utf8');
   await pool.query(
-    'INSERT INTO blocks (block, nonce) VALUES ($1, $2)',
-    [blockBuffer, blockData.nonce]
+    `INSERT INTO blocks (block, nonce, proposer, signature, ipfs_cid)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [blockBuffer, blockData.nonce, PROPOSER_ADDRESS, blockProposerSignature, cidToString]
   );
   console.log('Block data saved to DB');
 
@@ -210,7 +223,6 @@ async function saveBlockData(blockData: any, cidToString: string) {
 async function publishBlock(data: string, signature: string, from: string) {
   await ensureHeliaSetup();
 
-  // Log the data before verification (print length only to avoid flooding logs)
   console.log("Publishing block. Data length (before compression):", data.length);
 
   if (from !== PROPOSER_ADDRESS) {
@@ -226,7 +238,6 @@ async function publishBlock(data: string, signature: string, from: string) {
   
   let compressedData: Buffer;
   try {
-    // Log before compression
     console.log("Starting compression of block data...");
     compressedData = await gzip(data);
     console.log("Compression successful. Compressed data length:", compressedData.length);
@@ -243,6 +254,8 @@ async function publishBlock(data: string, signature: string, from: string) {
     const tx = await blockTrackerContract.proposeBlock(cidToString);
     await sepoliaAlchemy.transact.waitForTransaction((tx as any).hash);
     console.log('Blockchain transaction successful');
+    // Save the proposer data after successful blockchain transaction
+    await saveProposerData(PROPOSER_ADDRESS);
   } catch (error) {
     console.error("Failed to propose block:", error);
     throw new Error("Blockchain transaction failed");
@@ -261,7 +274,7 @@ async function publishBlock(data: string, signature: string, from: string) {
     throw new Error("Invalid block data structure");
   }
   try {
-    await saveBlockData(blockData, cidToString);
+    await saveBlockData(blockData, cidToString, signature);
   } catch (error) {
     console.error("Failed to save block/CID data:", error);
     throw new Error("Database operation failed");
@@ -327,7 +340,6 @@ async function updateBalances(from: string, to: string, token: string, amount: s
 
 async function handleIntention(intention: any, signature: string, from: string): Promise<any> {
   await initializeVault(from);
-  // Log the raw intention object and signature for debugging
   console.log("Handling intention. Raw intention:", JSON.stringify(intention));
   console.log("Received signature:", signature);
   
