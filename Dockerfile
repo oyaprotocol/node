@@ -1,29 +1,32 @@
-# Use an official Node.js runtime as a parent image.
-FROM node:18-alpine
+# Stage 1: Build Stage
+FROM node:18-alpine AS builder
 
-# Set the working directory.
 WORKDIR /usr/src/app
 
-# Copy package files.
+# Copy package files and install all dependencies (including devDependencies)
 COPY package*.json ./
-
-# Install build dependencies required for native modules.
 RUN apk add --no-cache python3 make g++ && ln -sf python3 /usr/bin/python
+RUN npm install   # Install both production and devDependencies
 
-# Install production dependencies.
-RUN npm install --production
-
-# Copy the rest of the application.
+# Copy source code and build the application
 COPY . .
-
-# Build the application (assuming you're using TypeScript).
 RUN npm run build
 
-# Expose the port that the app listens on.
-EXPOSE 3000
+# Stage 2: Production Stage
+FROM node:18-alpine
 
-# Set environment variables.
+WORKDIR /usr/src/app
+
+# Copy only production package files
+COPY package*.json ./
+RUN apk add --no-cache python3 make g++ && ln -sf python3 /usr/bin/python
+RUN npm install --production
+
+# Copy the compiled output from the builder stage
+COPY --from=builder /usr/src/app/dist ./dist
+
+# Expose the port and set environment variable
+EXPOSE 3000
 ENV NODE_ENV=production
 
-# Start the application.
-CMD [ "node", "dist/index.js" ]
+CMD ["node", "dist/index.js"]
