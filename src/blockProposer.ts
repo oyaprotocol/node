@@ -29,24 +29,6 @@ export interface BlockTrackerContract extends ethers.BaseContract {
   ): Promise<ethers.ContractTransaction>;
 }
 
-// Polyfill for CustomEvent in Node.js
-if (typeof CustomEvent === 'undefined') {
-  class CustomEvent {
-    type: string;
-    detail: any;
-    bubbles: boolean;
-    cancelable: boolean;
-    constructor(type: string, eventInitDict: { detail?: any; bubbles?: boolean; cancelable?: boolean } = {}) {
-      this.type = type;
-      this.detail = eventInitDict.detail || null;
-      this.bubbles = eventInitDict.bubbles || false;
-      this.cancelable = eventInitDict.cancelable || false;
-    }
-  }
-  (global as any).CustomEvent = CustomEvent;
-  console.log("CustomEvent polyfill applied.");
-}
-
 const PROPOSER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
 const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
 const OYA_REWARD_AMOUNT = parseUnits('1', 18);

@@ -1,3 +1,21 @@
+// Polyfill for CustomEvent in Node.js
+if (typeof globalThis.CustomEvent === 'undefined') {
+    class CustomEvent {
+      type: string;
+      detail: any;
+      bubbles: boolean;
+      cancelable: boolean;
+      constructor(type: string, eventInitDict: { detail?: any; bubbles?: boolean; cancelable?: boolean } = {}) {
+        this.type = type;
+        this.detail = eventInitDict.detail || null;
+        this.bubbles = eventInitDict.bubbles || false;
+        this.cancelable = eventInitDict.cancelable || false;
+      }
+    }
+    globalThis.CustomEvent = CustomEvent;
+    console.log("CustomEvent polyfill applied at entry point.");
+  }
+
 import express from 'express';
 import bppkg from 'body-parser';
 const { json } = bppkg;

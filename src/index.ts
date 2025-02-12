@@ -1,3 +1,24 @@
+if (typeof globalThis.CustomEvent === 'undefined') {
+  class CustomEventPolyfill<T = any> {
+    type: string;
+    detail: T;
+    bubbles: boolean;
+    cancelable: boolean;
+    constructor(type: string, eventInitDict: CustomEventInit<T> = {}) {
+      this.type = type;
+      this.detail = eventInitDict.detail || null as any;
+      this.bubbles = eventInitDict.bubbles || false;
+      this.cancelable = eventInitDict.cancelable || false;
+    }
+  }
+  // Assert the type so that it matches the expected CustomEvent constructor signature.
+  (globalThis as any).CustomEvent = CustomEventPolyfill as {
+    new <T>(type: string, eventInitDict?: CustomEventInit<T>): CustomEvent<T>;
+    prototype: CustomEvent<any>;
+  };
+  console.log("CustomEvent polyfill applied at entry point.");
+}
+
 import express from 'express';
 import bppkg from 'body-parser';
 const { json } = bppkg;
