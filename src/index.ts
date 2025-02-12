@@ -1,4 +1,11 @@
-import 'custom-event-polyfill';
+import { JSDOM } from 'jsdom';
+
+if (typeof globalThis.CustomEvent === 'undefined') {
+  const { window } = new JSDOM();
+  globalThis.CustomEvent = window.CustomEvent;
+  console.log("CustomEvent polyfill via jsdom applied.");
+}
+
 import express from 'express';
 import bppkg from 'body-parser';
 const { json } = bppkg;
