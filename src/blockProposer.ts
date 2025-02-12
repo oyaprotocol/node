@@ -31,7 +31,6 @@ export interface BlockTrackerContract extends ethers.BaseContract {
 
 const PROPOSER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
 const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
-const OYA_REWARD_AMOUNT = parseUnits('1', 18);
 
 let cachedIntentions: any[] = [];
 
@@ -145,7 +144,6 @@ async function initializeVault(vault: string) {
 async function initializeBalancesForVault(vault: string) {
   const initialBalance18 = parseUnits('10000', 18);
   const initialBalance6 = parseUnits('1000000', 6);
-  const initialOyaBalance = parseUnits('111', 18);
   const supportedTokens18: string[] = ["0x0000000000000000000000000000000000000000"];
   const supportedTokens6: string[] = ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"];
   const oyaTokens: string[] = ["0x0000000000000000000000000000000000000001"];
@@ -164,20 +162,13 @@ async function initializeBalancesForVault(vault: string) {
   for (const token of oyaTokens) {
     await pool.query(
       'INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3)',
-      [vault, token, initialOyaBalance.toString()]
+      [vault, token, /* Note: Removed initialOyaBalance since rewards are not minted */ "0"]
     );
   }
   console.log(`Vault ${vault} initialized with test tokens`);
 }
 
-async function mintRewards(addresses: string[]) {
-  for (const address of addresses) {
-    await initializeVault(address);
-    const currentBalance = await getBalance(address, OYA_TOKEN_ADDRESS);
-    const newBalance = currentBalance + safeBigInt(OYA_REWARD_AMOUNT.toString());
-    await updateBalance(address, OYA_TOKEN_ADDRESS, newBalance);
-  }
-}
+// Removed mintRewards function entirely
 
 // New function to save proposer data to the "proposers" table.
 async function saveProposerData(proposer: string): Promise<void> {
@@ -294,13 +285,6 @@ async function publishBlock(data: string, signature: string, from: string) {
   } catch (error) {
     console.error("Failed to update balances:", error);
     throw new Error("Balance update failed");
-  }
-  try {
-    await mintRewards(blockData.rewards.map((reward: any) => reward.vault));
-    console.log('Rewards minted successfully');
-  } catch (error) {
-    console.error("Failed to mint rewards:", error);
-    throw new Error("Minting rewards failed");
   }
   return cid;
 }
@@ -439,7 +423,8 @@ async function createAndPublishBlock() {
     rewards: rewardAddresses.map((address: string) => ({
       vault: address,
       token: OYA_TOKEN_ADDRESS,
-      amount: safeBigInt(OYA_REWARD_AMOUNT.toString()).toString(),
+      // Rewards minting removed; amount is set to "0"
+      amount: "0"
     })),
   };
   console.log("Block object to be signed:", JSON.stringify(blockObject));
