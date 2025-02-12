@@ -25,8 +25,12 @@ RUN npm install --production
 # Copy the compiled output from the builder stage
 COPY --from=builder /usr/src/app/dist ./dist
 
+# Copy the polyfill file (make sure polyfill.js is in the root of your project)
+COPY polyfill.js .
+
 # Expose the port and set environment variable
 EXPOSE 3000
 ENV NODE_ENV=production
 
-CMD ["node", "dist/index.js"]
+# Preload the polyfill before starting the application
+CMD ["node", "--require", "./polyfill.js", "dist/index.js"]
