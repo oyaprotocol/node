@@ -168,9 +168,6 @@ async function initializeBalancesForVault(vault: string) {
   console.log(`Vault ${vault} initialized with test tokens`);
 }
 
-// Removed mintRewards function entirely
-
-// New function to save proposer data to the "proposers" table.
 async function saveProposerData(proposer: string): Promise<void> {
   await pool.query(
     `INSERT INTO proposers (proposer, last_seen)
