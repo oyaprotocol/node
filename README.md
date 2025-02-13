@@ -4,6 +4,7 @@ node is a Node.js–based full node for the Oya natural language blockchain. It 
 
 ## Table of Contents
 
+- [Experimental Status](#experimental-status)
 - [Features](#features)
 - [Architecture Overview](#architecture-overview)
 - [Prerequisites](#prerequisites)
@@ -15,8 +16,13 @@ node is a Node.js–based full node for the Oya natural language blockchain. It 
 - [Block Proposing Workflow](#block-proposing-workflow)
 - [Testing](#testing)
 - [Deployment](#deployment)
+- [Future Enhancements](#future-enhancements)
 - [Contributing](#contributing)
 - [License](#license)
+
+## Experimental Status
+
+> **Warning:** This software is **early-stage and experimental** and under active development. The current implementation supports block proposals and processing for a single block proposer **only**. Functionality to view and verify blocks from other proposers—using onchain event logs—is not yet implemented. Users and developers should expect breaking changes and incomplete features as the project evolves. Contributions and feedback are *VERY* welcome!
 
 ## Features
 
@@ -293,6 +299,25 @@ Since the application is containerized, you can also deploy it to any hosting pr
 * **Local Deployment with Docker Compose:** Create a docker-compose.yml file to bring up your application along with its dependencies (such as PostgreSQL).
 
 * **Cloud Platforms (AWS, Google Cloud, DigitalOcean, etc.):** Use orchestration tools (e.g., Kubernetes or Docker Swarm) or managed container services (such as AWS Fargate or Google Cloud Run) to deploy your Docker image.
+
+## Future Enhancements
+
+Planned improvements for future releases include (but are not limited to):
+
+- **Multi-Proposer Support:**  
+  Extend the system to fetch, display, and verify blocks from multiple proposers by parsing onchain event logs. This will allow nodes to cross-check and validate proposals from different sources.
+
+- **Enhanced Block Verification:**  
+  Develop robust mechanisms for verifying the correctness of blocks proposed by various nodes, improving overall network security and consensus.
+
+- **Expanded API Functionality:**  
+  Add new API endpoints to query detailed block and proposer information.
+
+- **Robust Error Handling and Logging:**  
+  Improve error handling in the block proposer logic and enhance logging to facilitate debugging and monitoring.
+
+- **Performance Optimization:**  
+  Optimize the node for scalability and higher throughput as the network and transaction volumes grow.
 
 ## Contributing
 
