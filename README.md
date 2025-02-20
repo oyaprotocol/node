@@ -2,9 +2,10 @@
 
 `node` is a Node.js–based full node for the Oya natural language blockchain. It allows nodes to both propose new blocks (containing signed, natural language intentions) and in the near future will be able to verify and dispute blocks from other proposers. In addition, the API exposes endpoints for querying the blockchain’s current state—including blocks, CIDs, balances, and vault nonces.
 
+**WARNING: This software is early-stage and experimental and under active development. It should not be used in production. The underlying Oya Protocol has not been deployed to mainnet, and is itself experimental. The current node implementation supports block proposals and processing for a single block proposer only. Functionality to view and verify blocks from other proposers is not yet implemented. Users and developers should expect many breaking changes as the codebase evolves. Contributions and feedback are very welcome!**
+
 ## Table of Contents
 
-- [Experimental Status](#experimental-status)
 - [Features](#features)
 - [Architecture Overview](#architecture-overview)
 - [Prerequisites](#prerequisites)
@@ -19,11 +20,7 @@
 - [Future Enhancements](#future-enhancements)
 - [Contributing](#contributing)
 - [License](#license)
-
-## Experimental Status
-
-> **Warning:** This software is **early-stage and experimental** and under active development. The current implementation supports block proposals and processing for a single block proposer **only**. Functionality to view and verify blocks from other proposers—using onchain event logs—is not yet implemented. Users and developers should expect breaking changes and incomplete features as the project evolves. Contributions and feedback are *VERY* welcome!
-
+  
 ## Features
 
 - **Natural Language Blockchain Node:** Accepts signed intentions in natural language.
