@@ -24,7 +24,7 @@
 ## Features
 
 - **Natural Language Blockchain Node:** Accepts signed intentions in natural language.
-- **Block Proposer:** Caches incoming intentions and periodically bundles them into a block.
+- **Proposer:** Caches incoming intentions and periodically bundles them into a block.
 - **Blockchain Contract Integration:** Interacts with the [BlockTracker](https://github.com/pemulis/oya-onchain?tab=readme-ov-file#blocktracker) smart contract via ethers.js.
 - **IPFS Storage:** Uses Helia to upload block data to IPFS.
 - **Robust API Endpoints:** Exposes endpoints for blocks, CIDs, balances, and nonces.
@@ -35,7 +35,7 @@
 
 - **Express Server:** The main entry point (`index.ts`) sets up the Express server, JSON parsing, and routes.
 - **Routing & Controllers:** API endpoints are defined in `routes.ts` and implemented in `controllers.ts`. These endpoints manage database operations for blocks, CIDs, balances, and vault nonces.
-- **Block Proposer Logic:** Implemented in `blockProposer.ts`, this module:
+- **Proposer Logic:** Implemented in `proposer.ts`, this module:
   - Processes incoming intentions from the `/intention` endpoint.
   - Caches intentions and bundles them into a block every 10 seconds.
   - Signs the block, uploads it to IPFS via Helia, interacts with the BlockTracker contract, and updates the database accordingly.

@@ -23,7 +23,7 @@ import dotenv from 'dotenv';
 import pgpkg from 'pg';
 const { Pool } = pgpkg;
 import { blockRouter, cidRouter, balanceRouter, vaultNonceRouter } from './routes.js';
-import { handleIntention, createAndPublishBlock } from './blockProposer.js';
+import { handleIntention, createAndPublishBlock } from './proposer.js';
 dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;

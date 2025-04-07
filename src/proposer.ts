@@ -179,13 +179,13 @@ async function saveProposerData(proposer: string): Promise<void> {
   console.log(`Proposer data saved/updated for ${proposer}`);
 }
 
-async function saveBlockData(blockData: any, cidToString: string, blockProposerSignature: string) {
+async function saveBlockData(blockData: any, cidToString: string, proposerSignature: string) {
   // Convert the block (JSON) to a Buffer for the BYTEA column
   const blockBuffer = Buffer.from(JSON.stringify(blockData.block), 'utf8');
   await pool.query(
     `INSERT INTO blocks (block, nonce, proposer, signature, ipfs_cid)
      VALUES ($1, $2, $3, $4, $5)`,
-    [blockBuffer, blockData.nonce, PROPOSER_ADDRESS, blockProposerSignature, cidToString]
+    [blockBuffer, blockData.nonce, PROPOSER_ADDRESS, proposerSignature, cidToString]
   );
   console.log('Block data saved to DB');
 
@@ -215,7 +215,7 @@ async function publishBlock(data: string, signature: string, from: string) {
   console.log("Publishing block. Data length (before compression):", data.length);
 
   if (from !== PROPOSER_ADDRESS) {
-    throw new Error("Unauthorized: Only the blockProposer can publish new blocks.");
+    throw new Error("Unauthorized: Only the proposer can publish new blocks.");
   }
   
   const signerAddress = verifyMessage(data, signature);
@@ -425,10 +425,10 @@ async function createAndPublishBlock() {
     })),
   };
   console.log("Block object to be signed:", JSON.stringify(blockObject));
-  const blockProposerSignature = await wallet.signMessage(JSON.stringify(blockObject));
-  console.log("Generated block proposer signature:", blockProposerSignature);
+  const proposerSignature = await wallet.signMessage(JSON.stringify(blockObject));
+  console.log("Generated block proposer signature:", proposerSignature);
   try {
-    await publishBlock(JSON.stringify(blockObject), blockProposerSignature, PROPOSER_ADDRESS);
+    await publishBlock(JSON.stringify(blockObject), proposerSignature, PROPOSER_ADDRESS);
     console.log("Block published successfully");
   } catch (error) {
     console.error("Failed to publish block:", error);
