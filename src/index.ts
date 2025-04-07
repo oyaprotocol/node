@@ -13,7 +13,7 @@ import dotenv from 'dotenv';
 import pgpkg from 'pg';
 const { Pool } = pgpkg;
 import { blockRouter, cidRouter, balanceRouter, vaultNonceRouter } from './routes.js';
-import { handleIntention, createAndPublishBlock } from './blockProposer.js';
+import { handleIntention, createAndPublishBlock } from './proposer.js';
 
 dotenv.config();
 
@@ -37,7 +37,7 @@ app.use('/balance', balanceRouter);
 app.use('/nonce', vaultNonceRouter);
 
 
-// This endpoint receives an intention (with signature and from) and passes it to the block proposer logic.
+// This endpoint receives an intention (with signature and from) and passes it to the proposer logic.
 app.post('/intention', async (req, res) => {
   try {
     const { intention, signature, from } = req.body;
