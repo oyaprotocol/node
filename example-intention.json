@@ -1,0 +1,59 @@
+{
+  "action": "Transfer 1 ETH to nesseps.eth on Ethereum, with 0.000005 ETH in fees",
+  "nonce": 0,
+  "from": "vanessa.oya.eth",
+  "to": "nesseps.eth",
+  "assets": [
+    {
+      "asset": "0x0000000000000000000000000000000000000000000",
+      "assetName": "ETH"
+    }
+  ],
+  "totalFee": [0.000005],
+  "tip": [0.000004],
+  "protocolFee": [0.000001],
+  "inputs": [
+    {
+      "vault": "vanessa.oya.eth",
+      "asset": "0x0000000000000000000000000000000000000000000",
+      "assetName": "ETH",
+      "amount": 1,
+      "digits": 18,
+      "chain": "Ethereum Oya Vault"
+    }
+  ],
+  "outputs": [
+    {
+      "vault": "vanessa.oya.eth",
+      "asset": "0x0000000000000000000000000000000000000000000",
+      "assetName": "ETH",
+      "amount": -1,
+      "digits": 18,
+      "chain": "Ethereum"
+    },
+    {
+      "externalAddress": "nesseps.eth",
+      "asset": "0x0000000000000000000000000000000000000000000",
+      "assetName": "ETH",
+      "amount": 0.999995,
+      "digits": 18,
+      "chain": "Ethereum"
+    },
+    {
+      "vault": "example-node.oya.eth",
+      "asset": "0x0000000000000000000000000000000000000000000",
+      "assetName": "ETH",
+      "amount": 0.000004,
+      "digits": 18,
+      "chain": "Ethereum"
+    },
+    {
+      "vault": "treasury.oya.eth",
+      "asset": "0x0000000000000000000000000000000000000000000",
+      "assetName": "ETH",
+      "amount": 0.00001,
+      "digits": 18,
+      "chain": "Ethereum"
+    }
+  ]
+}
