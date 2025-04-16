@@ -1,6 +1,7 @@
 // Need to add authorization to routes, so that only the block proposer can call POST routes.
 
 import { Router } from 'express';
+import { bearerAuth } from './auth.js';
 import { 
   saveBlock, 
   getBlock, 

@@ -14,6 +14,7 @@ import pgpkg from 'pg';
 const { Pool } = pgpkg;
 import { blockRouter, cidRouter, balanceRouter, vaultNonceRouter } from './routes.js';
 import { handleIntention, createAndPublishBlock } from './proposer.js';
+import { bearerAuth } from './auth.js';
 
 dotenv.config();
 
@@ -21,6 +22,13 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(json());
+// Global middleware: protect all POST endpoints with Bearer token authorization
+app.use((req, res, next) => {
+  if (req.method === 'POST') {
+    return bearerAuth(req, res, next);
+  }
+  next();
+});
 
 // Database connection
 export const pool = new Pool({
@@ -38,7 +46,8 @@ app.use('/nonce', vaultNonceRouter);
 
 
 // This endpoint receives an intention (with signature and from) and passes it to the proposer logic.
-app.post('/intention', async (req, res) => {
+// Protected by Bearer token authorization.
+app.post('/intention', bearerAuth, async (req, res) => {
   try {
     const { intention, signature, from } = req.body;
     if (!intention || !signature || !from) {

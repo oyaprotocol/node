@@ -77,6 +77,8 @@
 Create a `.env` file (or use your preferred configuration method) in the project root with the following variables:
 
 ```ini
+# Bearer token for securing write endpoints
+API_BEARER_TOKEN=your_secure_token_here
 # PostgreSQL database connection string
 DATABASE_URL=postgres://username:password@host:port/database
 
