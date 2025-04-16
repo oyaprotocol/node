@@ -381,8 +381,25 @@ async function handleIntention(intention: any, signature: string, from: string):
       };
       proof.push(transfer);
     }
+  } else if (Array.isArray(intention.inputs) && Array.isArray(intention.outputs)) {
+    // New-style intention: each positive output represents a transfer from the vault
+    const fromVault = intention.from;
+    for (const out of intention.outputs) {
+      if (typeof out.amount !== 'number' || out.amount <= 0) continue;
+      const toAddress = out.externalAddress ?? out.vault;
+      if (!toAddress) continue;
+      const digits = Number(out.digits || 0);
+      const amountUnits = parseUnits(out.amount.toString(), digits).toString();
+      proof.push({
+        token: out.asset,
+        from: fromVault,
+        to: toAddress,
+        amount: amountUnits,
+        tokenId: 0,
+      });
+    }
   } else {
-    console.error("Unexpected action_type:", intention.action_type);
+    console.error("Unexpected intention format:", intention);
   }
   const executionObject = {
     execution: [
