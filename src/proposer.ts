@@ -30,7 +30,6 @@ export interface BlockTrackerContract extends ethers.BaseContract {
 }
 
 const PROPOSER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
-const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
 
 let cachedIntentions: any[] = [];
 
@@ -428,18 +427,9 @@ async function createAndPublishBlock() {
     return;
   }
   const block = cachedIntentions.map(({ execution }) => execution).flat();
-  const rewardAddresses = [
-    ...new Set(block.flatMap((execution: any) => execution.proof.map((proof: any) => proof.from)))
-  ];
   const blockObject = {
     block: block,
     nonce: nonce,
-    rewards: rewardAddresses.map((address: string) => ({
-      vault: address,
-      token: OYA_TOKEN_ADDRESS,
-      // Rewards minting removed; amount is set to "0"
-      amount: "0"
-    })),
   };
   console.log("Block object to be signed:", JSON.stringify(blockObject));
   const proposerSignature = await wallet.signMessage(JSON.stringify(blockObject));

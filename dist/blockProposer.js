@@ -18,8 +18,6 @@ function safeBigInt(value) {
 }
 // Constants (from your original oya-node code)
 const PROPOSER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
-const OYA_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001";
-const OYA_REWARD_AMOUNT = parseUnits('1', 18); // 1 Oya token (BigNumber)
 // Global variables
 let cachedIntentions = [];
 let mainnetAlchemy;
@@ -145,32 +143,15 @@ async function initializeVault(vault) {
 async function initializeBalancesForVault(vault) {
     const initialBalance18 = parseUnits('10000', 18);
     const initialBalance6 = parseUnits('1000000', 6);
-    const initialOyaBalance = parseUnits('111', 18);
     const supportedTokens18 = ["0x0000000000000000000000000000000000000000"];
     const supportedTokens6 = ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"];
-    const oyaTokens = ["0x0000000000000000000000000000000000000001"];
     for (const token of supportedTokens18) {
         await pool.query('INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3)', [vault, token, initialBalance18.toString()]);
     }
     for (const token of supportedTokens6) {
         await pool.query('INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3)', [vault, token, initialBalance6.toString()]);
     }
-    for (const token of oyaTokens) {
-        await pool.query('INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3)', [vault, token, initialOyaBalance.toString()]);
-    }
     console.log(`Vault ${vault} initialized with test tokens`);
-}
-/**
- * Mints rewards (1 Oya token) to the specified addresses.
- */
-async function mintRewards(addresses) {
-    for (const address of addresses) {
-        await initializeVault(address);
-        const currentBalance = await getBalance(address, OYA_TOKEN_ADDRESS);
-        // Use safeBigInt in case the BigNumber string includes decimals.
-        const newBalance = currentBalance + safeBigInt(OYA_REWARD_AMOUNT.toString());
-        await updateBalance(address, OYA_TOKEN_ADDRESS, newBalance);
-    }
 }
 /**
  * Saves block data and the corresponding CID into the database and updates vault nonces.
@@ -257,15 +238,6 @@ async function publishBlock(data, signature, from) {
     catch (error) {
         console.error("Failed to update balances:", error);
         throw new Error("Balance update failed");
-    }
-    // Mint rewards to all reward addresses.
-    try {
-        await mintRewards(blockData.rewards.map((reward) => reward.vault));
-        console.log('Rewards minted successfully');
-    }
-    catch (error) {
-        console.error("Failed to mint rewards:", error);
-        throw new Error("Minting rewards failed");
     }
     return cid;
 }
@@ -405,18 +377,9 @@ async function createAndPublishBlock() {
     }
     // Flatten cached intentions into a block array.
     const block = cachedIntentions.map(({ execution }) => execution).flat();
-    // Collect all unique reward addresses from proofs.
-    const rewardAddresses = [
-        ...new Set(block.flatMap((execution) => execution.proof.map((proof) => proof.from)))
-    ];
     const blockObject = {
         block: block,
         nonce: nonce,
-        rewards: rewardAddresses.map((address) => ({
-            vault: address,
-            token: OYA_TOKEN_ADDRESS,
-            amount: safeBigInt(OYA_REWARD_AMOUNT.toString()).toString(),
-        })),
     };
     // Sign the block object.
     const proposerSignature = await wallet.signMessage(JSON.stringify(blockObject));
