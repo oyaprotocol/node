@@ -25,7 +25,7 @@
 
 - **Natural Language protocol Node:** Accepts signed intentions in natural language.
 - **Proposer:** Caches incoming intentions and periodically bundles them into a block.
-- **Protocol Contract Integration:** Interacts with the [BlockTracker](https://github.com/pemulis/oya-onchain?tab=readme-ov-file#blocktracker) smart contract via ethers.js.
+- **Protocol Contract Integration:** Interacts with the [BlockTracker](https://github.com/oyaprotocol/contracts?tab=readme-ov-file#blocktracker) smart contract via ethers.js.
 - **IPFS Storage:** Uses Helia to upload block data to IPFS.
 - **Robust API Endpoints:** Exposes endpoints for blocks, CIDs, balances, and nonces.
 - **PostgreSQL Backend:** Uses PostgreSQL for persisting protocol state, including blocks, balances, and nonces.
