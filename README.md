@@ -1,6 +1,6 @@
 # Oya Node
 
-`node` is a Node.js–based full node for the Oya natural language blockchain. It allows nodes to both propose new blocks (containing signed, natural language intentions) and in the near future will be able to verify and dispute blocks from other proposers. In addition, the API exposes endpoints for querying the blockchain’s current state—including blocks, CIDs, balances, and vault nonces.
+`node` is a Node.js–based full node for the Oya natural language protocol. It allows nodes to both propose new blocks (containing signed, natural language intentions) and in the near future will be able to verify and dispute blocks from other proposers. In addition, the API exposes endpoints for querying the protocol’s current state—including blocks, CIDs, balances, and vault nonces.
 
 **WARNING: This software is early-stage and experimental and under active development. It should not be used in production. The underlying Oya Protocol has not been deployed to mainnet, and is itself experimental. The current node implementation supports block proposals and processing for a single block proposer only. Functionality to view and verify blocks from other proposers is not yet implemented. Users and developers should expect many breaking changes as the codebase evolves. Contributions and feedback are very welcome!**
 
@@ -23,12 +23,12 @@
   
 ## Features
 
-- **Natural Language Blockchain Node:** Accepts signed intentions in natural language.
+- **Natural Language protocol Node:** Accepts signed intentions in natural language.
 - **Proposer:** Caches incoming intentions and periodically bundles them into a block.
-- **Blockchain Contract Integration:** Interacts with the [BlockTracker](https://github.com/pemulis/oya-onchain?tab=readme-ov-file#blocktracker) smart contract via ethers.js.
+- **Protocol Contract Integration:** Interacts with the [BlockTracker](https://github.com/pemulis/oya-onchain?tab=readme-ov-file#blocktracker) smart contract via ethers.js.
 - **IPFS Storage:** Uses Helia to upload block data to IPFS.
 - **Robust API Endpoints:** Exposes endpoints for blocks, CIDs, balances, and nonces.
-- **PostgreSQL Backend:** Uses PostgreSQL for persisting blockchain state, including blocks, balances, and nonces.
+- **PostgreSQL Backend:** Uses PostgreSQL for persisting protocol state, including blocks, balances, and nonces.
 - **Automated Balance & Reward Updates:** Processes transfers or swaps and mints rewards automatically.
 
 ## Architecture Overview
@@ -47,7 +47,7 @@
 - **npm:** Package manager for installing dependencies
 - **PostgreSQL Database:** Either local or hosted (e.g., via Heroku)
 - **Alchemy API Key:** For interacting with Ethereum networks
-- **Blockchain Contract:** A deployed BlockTracker contract (its address must be provided)
+- **BlockTracker Contract:** A deployed BlockTracker contract (its address must be provided)
 - **IPFS (Helia):** Used internally to store block data
 - **Docker:** Installed and configured for building and running containers
 
@@ -226,13 +226,13 @@ Below is a summary of the main API endpoints:
    - Bundles all cached intentions into a block.
    - Signs the block using the block proposer’s private key.
    - Uploads the block data to IPFS via Helia.
-   - Calls the `proposeBlock` function on the blockchain contract using ethers.js.
+   - Calls the `proposeBlock` function on the BlockTracker contract using ethers.js.
    - Persists the block and associated CID to the database.
    - Updates balances based on the transactions in the block.
    - Mints rewards to the relevant addresses.
 
 3. **Error Handling:**  
-   The block proposer logic includes error handling for signature verification, IPFS uploads, blockchain transactions, and database operations.
+   The block proposer logic includes error handling for signature verification, IPFS uploads, protocol transactions, and database operations.
 
 ## Testing
 
