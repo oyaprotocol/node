@@ -23,26 +23,26 @@ let cachedIntentions = [];
 let mainnetAlchemy;
 let sepoliaAlchemy;
 let wallet;
-let blockTrackerContract; // now typed as our custom interface
+let bundleTrackerContract; // now typed as our custom interface
 // Variables for Helia/IPFS – will be initialized in setupHelia()
 let s; // helper for adding data to IPFS
 // Initialize wallet and contract on module load.
 initializeWalletAndContract()
     .then(() => {
-    console.log("Block proposer initialization complete. Ready to handle proposals.");
+    console.log("Bundle proposer initialization complete. Ready to handle proposals.");
 })
     .catch((error) => {
     console.error("Initialization failed:", error);
 });
 /**
- * Creates an instance of the BlockTracker contract.
+ * Creates an instance of the BundleTracker contract.
  */
-async function buildBlockTrackerContract() {
-    const abiPath = path.join(__dirname, 'abi', 'BlockTracker.json');
+async function buildBundleTrackerContract() {
+    const abiPath = path.join(__dirname, 'abi', 'BundleTracker.json');
     const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
     // Await and cast the provider from sepoliaAlchemy.
     const provider = (await sepoliaAlchemy.config.getProvider());
-    const contract = new ethers.Contract(process.env.BLOCK_TRACKER_ADDRESS, contractABI, provider);
+    const contract = new ethers.Contract(process.env.BUNDLE_TRACKER_ADDRESS, contractABI, provider);
     // Connect the wallet (casting to ContractRunner) and then cast to our custom interface.
     return contract.connect(wallet);
 }
@@ -72,10 +72,10 @@ async function buildAlchemyInstances() {
  * These functions directly query/update the database via the shared pool.
  */
 /**
- * Retrieves the latest nonce from the blocks table.
+ * Retrieves the latest nonce from the bundles table.
  */
 async function getLatestNonce() {
-    const result = await pool.query('SELECT nonce FROM blocks ORDER BY timestamp DESC LIMIT 1');
+    const result = await pool.query('SELECT nonce FROM bundles ORDER BY timestamp DESC LIMIT 1');
     if (result.rows.length === 0)
         return 0;
     return result.rows[0].nonce + 1;
@@ -154,16 +154,16 @@ async function initializeBalancesForVault(vault) {
     console.log(`Vault ${vault} initialized with test tokens`);
 }
 /**
- * Saves block data and the corresponding CID into the database and updates vault nonces.
+ * Saves bundle data and the corresponding CID into the database and updates vault nonces.
  */
-async function saveBlockData(blockData, cidToString) {
-    // Save block data
-    await pool.query('INSERT INTO blocks (block, nonce) VALUES ($1::jsonb, $2)', [JSON.stringify(blockData.block), blockData.nonce]);
-    console.log('Block data saved to DB');
+async function saveBundleData(blockData, cidToString) {
+    // Save bundle data
+    await pool.query('INSERT INTO bundles (bundle, nonce) VALUES ($1::jsonb, $2)', [JSON.stringify(blockData.block), blockData.nonce]);
+    console.log('Bundle data saved to DB');
     // Save the CID
     await pool.query('INSERT INTO cids (cid, nonce) VALUES ($1, $2)', [cidToString, blockData.nonce]);
     console.log('CID saved to DB');
-    // Update nonce for each vault in the block
+    // Update nonce for each vault in the bundle
     for (const execution of blockData.block) {
         const vaultNonce = execution.intention.nonce;
         const vault = execution.intention.from;
@@ -174,17 +174,17 @@ async function saveBlockData(blockData, cidToString) {
     }
 }
 /**
- * Publishes a block. This function:
+ * Publishes a bundle. This function:
  *  1. Ensures Helia/IPFS is set up.
- *  2. Signs and verifies the block.
- *  3. Uploads block data to IPFS.
+ *  2. Signs and verifies the bundle.
+ *  3. Uploads bundle data to IPFS.
  *  4. Calls the blockchain contract.
- *  5. Saves the block data, updates balances, mints rewards, and updates vault nonces.
+ *  5. Saves the bundle data, updates balances, mints rewards, and updates vault nonces.
  */
 async function publishBlock(data, signature, from) {
     await ensureHeliaSetup();
     if (from !== PROPOSER_ADDRESS) {
-        throw new Error("Unauthorized: Only the proposer can publish new blocks.");
+        throw new Error("Unauthorized: Only the proposer can publish new bundles.");
     }
     const signerAddress = verifyMessage(data, signature);
     if (signerAddress !== from) {
@@ -192,14 +192,14 @@ async function publishBlock(data, signature, from) {
     }
     const cid = await s.add(data);
     const cidToString = cid.toString();
-    console.log('Block published to IPFS, CID:', cidToString);
+    console.log('Bundle published to IPFS, CID:', cidToString);
     try {
-        const tx = await blockTrackerContract.proposeBlock(cidToString);
+        const tx = await bundleTrackerContract.proposeBundle(cidToString);
         await sepoliaAlchemy.transact.waitForTransaction(tx.hash);
         console.log('Blockchain transaction successful');
     }
     catch (error) {
-        console.error("Failed to propose block:", error);
+        console.error("Failed to propose bundle:", error);
         throw new Error("Blockchain transaction failed");
     }
     let blockData;
@@ -207,22 +207,22 @@ async function publishBlock(data, signature, from) {
         blockData = JSON.parse(data);
     }
     catch (error) {
-        console.error("Failed to parse block data:", error);
-        throw new Error("Invalid block data");
+        console.error("Failed to parse bundle data:", error);
+        throw new Error("Invalid bundle data");
     }
     if (!Array.isArray(blockData.block)) {
-        console.error("Invalid block data structure:", blockData);
-        throw new Error("Invalid block data structure");
+        console.error("Invalid bundle data structure:", blockData);
+        throw new Error("Invalid bundle data structure");
     }
-    // Save the block and CID data directly via DB queries.
+    // Save the bundle and CID data directly via DB queries.
     try {
-        await saveBlockData(blockData, cidToString);
+        await saveBundleData(blockData, cidToString);
     }
     catch (error) {
-        console.error("Failed to save block/CID data:", error);
+        console.error("Failed to save bundle/CID data:", error);
         throw new Error("Database operation failed");
     }
-    // Update balances based on the proofs contained in the block.
+    // Update balances based on the proofs contained in the bundle.
     try {
         for (const execution of blockData.block) {
             if (!Array.isArray(execution.proof)) {
@@ -264,11 +264,11 @@ async function updateBalances(from, to, token, amount) {
     await initializeVault(to);
     // Clean the amount string in case it includes a fractional part.
     const amountBigInt = safeBigInt(amount);
-    // If the "from" address is the block proposer, update its balance to a large value.
+    // If the "from" address is the bundle proposer, update its balance to a large value.
     if (from.toLowerCase() === PROPOSER_ADDRESS.toLowerCase()) {
         const largeBalance = parseUnits('1000000000000', 18);
         await updateBalance(from, token, safeBigInt(largeBalance.toString()));
-        console.log(`Block proposer balance updated to a large amount for token ${token}`);
+        console.log(`Bundle proposer balance updated to a large amount for token ${token}`);
     }
     const fromBalance = await getBalance(from, token);
     const toBalance = await getBalance(to, token);
@@ -402,7 +402,7 @@ async function initializeWalletAndContract() {
     mainnetAlchemy = mainAlchemy;
     sepoliaAlchemy = sepAlchemy;
     wallet = walletInstance;
-    blockTrackerContract = await buildBlockTrackerContract();
+    bundleTrackerContract = await buildBundleTrackerContract();
 }
 const _getCachedIntentions = () => cachedIntentions;
 const _clearCachedIntentions = () => {

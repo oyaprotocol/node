@@ -2,23 +2,24 @@ import { Request, Response } from 'express';
 import { pool } from './index.js';
 
 export const saveBundle = async (req: Request, res: Response) => {
-  const { block, nonce } = req.body;
+  const { bundle: bundleBody, block: blockBody, nonce } = req.body as any;
+  const bundle = bundleBody ?? blockBody;
 
-  console.log("Received bundle:", JSON.stringify(block, null, 2));
+  console.log("Received bundle:", JSON.stringify(bundle, null, 2));
   console.log("Received nonce:", nonce);
 
-  if (!block || typeof nonce !== 'number') {
+  if (!bundle || typeof nonce !== 'number') {
     return res.status(400).json({ error: 'Invalid bundle data' });
   }
 
   try {
-    const blockString = JSON.stringify(block);
+    const bundleString = JSON.stringify(bundle);
 
-    console.log("Stringified bundle for DB:", blockString);
+    console.log("Stringified bundle for DB:", bundleString);
 
     const result = await pool.query(
       'INSERT INTO bundles (bundle, nonce) VALUES ($1::jsonb, $2) RETURNING *',
-      [blockString, nonce]
+      [bundleString, nonce]
     );
 
     res.status(201).json(result.rows[0]);
