@@ -17,7 +17,7 @@ export const saveBundle = async (req: Request, res: Response) => {
     console.log("Stringified bundle for DB:", blockString);
 
     const result = await pool.query(
-      'INSERT INTO blocks (block, nonce) VALUES ($1::jsonb, $2) RETURNING *',
+      'INSERT INTO bundles (bundle, nonce) VALUES ($1::jsonb, $2) RETURNING *',
       [blockString, nonce]
     );
 
@@ -33,7 +33,7 @@ export const getBundle = async (req: Request, res: Response) => {
 
   try {
     const result = await pool.query(
-      'SELECT * FROM blocks WHERE nonce = $1 ORDER BY timestamp DESC',
+      'SELECT * FROM bundles WHERE nonce = $1 ORDER BY timestamp DESC',
       [parseInt(nonce)]
     );
 
@@ -50,7 +50,7 @@ export const getBundle = async (req: Request, res: Response) => {
 
 export const getAllBundles = async (req: Request, res: Response) => {
   try {
-    const result = await pool.query('SELECT * FROM blocks ORDER BY timestamp DESC');
+    const result = await pool.query('SELECT * FROM bundles ORDER BY timestamp DESC');
     res.status(200).json(result.rows);
   } catch (err) {
     console.error(err);

@@ -79,7 +79,7 @@ async function buildAlchemyInstances() {
 
 async function getLatestNonce(): Promise<number> {
   const result = await pool.query(
-    'SELECT nonce FROM blocks ORDER BY timestamp DESC LIMIT 1'
+    'SELECT nonce FROM bundles ORDER BY timestamp DESC LIMIT 1'
   );
   if (result.rows.length === 0) return 0;
   return result.rows[0].nonce + 1;
@@ -185,7 +185,7 @@ async function saveBundleData(blockData: any, cidToString: string, proposerSigna
   // Convert the block (JSON) to a Buffer for the BYTEA column
   const blockBuffer = Buffer.from(JSON.stringify(blockData.block), 'utf8');
   await pool.query(
-    `INSERT INTO blocks (block, nonce, proposer, signature, ipfs_cid)
+    `INSERT INTO bundles (bundle, nonce, proposer, signature, ipfs_cid)
      VALUES ($1, $2, $3, $4, $5)`,
     [blockBuffer, blockData.nonce, PROPOSER_ADDRESS, proposerSignature, cidToString]
   );
