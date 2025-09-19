@@ -12,8 +12,8 @@ const { json } = bppkg;
 import dotenv from 'dotenv';
 import pgpkg from 'pg';
 const { Pool } = pgpkg;
-import { blockRouter, cidRouter, balanceRouter, vaultNonceRouter } from './routes.js';
-import { handleIntention, createAndPublishBlock } from './proposer.js';
+import { bundleRouter, cidRouter, balanceRouter, vaultNonceRouter } from './routes.js';
+import { handleIntention, createAndPublishBundle } from './proposer.js';
 import { bearerAuth } from './auth.js';
 
 dotenv.config();
@@ -39,7 +39,7 @@ export const pool = new Pool({
 });
 
 // Routes
-app.use('/block', blockRouter);
+app.use('/bundle', bundleRouter);
 app.use('/cid', cidRouter);
 app.use('/balance', balanceRouter);
 app.use('/nonce', vaultNonceRouter);
@@ -62,12 +62,12 @@ app.post('/intention', bearerAuth, async (req, res) => {
   }
 });
 
-// Every 10 seconds, try to publish a new block if there are cached intentions.
+// Every 10 seconds, try to publish a new bundle if there are cached intentions.
 setInterval(async () => {
   try {
-    await createAndPublishBlock();
+    await createAndPublishBundle();
   } catch (error) {
-    console.error('Error creating and publishing block:', error);
+    console.error('Error creating and publishing bundle:', error);
   }
 }, 10 * 1000);
 

@@ -1,20 +1,20 @@
 import { Request, Response } from 'express';
 import { pool } from './index.js';
 
-export const saveBlock = async (req: Request, res: Response) => {
+export const saveBundle = async (req: Request, res: Response) => {
   const { block, nonce } = req.body;
 
-  console.log("Received block:", JSON.stringify(block, null, 2));
+  console.log("Received bundle:", JSON.stringify(block, null, 2));
   console.log("Received nonce:", nonce);
 
   if (!block || typeof nonce !== 'number') {
-    return res.status(400).json({ error: 'Invalid block data' });
+    return res.status(400).json({ error: 'Invalid bundle data' });
   }
 
   try {
     const blockString = JSON.stringify(block);
 
-    console.log("Stringified block for DB:", blockString);
+    console.log("Stringified bundle for DB:", blockString);
 
     const result = await pool.query(
       'INSERT INTO blocks (block, nonce) VALUES ($1::jsonb, $2) RETURNING *',
@@ -23,12 +23,12 @@ export const saveBlock = async (req: Request, res: Response) => {
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("Database insertion error:", err);
+    console.error("Database insertion error (bundle):", err);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
 
-export const getBlock = async (req: Request, res: Response) => {
+export const getBundle = async (req: Request, res: Response) => {
   const { nonce } = req.params;
 
   try {
@@ -38,7 +38,7 @@ export const getBlock = async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Block not found' });
+      return res.status(404).json({ error: 'Bundle not found' });
     }
 
     res.status(200).json(result.rows);
@@ -48,7 +48,7 @@ export const getBlock = async (req: Request, res: Response) => {
   }
 };
 
-export const getAllBlocks = async (req: Request, res: Response) => {
+export const getAllBundles = async (req: Request, res: Response) => {
   try {
     const result = await pool.query('SELECT * FROM blocks ORDER BY timestamp DESC');
     res.status(200).json(result.rows);
