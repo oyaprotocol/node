@@ -3,15 +3,15 @@
 import { expect } from 'chai';
 import request from 'supertest';
 import { app } from '../../src/index'; // Import your Express app
-// import { pool } from '../src/index'; // Import your database connection
+import { pool } from '../../src/index'; // Import your database connection
 
 // Setup the test environment
 before(async () => {
   // Create tables for testing
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS blocks (
+    CREATE TABLE IF NOT EXISTS bundles (
       id SERIAL PRIMARY KEY,
-      block JSONB NOT NULL,
+      bundle JSONB NOT NULL,
       nonce INT NOT NULL,
       timestamp TIMESTAMPTZ DEFAULT NOW()
     )
@@ -46,7 +46,7 @@ before(async () => {
 // Clean up the test environment
 after(async () => {
   // Drop tables after testing
-  await pool.query('DROP TABLE IF EXISTS blocks');
+  await pool.query('DROP TABLE IF EXISTS bundles');
   await pool.query('DROP TABLE IF EXISTS balances');
   await pool.query('DROP TABLE IF EXISTS cids');
   await pool.query('DROP TABLE IF EXISTS nonces');
@@ -54,55 +54,55 @@ after(async () => {
 
 describe('API Tests', () => {
 
-  describe('POST /block', () => {
-    it('should save a block', async () => {
+  describe('POST /bundle', () => {
+    it('should save a bundle', async () => {
       const res = await request(app)
-        .post('/block')
+        .post('/bundle')
         .send({
-          block: { some: 'data' },
+          bundle: { some: 'data' },
           nonce: 1
         });
       expect(res.status).to.equal(201);
-      expect(res.body).to.have.property('block');
+      expect(res.body).to.have.property('bundle');
       expect(res.body).to.have.property('nonce', 1);
     });
 
     it('should return 400 for invalid data', async () => {
       const res = await request(app)
-        .post('/block')
+        .post('/bundle')
         .send({
-          block: null,
+          bundle: null,
           nonce: 'invalid'
         });
       expect(res.status).to.equal(400);
     });
   });
 
-  describe('GET /block/:nonce', () => {
-    it('should get a block by nonce', async () => {
-      await pool.query('INSERT INTO blocks (block, nonce) VALUES ($1, $2)', [JSON.stringify({ some: 'data' }), 1]);
+  describe('GET /bundle/:nonce', () => {
+    it('should get a bundle by nonce', async () => {
+      await pool.query('INSERT INTO bundles (bundle, nonce) VALUES ($1, $2)', [JSON.stringify({ some: 'data' }), 1]);
 
       const res = await request(app)
-        .get('/block/1')
+        .get('/bundle/1')
         .send();
       expect(res.status).to.equal(200);
       expect(res.body).to.be.an('array');
-      expect(res.body[0]).to.have.property('block');
+      expect(res.body[0]).to.have.property('bundle');
       expect(res.body[0]).to.have.property('nonce', 1);
     });
 
-    it('should return 404 for non-existing block', async () => {
+    it('should return 404 for non-existing bundle', async () => {
       const res = await request(app)
-        .get('/block/999')
+        .get('/bundle/999')
         .send();
       expect(res.status).to.equal(404);
     });
   });
 
-  describe('GET /block', () => {
-    it('should get all blocks', async () => {
+  describe('GET /bundle', () => {
+    it('should get all bundles', async () => {
       const res = await request(app)
-        .get('/block')
+        .get('/bundle')
         .send();
       expect(res.status).to.equal(200);
       expect(res.body).to.be.an('array');

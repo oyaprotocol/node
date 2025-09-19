@@ -22,9 +22,9 @@ function safeBigInt(value: string): bigint {
   return BigInt(integerPart);
 }
 
-export interface BlockTrackerContract extends ethers.BaseContract {
-  proposeBlock(
-    _blockData: string,
+export interface BundleTrackerContract extends ethers.BaseContract {
+  proposeBundle(
+    _bundleData: string,
     overrides?: ethers.Overrides
   ): Promise<ethers.ContractTransaction>;
 }
@@ -36,28 +36,28 @@ let cachedIntentions: any[] = [];
 let mainnetAlchemy: Alchemy;
 let sepoliaAlchemy: Alchemy;
 let wallet: Wallet;
-let blockTrackerContract: BlockTrackerContract;
+let bundleTrackerContract: BundleTrackerContract;
 
 let s: any;
 
 initializeWalletAndContract()
   .then(() => {
-    console.log("Block proposer initialization complete. Ready to handle proposals.");
+    console.log("Bundle proposer initialization complete. Ready to handle proposals.");
   })
   .catch((error) => {
     console.error("Initialization failed:", error);
   });
 
-async function buildBlockTrackerContract(): Promise<BlockTrackerContract> {
-  const abiPath = path.join(__dirname, 'abi', 'BlockTracker.json');
+async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
+  const abiPath = path.join(__dirname, 'abi', 'BundleTracker.json');
   const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
   const provider = (await sepoliaAlchemy.config.getProvider()) as unknown as ethers.Provider;
   const contract = new ethers.Contract(
-    process.env.BLOCK_TRACKER_ADDRESS as string,
+    process.env.BUNDLE_TRACKER_ADDRESS as string,
     contractABI,
     provider
   );
-  return contract.connect(wallet as unknown as ethers.ContractRunner) as BlockTrackerContract;
+  return contract.connect(wallet as unknown as ethers.ContractRunner) as BundleTrackerContract;
 }
 
 async function buildAlchemyInstances() {
@@ -76,7 +76,7 @@ async function buildAlchemyInstances() {
 
 async function getLatestNonce(): Promise<number> {
   const result = await pool.query(
-    'SELECT nonce FROM blocks ORDER BY timestamp DESC LIMIT 1'
+    'SELECT nonce FROM bundles ORDER BY timestamp DESC LIMIT 1'
   );
   if (result.rows.length === 0) return 0;
   return result.rows[0].nonce + 1;
@@ -178,24 +178,24 @@ async function saveProposerData(proposer: string): Promise<void> {
   console.log(`Proposer data saved/updated for ${proposer}`);
 }
 
-async function saveBlockData(blockData: any, cidToString: string, proposerSignature: string) {
-  // Convert the block (JSON) to a Buffer for the BYTEA column
-  const blockBuffer = Buffer.from(JSON.stringify(blockData.block), 'utf8');
+async function saveBundleData(bundleData: any, cidToString: string, proposerSignature: string) {
+  // Convert the bundle (JSON) to a Buffer for the BYTEA column
+  const bundleBuffer = Buffer.from(JSON.stringify(bundleData.bundle), 'utf8');
   await pool.query(
-    `INSERT INTO blocks (block, nonce, proposer, signature, ipfs_cid)
+    `INSERT INTO bundles (bundle, nonce, proposer, signature, ipfs_cid)
      VALUES ($1, $2, $3, $4, $5)`,
-    [blockBuffer, blockData.nonce, PROPOSER_ADDRESS, proposerSignature, cidToString]
+    [bundleBuffer, bundleData.nonce, PROPOSER_ADDRESS, proposerSignature, cidToString]
   );
-  console.log('Block data saved to DB');
+  console.log('Bundle data saved to DB');
 
   // Also insert into the cids table, now including the proposer
   await pool.query(
     'INSERT INTO cids (cid, nonce, proposer) VALUES ($1, $2, $3)',
-    [cidToString, blockData.nonce, PROPOSER_ADDRESS]
+    [cidToString, bundleData.nonce, PROPOSER_ADDRESS]
   );
   console.log('CID saved to DB');
 
-  for (const execution of blockData.block) {
+  for (const execution of bundleData.bundle) {
     const vaultNonce = execution.intention.nonce;
     const vault = execution.intention.from;
     await pool.query(
@@ -208,13 +208,13 @@ async function saveBlockData(blockData: any, cidToString: string, proposerSignat
   }
 }
 
-async function publishBlock(data: string, signature: string, from: string) {
+async function publishBundle(data: string, signature: string, from: string) {
   await ensureHeliaSetup();
 
-  console.log("Publishing block. Data length (before compression):", data.length);
+  console.log("Publishing bundle. Data length (before compression):", data.length);
 
   if (from !== PROPOSER_ADDRESS) {
-    throw new Error("Unauthorized: Only the proposer can publish new blocks.");
+    throw new Error("Unauthorized: Only the proposer can publish new bundles.");
   }
   
   const signerAddress = verifyMessage(data, signature);
@@ -226,49 +226,49 @@ async function publishBlock(data: string, signature: string, from: string) {
   
   let compressedData: Buffer;
   try {
-    console.log("Starting compression of block data...");
+    console.log("Starting compression of bundle data...");
     compressedData = await gzip(data);
     console.log("Compression successful. Compressed data length:", compressedData.length);
   } catch (error) {
     console.error("Compression failed:", error);
-    throw new Error("Block data compression failed");
+    throw new Error("Bundle data compression failed");
   }
   
   const cid = await s.add(compressedData);
   const cidToString = cid.toString();
-  console.log('Block published to IPFS, CID:', cidToString);
+  console.log('Bundle published to IPFS, CID:', cidToString);
   
   try {
-    const tx = await blockTrackerContract.proposeBlock(cidToString);
+    const tx = await bundleTrackerContract.proposeBundle(cidToString);
     await sepoliaAlchemy.transact.waitForTransaction((tx as any).hash);
     console.log('Blockchain transaction successful');
     // Save proposer data after successful blockchain transaction.
     await saveProposerData(PROPOSER_ADDRESS);
   } catch (error) {
-    console.error("Failed to propose block:", error);
+    console.error("Failed to propose bundle:", error);
     throw new Error("Blockchain transaction failed");
   }
   
-  let blockData: any;
+  let bundleData: any;
   try {
-    blockData = JSON.parse(data);
-    console.log("Block data parsed successfully");
+    bundleData = JSON.parse(data);
+    console.log("Bundle data parsed successfully");
   } catch (error) {
-    console.error("Failed to parse block data:", error);
-    throw new Error("Invalid block data");
+    console.error("Failed to parse bundle data:", error);
+    throw new Error("Invalid bundle data");
   }
-  if (!Array.isArray(blockData.block)) {
-    console.error("Invalid block data structure:", blockData);
-    throw new Error("Invalid block data structure");
+  if (!Array.isArray(bundleData.bundle)) {
+    console.error("Invalid bundle data structure:", bundleData);
+    throw new Error("Invalid bundle data structure");
   }
   try {
-    await saveBlockData(blockData, cidToString, signature);
+    await saveBundleData(bundleData, cidToString, signature);
   } catch (error) {
-    console.error("Failed to save block/CID data:", error);
+    console.error("Failed to save bundle/CID data:", error);
     throw new Error("Database operation failed");
   }
   try {
-    for (const execution of blockData.block) {
+    for (const execution of bundleData.bundle) {
       if (!Array.isArray(execution.proof)) {
         console.error("Invalid proof structure in execution:", execution);
         throw new Error("Invalid proof structure");
@@ -303,7 +303,7 @@ async function updateBalances(from: string, to: string, token: string, amount: s
   if (from.toLowerCase() === PROPOSER_ADDRESS.toLowerCase()) {
     const largeBalance = parseUnits('1000000000000', 18);
     await updateBalance(from, token, safeBigInt(largeBalance.toString()));
-    console.log(`Block proposer balance updated to a large amount for token ${token}`);
+    console.log(`Bundle proposer balance updated to a large amount for token ${token}`);
   }
   const fromBalance = await getBalance(from, token);
   const toBalance = await getBalance(to, token);
@@ -413,7 +413,7 @@ async function handleIntention(intention: any, signature: string, from: string):
   return executionObject;
 }
 
-async function createAndPublishBlock() {
+async function createAndPublishBundle() {
   if (cachedIntentions.length === 0) {
     console.log("No intentions to propose.");
     return;
@@ -426,19 +426,19 @@ async function createAndPublishBlock() {
     console.error("Failed to get latest nonce:", error);
     return;
   }
-  const block = cachedIntentions.map(({ execution }) => execution).flat();
-  const blockObject = {
-    block: block,
+  const bundle = cachedIntentions.map(({ execution }) => execution).flat();
+  const bundleObject = {
+    bundle: bundle,
     nonce: nonce,
   };
-  console.log("Block object to be signed:", JSON.stringify(blockObject));
-  const proposerSignature = await wallet.signMessage(JSON.stringify(blockObject));
-  console.log("Generated block proposer signature:", proposerSignature);
+  console.log("Bundle object to be signed:", JSON.stringify(bundleObject));
+  const proposerSignature = await wallet.signMessage(JSON.stringify(bundleObject));
+  console.log("Generated bundle proposer signature:", proposerSignature);
   try {
-    await publishBlock(JSON.stringify(blockObject), proposerSignature, PROPOSER_ADDRESS);
-    console.log("Block published successfully");
+    await publishBundle(JSON.stringify(bundleObject), proposerSignature, PROPOSER_ADDRESS);
+    console.log("Bundle published successfully");
   } catch (error) {
-    console.error("Failed to publish block:", error);
+    console.error("Failed to publish bundle:", error);
     cachedIntentions = [];
     return;
   }
@@ -450,7 +450,7 @@ async function initializeWalletAndContract() {
   mainnetAlchemy = mainAlchemy;
   sepoliaAlchemy = sepAlchemy;
   wallet = walletInstance;
-  blockTrackerContract = await buildBlockTrackerContract();
+  bundleTrackerContract = await buildBundleTrackerContract();
 }
 
 const _getCachedIntentions = () => cachedIntentions;
@@ -460,7 +460,7 @@ const _clearCachedIntentions = () => {
 
 export { 
   handleIntention, 
-  createAndPublishBlock, 
+  createAndPublishBundle, 
   _getCachedIntentions, 
   _clearCachedIntentions 
 };

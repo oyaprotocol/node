@@ -1,28 +1,28 @@
 import { pool } from './index.js';
-export const saveBlock = async (req, res) => {
-    const { block, nonce } = req.body;
-    console.log("Received block:", JSON.stringify(block, null, 2));
+export const saveBundle = async (req, res) => {
+    const { bundle, nonce } = req.body;
+    console.log("Received bundle:", JSON.stringify(bundle, null, 2));
     console.log("Received nonce:", nonce);
-    if (!block || typeof nonce !== 'number') {
-        return res.status(400).json({ error: 'Invalid block data' });
+    if (!bundle || typeof nonce !== 'number') {
+        return res.status(400).json({ error: 'Invalid bundle data' });
     }
     try {
-        const blockString = JSON.stringify(block);
-        console.log("Stringified block for DB:", blockString);
-        const result = await pool.query('INSERT INTO blocks (block, nonce) VALUES ($1::jsonb, $2) RETURNING *', [blockString, nonce]);
+        const bundleString = JSON.stringify(bundle);
+        console.log("Stringified bundle for DB:", bundleString);
+        const result = await pool.query('INSERT INTO bundles (bundle, nonce) VALUES ($1::jsonb, $2) RETURNING *', [bundleString, nonce]);
         res.status(201).json(result.rows[0]);
     }
     catch (err) {
-        console.error("Database insertion error:", err);
+        console.error("Database insertion error (bundle):", err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
-export const getBlock = async (req, res) => {
+export const getBundle = async (req, res) => {
     const { nonce } = req.params;
     try {
-        const result = await pool.query('SELECT * FROM blocks WHERE nonce = $1 ORDER BY timestamp DESC', [parseInt(nonce)]);
+        const result = await pool.query('SELECT * FROM bundles WHERE nonce = $1 ORDER BY timestamp DESC', [parseInt(nonce)]);
         if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Block not found' });
+            return res.status(404).json({ error: 'Bundle not found' });
         }
         res.status(200).json(result.rows);
     }
@@ -31,9 +31,9 @@ export const getBlock = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
-export const getAllBlocks = async (req, res) => {
+export const getAllBundles = async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM blocks ORDER BY timestamp DESC');
+        const result = await pool.query('SELECT * FROM bundles ORDER BY timestamp DESC');
         res.status(200).json(result.rows);
     }
     catch (err) {

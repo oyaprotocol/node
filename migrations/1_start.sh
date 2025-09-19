@@ -25,17 +25,16 @@ fi
 echo "Creating tables..."
 heroku pg:psql --app "$APP_NAME" DATABASE_URL <<EOF
 -- Drop existing tables if any
-DROP TABLE IF EXISTS blocks;
 DROP TABLE IF EXISTS bundles;
 DROP TABLE IF EXISTS cids;
 DROP TABLE IF EXISTS balances;
 DROP TABLE IF EXISTS nonces;
 DROP TABLE IF EXISTS proposers;
 
--- Create the blocks table
-CREATE TABLE IF NOT EXISTS blocks (
+-- Create the bundles table
+CREATE TABLE IF NOT EXISTS bundles (
   id SERIAL PRIMARY KEY,
-  block BYTEA NOT NULL,
+  bundle BYTEA NOT NULL,
   nonce INTEGER NOT NULL,
   proposer TEXT NOT NULL,
   signature TEXT NOT NULL,
@@ -79,7 +78,7 @@ CREATE TABLE IF NOT EXISTS proposers (
 );
 EOF
 
-echo "Tables 'blocks', 'cids', 'balances', 'nonces', and 'proposers' created successfully."
+echo "Tables 'bundles', 'cids', 'balances', 'nonces', and 'proposers' created successfully."
 
 echo "Adding case-insensitive indexes and updating existing data to lowercase..."
 # Create a unique index on nonces (lowercase vault)

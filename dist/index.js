@@ -22,8 +22,8 @@ const { json } = bppkg;
 import dotenv from 'dotenv';
 import pgpkg from 'pg';
 const { Pool } = pgpkg;
-import { blockRouter, cidRouter, balanceRouter, vaultNonceRouter } from './routes.js';
-import { handleIntention, createAndPublishBlock } from './proposer.js';
+import { bundleRouter, cidRouter, balanceRouter, vaultNonceRouter } from './routes.js';
+import { handleIntention, createAndPublishBundle } from './proposer.js';
 dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
@@ -36,11 +36,11 @@ export const pool = new Pool({
     }
 });
 // Routes
-app.use('/block', blockRouter);
+app.use('/bundle', bundleRouter);
 app.use('/cid', cidRouter);
 app.use('/balance', balanceRouter);
 app.use('/nonce', vaultNonceRouter);
-// This endpoint receives an intention (with signature and from) and passes it to the block proposer logic.
+// This endpoint receives an intention (with signature and from) and passes it to the bundle proposer logic.
 app.post('/intention', async (req, res) => {
     try {
         const { intention, signature, from } = req.body;
@@ -56,13 +56,13 @@ app.post('/intention', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-// Every 10 seconds, try to publish a new block if there are cached intentions.
+// Every 10 seconds, try to publish a new bundle if there are cached intentions.
 setInterval(async () => {
     try {
-        await createAndPublishBlock();
+        await createAndPublishBundle();
     }
     catch (error) {
-        console.error('Error creating and publishing block:', error);
+        console.error('Error creating and publishing bundle:', error);
     }
 }, 10 * 1000);
 app.listen(port, () => {

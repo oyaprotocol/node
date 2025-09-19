@@ -1,8 +1,8 @@
 # Oya Node
 
-`node` is a Node.js–based full node for the Oya natural language protocol. It allows nodes to both propose new blocks (containing signed, natural language intentions) and in the near future will be able to verify and dispute blocks from other proposers. In addition, the API exposes endpoints for querying the protocol’s current state—including blocks, CIDs, balances, and vault nonces.
+`node` is a Node.js–based full node for the Oya natural language protocol. It allows nodes to both propose new bundles (containing signed, natural language intentions) and in the near future will be able to verify and dispute bundles from other proposers. In addition, the API exposes endpoints for querying the protocol’s current state—including bundles, CIDs, balances, and vault nonces.
 
-**WARNING: This software is early-stage and experimental and under active development. It should not be used in production. The underlying Oya Protocol has not been deployed to mainnet, and is itself experimental. The current node implementation supports block proposals and processing for a single block proposer only. Functionality to view and verify blocks from other proposers is not yet implemented. Users and developers should expect many breaking changes as the codebase evolves. Contributions and feedback are very welcome!**
+**WARNING: This software is early-stage and experimental and under active development. It should not be used in production. The underlying Oya Protocol has not been deployed to mainnet, and is itself experimental. The current node implementation supports bundle proposals and processing for a single bundle proposer only. Functionality to view and verify bundles from other proposers is not yet implemented. Users and developers should expect many breaking changes as the codebase evolves. Contributions and feedback are very welcome!**
 
 ## Table of Contents
 
@@ -14,7 +14,7 @@
 - [Database Setup](#database-setup)
 - [Running the Application](#running-the-application)
 - [API Endpoints](#api-endpoints)
-- [Block Proposing Workflow](#block-proposing-workflow)
+- [Bundle Proposing Workflow](#bundle-proposing-workflow)
 - [Testing](#testing)
 - [Deployment](#deployment)
 - [Future Enhancements](#future-enhancements)
@@ -24,21 +24,21 @@
 ## Features
 
 - **Natural Language protocol Node:** Accepts signed intentions in natural language.
-- **Proposer:** Caches incoming intentions and periodically bundles them into a block.
-- **Protocol Contract Integration:** Interacts with the [BlockTracker](https://github.com/oyaprotocol/contracts?tab=readme-ov-file#blocktracker) smart contract via ethers.js.
-- **IPFS Storage:** Uses Helia to upload block data to IPFS.
-- **Robust API Endpoints:** Exposes endpoints for blocks, CIDs, balances, and nonces.
-- **PostgreSQL Backend:** Uses PostgreSQL for persisting protocol state, including blocks, balances, and nonces.
+- **Proposer:** Caches incoming intentions and periodically bundles them into a bundle.
+- **Protocol Contract Integration:** Interacts with the [BundleTracker](https://github.com/oyaprotocol/contracts?tab=readme-ov-file#bundletracker) smart contract via ethers.js.
+- **IPFS Storage:** Uses Helia to upload bundle data to IPFS.
+- **Robust API Endpoints:** Exposes endpoints for bundles, CIDs, balances, and nonces.
+- **PostgreSQL Backend:** Uses PostgreSQL for persisting protocol state, including bundles, balances, and nonces.
 - **Automated Balance & Reward Updates:** Processes transfers or swaps and mints rewards automatically.
 
 ## Architecture Overview
 
 - **Express Server:** The main entry point (`index.ts`) sets up the Express server, JSON parsing, and routes.
-- **Routing & Controllers:** API endpoints are defined in `routes.ts` and implemented in `controllers.ts`. These endpoints manage database operations for blocks, CIDs, balances, and vault nonces.
+- **Routing & Controllers:** API endpoints are defined in `routes.ts` and implemented in `controllers.ts`. These endpoints manage database operations for bundles, CIDs, balances, and vault nonces.
 - **Proposer Logic:** Implemented in `proposer.ts`, this module:
   - Processes incoming intentions from the `/intention` endpoint.
-  - Caches intentions and bundles them into a block every 10 seconds.
-  - Signs the block, uploads it to IPFS via Helia, interacts with the BlockTracker contract, and updates the database accordingly.
+  - Caches intentions and bundles them into a bundle every 10 seconds.
+  - Signs the bundle, uploads it to IPFS via Helia, interacts with the BundleTracker contract, and updates the database accordingly.
 - **Database:** PostgreSQL is used for persistent storage. Migration scripts (e.g., `migrations/1_createTable.sh`) set up the required tables.
 
 ## Prerequisites
@@ -47,8 +47,8 @@
 - **npm:** Package manager for installing dependencies
 - **PostgreSQL Database:** Either local or hosted (e.g., via Heroku)
 - **Alchemy API Key:** For interacting with Ethereum networks
-- **BlockTracker Contract:** A deployed BlockTracker contract (its address must be provided)
-- **IPFS (Helia):** Used internally to store block data
+- **BundleTracker Contract:** A deployed BundleTracker contract (its address must be provided)
+- **IPFS (Helia):** Used internally to store bundle data
 - **Docker:** Installed and configured for building and running containers
 
 ## Installation
@@ -85,11 +85,11 @@ DATABASE_URL=postgres://username:password@host:port/database
 # Alchemy API Key for Ethereum network access
 ALCHEMY_API_KEY=your_alchemy_api_key
 
-# Deployed BlockTracker contract address
-BLOCK_TRACKER_ADDRESS=your_block_tracker_contract_address
+# Deployed BundleTracker contract address
+BUNDLE_TRACKER_ADDRESS=your_bundle_tracker_contract_address
 (This will be 0xd4af8d53a8fccacd1dc8abe8ddf7dfbc4b81546c on Sepolia.)
 
-# Private key used by the block proposer for signing blocks (ensure this is kept secure)
+# Private key used by the bundle proposer for signing bundles (ensure this is kept secure)
 TEST_PRIVATE_KEY=your_private_key
 ```
 
@@ -99,8 +99,8 @@ TEST_PRIVATE_KEY=your_private_key
 
 The database schema is managed via SQL migration scripts. For example, the `migrations/1_createTable.sh` script drops (if needed) and creates the following tables:
 
-- **blocks:** Stores block data and nonce.
-- **cids:** Stores IPFS CIDs corresponding to blocks.
+- **bundles:** Stores bundle data and nonce.
+- **cids:** Stores IPFS CIDs corresponding to bundles.
 - **balances:** Tracks token balances per vault.
 - **nonces:** Tracks the latest nonce for each vault.
 
@@ -184,10 +184,10 @@ Your application will now be accessible on `http://localhost:3000`.
 
 Below is a summary of the main API endpoints:
 
-- **Blocks**
-  - `GET /block` — Retrieve all blocks.
-  - `GET /block/:nonce` — Retrieve a block by its nonce.
-  - `POST /block` — Save a block (typically called internally after publishing).
+- **Bundles**
+  - `GET /bundle` — Retrieve all bundles.
+  - `GET /bundle/:nonce` — Retrieve a bundle by its nonce.
+  - `POST /bundle` — Save a bundle (typically called internally after publishing).
 
 - **CIDs**
   - `POST /cid` — Save a CID (internal use).
@@ -213,26 +213,26 @@ Below is a summary of the main API endpoints:
     }
     ```
 
-    This endpoint passes the intention to the block proposer logic after verifying the signature.
+    This endpoint passes the intention to the bundle proposer logic after verifying the signature.
 
-## Block Proposing Workflow
+## Bundle Proposing Workflow
 
 1. **Receiving Intentions:**  
    When a client posts to `/intention`, the application verifies the signature (using ethers’ `verifyMessage`) and caches the intention.
 
-2. **Creating a Block:**  
+2. **Creating a Bundle:**  
    Every 10 seconds, the application checks if there are cached intentions. If so, it:
    - Retrieves the latest nonce from the database.
-   - Bundles all cached intentions into a block.
-   - Signs the block using the block proposer’s private key.
-   - Uploads the block data to IPFS via Helia.
-   - Calls the `proposeBlock` function on the BlockTracker contract using ethers.js.
-   - Persists the block and associated CID to the database.
-   - Updates balances based on the transactions in the block.
+   - Bundles all cached intentions into a bundle.
+   - Signs the bundle using the bundle proposer’s private key.
+   - Uploads the bundle data to IPFS via Helia.
+   - Calls the `proposeBundle` function on the BundleTracker contract using ethers.js.
+   - Persists the bundle and associated CID to the database.
+   - Updates balances based on the transactions in the bundle.
    - Mints rewards to the relevant addresses.
 
 3. **Error Handling:**  
-   The block proposer logic includes error handling for signature verification, IPFS uploads, protocol transactions, and database operations.
+   The bundle proposer logic includes error handling for signature verification, IPFS uploads, protocol transactions, and database operations.
 
 ## Testing
 
@@ -304,16 +304,16 @@ Since the application is containerized, you can also deploy it to any hosting pr
 Planned improvements for future releases include (but are not limited to):
 
 - **Multi-Proposer Support:**  
-  Extend the system to fetch, display, and verify blocks from multiple proposers by parsing onchain event logs. This will allow nodes to cross-check and validate proposals from different sources.
+  Extend the system to fetch, display, and verify bundles from multiple proposers by parsing onchain event logs. This will allow nodes to cross-check and validate proposals from different sources.
 
-- **Enhanced Block Verification:**  
-  Develop robust mechanisms for verifying the correctness of blocks proposed by various nodes, improving overall network security and consensus.
+- **Enhanced Bundle Verification:**  
+  Develop robust mechanisms for verifying the correctness of bundles proposed by various nodes, improving overall network security and consensus.
 
 - **Expanded API Functionality:**  
-  Add new API endpoints to query detailed block and proposer information.
+  Add new API endpoints to query detailed bundle and proposer information.
 
 - **Robust Error Handling and Logging:**  
-  Improve error handling in the block proposer logic and enhance logging to facilitate debugging and monitoring.
+  Improve error handling in the bundle proposer logic and enhance logging to facilitate debugging and monitoring.
 
 - **Performance Optimization:**  
   Optimize the node for scalability and higher throughput as the network and transaction volumes grow.
