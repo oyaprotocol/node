@@ -1,14 +1,14 @@
-// Need to add authorization to routes, so that only the block proposer can call POST routes.
+// Need to add authorization to routes, so that only the bundle proposer can call POST routes.
 import { Router } from 'express';
-import { saveBlock, getBlock, getAllBlocks, saveCID, getCIDsByNonce, updateBalanceForOneToken, getBalanceForOneToken, getBalanceForAllTokens, getVaultNonce, setVaultNonce } from './controllers.js';
-const blockRouter = Router();
+import { saveBundle, getBundle, getAllBundles, saveCID, getCIDsByNonce, updateBalanceForOneToken, getBalanceForOneToken, getBalanceForAllTokens, getVaultNonce, setVaultNonce } from './controllers.js';
+const bundleRouter = Router();
 const cidRouter = Router();
 const balanceRouter = Router();
 const vaultNonceRouter = Router();
-// Block routes
-blockRouter.post('/', saveBlock);
-blockRouter.get('/:nonce', getBlock);
-blockRouter.get('/', getAllBlocks);
+// Bundle routes
+bundleRouter.post('/', saveBundle);
+bundleRouter.get('/:nonce', getBundle);
+bundleRouter.get('/', getAllBundles);
 // CID routes
 cidRouter.post('/', saveCID);
 cidRouter.get('/:nonce', getCIDsByNonce);
@@ -19,4 +19,4 @@ balanceRouter.get('/:vault', getBalanceForAllTokens);
 // Vault nonce routes
 vaultNonceRouter.get('/:vault', getVaultNonce);
 vaultNonceRouter.post('/:vault', setVaultNonce);
-export { blockRouter, cidRouter, balanceRouter, vaultNonceRouter };
+export { bundleRouter, cidRouter, balanceRouter, vaultNonceRouter };

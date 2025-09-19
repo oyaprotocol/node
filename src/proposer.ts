@@ -49,7 +49,7 @@ initializeWalletAndContract()
   });
 
 async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
-  const abiPath = path.join(__dirname, 'abi', 'BlockTracker.json');
+  const abiPath = path.join(__dirname, 'abi', 'BundleTracker.json');
   const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
   const provider = (await sepoliaAlchemy.config.getProvider()) as unknown as ethers.Provider;
   const contract = new ethers.Contract(
@@ -57,10 +57,7 @@ async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
     contractABI,
     provider
   );
-  const instance = contract.connect(wallet as unknown as ethers.ContractRunner);
-  const bundleContract = instance as unknown as BundleTrackerContract;
-  (bundleContract as any).proposeBundle = (...args: any[]) => (instance as any).proposeBlock(...args);
-  return bundleContract;
+  return contract.connect(wallet as unknown as ethers.ContractRunner) as BundleTrackerContract;
 }
 
 async function buildAlchemyInstances() {
