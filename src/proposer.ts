@@ -178,24 +178,24 @@ async function saveProposerData(proposer: string): Promise<void> {
   console.log(`Proposer data saved/updated for ${proposer}`);
 }
 
-async function saveBundleData(blockData: any, cidToString: string, proposerSignature: string) {
-  // Convert the block (JSON) to a Buffer for the BYTEA column
-  const blockBuffer = Buffer.from(JSON.stringify(blockData.block), 'utf8');
+async function saveBundleData(bundleData: any, cidToString: string, proposerSignature: string) {
+  // Convert the bundle (JSON) to a Buffer for the BYTEA column
+  const bundleBuffer = Buffer.from(JSON.stringify(bundleData.bundle), 'utf8');
   await pool.query(
     `INSERT INTO bundles (bundle, nonce, proposer, signature, ipfs_cid)
      VALUES ($1, $2, $3, $4, $5)`,
-    [blockBuffer, blockData.nonce, PROPOSER_ADDRESS, proposerSignature, cidToString]
+    [bundleBuffer, bundleData.nonce, PROPOSER_ADDRESS, proposerSignature, cidToString]
   );
   console.log('Bundle data saved to DB');
 
   // Also insert into the cids table, now including the proposer
   await pool.query(
     'INSERT INTO cids (cid, nonce, proposer) VALUES ($1, $2, $3)',
-    [cidToString, blockData.nonce, PROPOSER_ADDRESS]
+    [cidToString, bundleData.nonce, PROPOSER_ADDRESS]
   );
   console.log('CID saved to DB');
 
-  for (const execution of blockData.block) {
+  for (const execution of bundleData.bundle) {
     const vaultNonce = execution.intention.nonce;
     const vault = execution.intention.from;
     await pool.query(
@@ -249,26 +249,26 @@ async function publishBundle(data: string, signature: string, from: string) {
     throw new Error("Blockchain transaction failed");
   }
   
-  let blockData: any;
+  let bundleData: any;
   try {
-    blockData = JSON.parse(data);
+    bundleData = JSON.parse(data);
     console.log("Bundle data parsed successfully");
   } catch (error) {
     console.error("Failed to parse bundle data:", error);
     throw new Error("Invalid bundle data");
   }
-  if (!Array.isArray(blockData.block)) {
-    console.error("Invalid bundle data structure:", blockData);
+  if (!Array.isArray(bundleData.bundle)) {
+    console.error("Invalid bundle data structure:", bundleData);
     throw new Error("Invalid bundle data structure");
   }
   try {
-    await saveBundleData(blockData, cidToString, signature);
+    await saveBundleData(bundleData, cidToString, signature);
   } catch (error) {
     console.error("Failed to save bundle/CID data:", error);
     throw new Error("Database operation failed");
   }
   try {
-    for (const execution of blockData.block) {
+    for (const execution of bundleData.bundle) {
       if (!Array.isArray(execution.proof)) {
         console.error("Invalid proof structure in execution:", execution);
         throw new Error("Invalid proof structure");
@@ -426,16 +426,16 @@ async function createAndPublishBundle() {
     console.error("Failed to get latest nonce:", error);
     return;
   }
-  const block = cachedIntentions.map(({ execution }) => execution).flat();
-  const blockObject = {
-    block: block,
+  const bundle = cachedIntentions.map(({ execution }) => execution).flat();
+  const bundleObject = {
+    bundle: bundle,
     nonce: nonce,
   };
-  console.log("Block object to be signed:", JSON.stringify(blockObject));
-  const proposerSignature = await wallet.signMessage(JSON.stringify(blockObject));
-  console.log("Generated block proposer signature:", proposerSignature);
+  console.log("Bundle object to be signed:", JSON.stringify(bundleObject));
+  const proposerSignature = await wallet.signMessage(JSON.stringify(bundleObject));
+  console.log("Generated bundle proposer signature:", proposerSignature);
   try {
-    await publishBundle(JSON.stringify(blockObject), proposerSignature, PROPOSER_ADDRESS);
+    await publishBundle(JSON.stringify(bundleObject), proposerSignature, PROPOSER_ADDRESS);
     console.log("Bundle published successfully");
   } catch (error) {
     console.error("Failed to publish bundle:", error);

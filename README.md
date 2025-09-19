@@ -47,7 +47,7 @@
 - **npm:** Package manager for installing dependencies
 - **PostgreSQL Database:** Either local or hosted (e.g., via Heroku)
 - **Alchemy API Key:** For interacting with Ethereum networks
-- **BlockTracker Contract:** A deployed BlockTracker contract (its address must be provided)
+- **BundleTracker Contract:** A deployed BundleTracker contract (its address must be provided)
 - **IPFS (Helia):** Used internally to store block data
 - **Docker:** Installed and configured for building and running containers
 
@@ -89,7 +89,7 @@ ALCHEMY_API_KEY=your_alchemy_api_key
 BUNDLE_TRACKER_ADDRESS=your_block_tracker_contract_address
 (This will be 0xd4af8d53a8fccacd1dc8abe8ddf7dfbc4b81546c on Sepolia.)
 
-# Private key used by the block proposer for signing blocks (ensure this is kept secure)
+# Private key used by the bundle proposer for signing bundles (ensure this is kept secure)
 TEST_PRIVATE_KEY=your_private_key
 ```
 
@@ -100,7 +100,7 @@ TEST_PRIVATE_KEY=your_private_key
 The database schema is managed via SQL migration scripts. For example, the `migrations/1_createTable.sh` script drops (if needed) and creates the following tables:
 
 - **bundles:** Stores bundle data and nonce.
-- **cids:** Stores IPFS CIDs corresponding to blocks.
+- **cids:** Stores IPFS CIDs corresponding to bundles.
 - **balances:** Tracks token balances per vault.
 - **nonces:** Tracks the latest nonce for each vault.
 
@@ -304,13 +304,13 @@ Since the application is containerized, you can also deploy it to any hosting pr
 Planned improvements for future releases include (but are not limited to):
 
 - **Multi-Proposer Support:**  
-  Extend the system to fetch, display, and verify blocks from multiple proposers by parsing onchain event logs. This will allow nodes to cross-check and validate proposals from different sources.
+  Extend the system to fetch, display, and verify bundles from multiple proposers by parsing onchain event logs. This will allow nodes to cross-check and validate proposals from different sources.
 
-- **Enhanced Block Verification:**  
-  Develop robust mechanisms for verifying the correctness of blocks proposed by various nodes, improving overall network security and consensus.
+- **Enhanced Bundle Verification:**  
+  Develop robust mechanisms for verifying the correctness of bundles proposed by various nodes, improving overall network security and consensus.
 
 - **Expanded API Functionality:**  
-  Add new API endpoints to query detailed block and proposer information.
+  Add new API endpoints to query detailed bundle and proposer information.
 
 - **Robust Error Handling and Logging:**  
   Improve error handling in the block proposer logic and enhance logging to facilitate debugging and monitoring.
