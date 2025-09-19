@@ -7,7 +7,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "heroku-postbuild": "npm run build",
-    "test": "ts-mocha --project tsconfig.json 'test/**/*.ts'"
+    "test": "ts-mocha --project tsconfig.json 'test/*.test.ts'"
   },
   "dependencies": {
     "@helia/strings": "^3.0.3",
