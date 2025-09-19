@@ -1,7 +1,6 @@
 import { pool } from './index.js';
 export const saveBundle = async (req, res) => {
-    const { bundle: bundleBody, block: blockBody, nonce } = req.body;
-    const bundle = bundleBody ?? blockBody;
+    const { bundle, nonce } = req.body;
     console.log("Received bundle:", JSON.stringify(bundle, null, 2));
     console.log("Received nonce:", nonce);
     if (!bundle || typeof nonce !== 'number') {

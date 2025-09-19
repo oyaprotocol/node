@@ -2,8 +2,7 @@ import { Request, Response } from 'express';
 import { pool } from './index.js';
 
 export const saveBundle = async (req: Request, res: Response) => {
-  const { bundle: bundleBody, block: blockBody, nonce } = req.body as any;
-  const bundle = bundleBody ?? blockBody;
+  const { bundle, nonce } = req.body as any;
 
   console.log("Received bundle:", JSON.stringify(bundle, null, 2));
   console.log("Received nonce:", nonce);

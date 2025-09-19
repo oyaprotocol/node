@@ -25,7 +25,7 @@
 
 - **Natural Language protocol Node:** Accepts signed intentions in natural language.
 - **Proposer:** Caches incoming intentions and periodically bundles them into a bundle.
-- **Protocol Contract Integration:** Interacts with the [BundleTracker](https://github.com/oyaprotocol/contracts?tab=readme-ov-file#blocktracker) smart contract via ethers.js.
+- **Protocol Contract Integration:** Interacts with the [BundleTracker](https://github.com/oyaprotocol/contracts?tab=readme-ov-file#bundletracker) smart contract via ethers.js.
 - **IPFS Storage:** Uses Helia to upload bundle data to IPFS.
 - **Robust API Endpoints:** Exposes endpoints for bundles, CIDs, balances, and nonces.
 - **PostgreSQL Backend:** Uses PostgreSQL for persisting protocol state, including bundles, balances, and nonces.
@@ -48,7 +48,7 @@
 - **PostgreSQL Database:** Either local or hosted (e.g., via Heroku)
 - **Alchemy API Key:** For interacting with Ethereum networks
 - **BundleTracker Contract:** A deployed BundleTracker contract (its address must be provided)
-- **IPFS (Helia):** Used internally to store block data
+- **IPFS (Helia):** Used internally to store bundle data
 - **Docker:** Installed and configured for building and running containers
 
 ## Installation
@@ -86,7 +86,7 @@ DATABASE_URL=postgres://username:password@host:port/database
 ALCHEMY_API_KEY=your_alchemy_api_key
 
 # Deployed BundleTracker contract address
-BUNDLE_TRACKER_ADDRESS=your_block_tracker_contract_address
+BUNDLE_TRACKER_ADDRESS=your_bundle_tracker_contract_address
 (This will be 0xd4af8d53a8fccacd1dc8abe8ddf7dfbc4b81546c on Sepolia.)
 
 # Private key used by the bundle proposer for signing bundles (ensure this is kept secure)
@@ -313,7 +313,7 @@ Planned improvements for future releases include (but are not limited to):
   Add new API endpoints to query detailed bundle and proposer information.
 
 - **Robust Error Handling and Logging:**  
-  Improve error handling in the block proposer logic and enhance logging to facilitate debugging and monitoring.
+  Improve error handling in the bundle proposer logic and enhance logging to facilitate debugging and monitoring.
 
 - **Performance Optimization:**  
   Optimize the node for scalability and higher throughput as the network and transaction volumes grow.
