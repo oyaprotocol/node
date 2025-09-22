@@ -7,12 +7,12 @@
 		"build": "tsc",
 		"start": "node dist/index.js",
 		"heroku-postbuild": "npm run build",
-		"test": "ts-mocha --project tsconfig.json 'test/*.test.ts'",
+		"test": "ts-mocha --project tsconfig.test.json 'test/*.test.ts' --exclude 'test/old/**'",
 		"lint": "eslint src/**/*.ts test/**/*.ts",
-		"format": "prettier --write src/**/*.ts test/**/*.ts",
-		"format.check": "prettier --check src/**/*.ts test/**/*.ts",
+		"format": "prettier --write src/*.ts test/*.ts",
+		"format.check": "prettier --check src/*.ts test/*.ts",
 		"types.check": "tsc --noEmit",
-		"local-ci": "npm run lint && npm run format.check && npm run types.check && npm run test"
+		"local-ci": "node scripts/local-ci.js"
 	},
 	"dependencies": {
 		"@helia/strings": "^4.1.0",
@@ -24,13 +24,13 @@
 		"express": "^5.1.0",
 		"helia": "^5.5.1",
 		"jsdom": "^27.0.0",
-		"pg": "^8.16.3",
-		"ts-node": "^10.9.2"
+		"pg": "^8.16.3"
 	},
 	"devDependencies": {
 		"@eslint/js": "^9.36.0",
 		"@types/body-parser": "^1.19.6",
 		"@types/chai": "^5.2.2",
+		"@types/expect": "^1.20.4",
 		"@types/express": "^5.0.3",
 		"@types/jsdom": "^21.1.7",
 		"@types/mocha": "^10.0.10",
@@ -40,6 +40,7 @@
 		"@typescript-eslint/parser": "^8.44.0",
 		"chai": "^6.0.1",
 		"chai-as-promised": "^8.0.2",
+		"chalk": "^5.6.2",
 		"eslint": "^9.36.0",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-prettier": "^5.5.4",
@@ -51,6 +52,8 @@
 		"sinon": "^21.0.0",
 		"supertest": "^7.1.4",
 		"ts-mocha": "^11.1.0",
+		"ts-node": "^10.9.2",
+		"tsconfig-paths": "^4.2.0",
 		"typescript": "^5.9.2",
 		"typescript-eslint": "^8.44.0"
 	}
