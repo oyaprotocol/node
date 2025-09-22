@@ -13,7 +13,7 @@ export interface Intention {
 	from?: string
 	signature?: string
 	inputs?: TokenAmount[]
-	outputs?: TokenAmount[]
+	outputs?: IntentionOutput[]
 	[key: string]: unknown
 }
 
@@ -22,8 +22,16 @@ export interface TokenAmount {
 	amount: string
 }
 
+export interface IntentionOutput {
+	asset?: string
+	amount?: number | string
+	vault?: string
+	externalAddress?: string
+	digits?: number
+}
+
 export interface BundleData {
-	bundle: Execution[] | unknown
+	bundle: unknown
 	nonce: number
 }
 
