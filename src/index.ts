@@ -56,9 +56,9 @@ app.post('/intention', bearerAuth, async (req, res) => {
     console.log('Received signed intention:', intention, signature, from);
     const response = await handleIntention(intention, signature, from);
     res.status(200).json(response);
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error handling intention:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 
