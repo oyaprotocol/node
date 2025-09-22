@@ -9,6 +9,7 @@ import { pool } from './index.js';
 import { fileURLToPath } from 'url';
 import zlib from 'zlib';
 import { promisify } from 'util';
+import { Intention, BundleData } from './types/core.js';
 
 const gzip = promisify(zlib.gzip);
 
@@ -31,14 +32,14 @@ export interface BundleTrackerContract extends ethers.BaseContract {
 
 const PROPOSER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
 
-let cachedIntentions: any[] = [];
+let cachedIntentions: Intention[] = [];
 
 let mainnetAlchemy: Alchemy;
 let sepoliaAlchemy: Alchemy;
 let wallet: Wallet;
 let bundleTrackerContract: BundleTrackerContract;
 
-let s: any;
+let s: ReturnType<typeof strings>;
 
 initializeWalletAndContract()
   .then(() => {
@@ -178,7 +179,7 @@ async function saveProposerData(proposer: string): Promise<void> {
   console.log(`Proposer data saved/updated for ${proposer}`);
 }
 
-async function saveBundleData(bundleData: any, cidToString: string, proposerSignature: string) {
+async function saveBundleData(bundleData: BundleData, cidToString: string, proposerSignature: string) {
   // Convert the bundle (JSON) to a Buffer for the BYTEA column
   const bundleBuffer = Buffer.from(JSON.stringify(bundleData.bundle), 'utf8');
   await pool.query(
@@ -240,7 +241,7 @@ async function publishBundle(data: string, signature: string, from: string) {
   
   try {
     const tx = await bundleTrackerContract.proposeBundle(cidToString);
-    await sepoliaAlchemy.transact.waitForTransaction((tx as any).hash);
+    await sepoliaAlchemy.transact.waitForTransaction((tx as ethers.ContractTransactionResponse).hash);
     console.log('Blockchain transaction successful');
     // Save proposer data after successful blockchain transaction.
     await saveProposerData(PROPOSER_ADDRESS);
@@ -249,7 +250,7 @@ async function publishBundle(data: string, signature: string, from: string) {
     throw new Error("Blockchain transaction failed");
   }
   
-  let bundleData: any;
+  let bundleData: BundleData;
   try {
     bundleData = JSON.parse(data);
     console.log("Bundle data parsed successfully");
@@ -319,7 +320,7 @@ async function updateBalances(from: string, to: string, token: string, amount: s
   console.log(`Balances updated: from ${from} to ${to} for token ${token} amount ${amount}`);
 }
 
-async function handleIntention(intention: any, signature: string, from: string): Promise<any> {
+async function handleIntention(intention: Intention, signature: string, from: string): Promise<Intention> {
   await initializeVault(from);
   console.log("Handling intention. Raw intention:", JSON.stringify(intention));
   console.log("Received signature:", signature);
@@ -330,7 +331,7 @@ async function handleIntention(intention: any, signature: string, from: string):
     console.log("Signature verification failed. Expected:", from, "Got:", signerAddress);
     throw new Error("Signature verification failed");
   }
-  const proof: any[] = [];
+  const proof: unknown[] = [];
   if (intention.action_type === "transfer" || intention.action_type === "swap") {
     const tokenAddress = intention.from_token_address;
     const sentTokenDecimals = await getTokenDecimals(tokenAddress);
