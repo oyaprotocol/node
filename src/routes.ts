@@ -1,7 +1,6 @@
 // Need to add authorization to routes, so that only the bundle proposer can call POST routes.
 
 import { Router } from 'express';
-import { bearerAuth } from './auth.js';
 import { 
   saveBundle, 
   getBundle, 
