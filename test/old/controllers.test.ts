@@ -2,8 +2,8 @@
 
 import { expect } from 'chai'
 import request from 'supertest'
-import { app } from '../../src/index' // Import your Express app
-import { pool } from '../../src/index' // Import your database connection
+import { app } from '../../src/index.js' // Import your Express app
+import { pool } from '../../src/index.js' // Import your database connection
 
 // Setup the test environment
 before(async () => {
