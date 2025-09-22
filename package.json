@@ -9,7 +9,9 @@
 		"heroku-postbuild": "npm run build",
 		"test": "ts-mocha --project tsconfig.json 'test/*.test.ts'",
 		"lint": "eslint src/**/*.ts test/**/*.ts",
-		"format": "prettier --write src/**/*.ts test/**/*.ts"
+		"format": "prettier --write src/**/*.ts test/**/*.ts",
+		"format.check": "prettier --check src/**/*.ts test/**/*.ts",
+		"types.check": "tsc --noEmit"
 	},
 	"dependencies": {
 		"@helia/strings": "^4.1.0",
