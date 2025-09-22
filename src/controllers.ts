@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import { pool } from './index.js';
+import { RequestBody } from './types/core.js';
 
 export const saveBundle = async (req: Request, res: Response) => {
-  const { bundle, nonce } = req.body as any;
+  const { bundle, nonce } = req.body as RequestBody;
 
   console.log("Received bundle:", JSON.stringify(bundle, null, 2));
   console.log("Received nonce:", nonce);
