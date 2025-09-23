@@ -1,3 +1,20 @@
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
+ * ║                        Authentication Module                              ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Bearer token authentication middleware for protecting POST endpoints.
+ * Ensures only authorized clients can modify state or submit intentions.
+ *
+ * Security features:
+ * - Bearer token validation
+ * - Constant-time comparison to prevent timing attacks
+ * - Protected POST endpoint enforcement
+ *
+ * @packageDocumentation
+ */
+
 import { Request, Response, NextFunction } from 'express'
 
 const API_BEARER_TOKEN = process.env.API_BEARER_TOKEN
