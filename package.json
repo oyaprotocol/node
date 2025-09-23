@@ -8,9 +8,9 @@
 		"start": "node dist/index.js",
 		"heroku-postbuild": "npm run build",
 		"test": "ts-mocha --project tsconfig.test.json 'test/*.test.ts' --exclude 'test/old/**'",
-		"lint": "eslint src/**/*.ts test/**/*.ts",
-		"format": "prettier --write src/*.ts test/*.ts",
-		"format.check": "prettier --check src/*.ts test/*.ts",
+		"lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
+		"format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+		"format.check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
 		"types.check": "tsc --noEmit",
 		"local-ci": "node scripts/local-ci.js"
 	},
