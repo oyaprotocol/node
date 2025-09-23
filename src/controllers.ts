@@ -20,6 +20,11 @@ import { Request, Response } from 'express'
 import { pool } from './index.js'
 import { RequestBody } from './types/core.js'
 
+/**
+ * POST /bundle
+ * Saves a new bundle with its nonce to the database.
+ * Returns the created bundle or 400/500 on error.
+ */
 export const saveBundle = async (req: Request, res: Response) => {
 	const { bundle, nonce } = req.body as RequestBody
 
@@ -47,6 +52,11 @@ export const saveBundle = async (req: Request, res: Response) => {
 	}
 }
 
+/**
+ * GET /bundle/:nonce
+ * Retrieves a bundle by its nonce.
+ * Returns the bundle or 404 if not found.
+ */
 export const getBundle = async (req: Request, res: Response) => {
 	const { nonce } = req.params
 
@@ -67,6 +77,10 @@ export const getBundle = async (req: Request, res: Response) => {
 	}
 }
 
+/**
+ * GET /bundle
+ * Retrieves all bundles ordered by timestamp.
+ */
 export const getAllBundles = async (req: Request, res: Response) => {
 	try {
 		const result = await pool.query(
@@ -79,6 +93,10 @@ export const getAllBundles = async (req: Request, res: Response) => {
 	}
 }
 
+/**
+ * GET /balance/:vault
+ * Returns all token balances for a specific vault.
+ */
 export const getBalanceForAllTokens = async (req: Request, res: Response) => {
 	const { vault } = req.params
 
@@ -95,6 +113,11 @@ export const getBalanceForAllTokens = async (req: Request, res: Response) => {
 	}
 }
 
+/**
+ * GET /balance/:vault/:token
+ * Returns the balance for a specific token in a vault.
+ * Returns 404 if balance not found.
+ */
 export const getBalanceForOneToken = async (req: Request, res: Response) => {
 	const { vault, token } = req.params
 
@@ -116,6 +139,11 @@ export const getBalanceForOneToken = async (req: Request, res: Response) => {
 	}
 }
 
+/**
+ * POST /balance/:vault/:token
+ * Updates or creates a balance entry for a vault/token pair.
+ * Expects balance string in request body.
+ */
 export const updateBalanceForOneToken = async (req: Request, res: Response) => {
 	const { vault, token, balance } = req.body
 
@@ -150,6 +178,11 @@ export const updateBalanceForOneToken = async (req: Request, res: Response) => {
 	}
 }
 
+/**
+ * POST /cid
+ * Saves an IPFS CID with its associated nonce.
+ * Returns the created CID record or 400 on invalid data.
+ */
 export const saveCID = async (req: Request, res: Response) => {
 	const { cid, nonce } = req.body
 
@@ -165,6 +198,11 @@ export const saveCID = async (req: Request, res: Response) => {
 	}
 }
 
+/**
+ * GET /cid/:nonce
+ * Retrieves all CIDs associated with a specific nonce.
+ * Returns 404 if no CIDs found for the nonce.
+ */
 export const getCIDsByNonce = async (req: Request, res: Response) => {
 	const { nonce } = req.params
 
@@ -187,7 +225,11 @@ export const getCIDsByNonce = async (req: Request, res: Response) => {
 	}
 }
 
-// Handle GET request to fetch nonce
+/**
+ * GET /nonce/:vault
+ * Gets the current nonce for a vault.
+ * Returns 404 if vault has no nonce set.
+ */
 export const getVaultNonce = async (req: Request, res: Response) => {
 	const { vault } = req.params
 	try {
@@ -206,7 +248,11 @@ export const getVaultNonce = async (req: Request, res: Response) => {
 	}
 }
 
-// Handle POST request to set nonce
+/**
+ * POST /nonce/:vault
+ * Sets or updates the nonce for a vault.
+ * Creates new entry or updates existing one.
+ */
 export const setVaultNonce = async (req: Request, res: Response) => {
 	const { vault } = req.params
 	const { nonce } = req.body
