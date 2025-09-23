@@ -1,3 +1,21 @@
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
+ * ║                         Database Controllers                              ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Database controller functions for managing bundles, CIDs, balances, and vaults.
+ * Provides CRUD operations for all core data entities in PostgreSQL.
+ *
+ * Key operations:
+ * - Bundle management (save, retrieve)
+ * - CID tracking for IPFS content
+ * - Balance management for vaults and tokens
+ * - Vault nonce tracking for transaction ordering
+ *
+ * @packageDocumentation
+ */
+
 import { Request, Response } from 'express'
 import { pool } from './index.js'
 import { RequestBody } from './types/core.js'
