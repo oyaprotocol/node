@@ -1,3 +1,22 @@
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
+ * ║                           Bundle Proposer                                 ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Handles the bundle proposer logic for the Oya Protocol.
+ * Manages intention verification, bundle creation, IPFS uploads, and blockchain interactions.
+ *
+ * Key responsibilities:
+ * - Verify intention signatures using ethers.js
+ * - Cache intentions until bundle creation
+ * - Compress and upload bundles to IPFS via Helia
+ * - Submit bundle CIDs to the BundleTracker smart contract
+ * - Update database with bundles, balances, and nonces
+ *
+ * @packageDocumentation
+ */
+
 import { ethers, parseUnits, verifyMessage } from 'ethers'
 import { Alchemy, Wallet, Network } from 'alchemy-sdk'
 import { createHelia } from 'helia'
