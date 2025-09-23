@@ -1,22 +1,49 @@
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
+ * ║                         Database Controllers                              ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Database controller functions for managing bundles, CIDs, balances, and vaults.
+ * Provides CRUD operations for all core data entities in PostgreSQL.
+ *
+ * Key operations:
+ * - Bundle management (save, retrieve)
+ * - CID tracking for IPFS content
+ * - Balance management for vaults and tokens
+ * - Vault nonce tracking for transaction ordering
+ *
+ * @packageDocumentation
+ */
 import { pool } from './index.js';
+/**
+ * POST /bundle
+ * Saves a new bundle with its nonce to the database.
+ * Returns the created bundle or 400/500 on error.
+ */
 export const saveBundle = async (req, res) => {
     const { bundle, nonce } = req.body;
-    console.log("Received bundle:", JSON.stringify(bundle, null, 2));
-    console.log("Received nonce:", nonce);
+    console.log('Received bundle:', JSON.stringify(bundle, null, 2));
+    console.log('Received nonce:', nonce);
     if (!bundle || typeof nonce !== 'number') {
         return res.status(400).json({ error: 'Invalid bundle data' });
     }
     try {
         const bundleString = JSON.stringify(bundle);
-        console.log("Stringified bundle for DB:", bundleString);
+        console.log('Stringified bundle for DB:', bundleString);
         const result = await pool.query('INSERT INTO bundles (bundle, nonce) VALUES ($1::jsonb, $2) RETURNING *', [bundleString, nonce]);
         res.status(201).json(result.rows[0]);
     }
     catch (err) {
-        console.error("Database insertion error (bundle):", err);
+        console.error('Database insertion error (bundle):', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+/**
+ * GET /bundle/:nonce
+ * Retrieves a bundle by its nonce.
+ * Returns the bundle or 404 if not found.
+ */
 export const getBundle = async (req, res) => {
     const { nonce } = req.params;
     try {
@@ -31,6 +58,10 @@ export const getBundle = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+/**
+ * GET /bundle
+ * Retrieves all bundles ordered by timestamp.
+ */
 export const getAllBundles = async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM bundles ORDER BY timestamp DESC');
@@ -41,11 +72,15 @@ export const getAllBundles = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+/**
+ * GET /balance/:vault
+ * Returns all token balances for a specific vault.
+ */
 export const getBalanceForAllTokens = async (req, res) => {
     const { vault } = req.params;
     try {
         const result = await pool.query('SELECT * FROM balances WHERE LOWER(vault) = LOWER($1) ORDER BY timestamp DESC', [vault]);
-        console.log("Getting all token balances:", result.rows);
+        console.log('Getting all token balances:', result.rows);
         res.status(200).json(result.rows);
     }
     catch (err) {
@@ -53,11 +88,16 @@ export const getBalanceForAllTokens = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+/**
+ * GET /balance/:vault/:token
+ * Returns the balance for a specific token in a vault.
+ * Returns 404 if balance not found.
+ */
 export const getBalanceForOneToken = async (req, res) => {
     const { vault, token } = req.params;
     try {
         const result = await pool.query('SELECT * FROM balances WHERE LOWER(vault) = LOWER($1) AND LOWER(token) = LOWER($2) ORDER BY timestamp DESC', [vault, token]);
-        console.log("Getting balance for one token:", result.rows);
+        console.log('Getting balance for one token:', result.rows);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Balance not found' });
         }
@@ -68,6 +108,11 @@ export const getBalanceForOneToken = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+/**
+ * POST /balance/:vault/:token
+ * Updates or creates a balance entry for a vault/token pair.
+ * Expects balance string in request body.
+ */
 export const updateBalanceForOneToken = async (req, res) => {
     const { vault, token, balance } = req.body;
     try {
@@ -88,6 +133,11 @@ export const updateBalanceForOneToken = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+/**
+ * POST /cid
+ * Saves an IPFS CID with its associated nonce.
+ * Returns the created CID record or 400 on invalid data.
+ */
 export const saveCID = async (req, res) => {
     const { cid, nonce } = req.body;
     try {
@@ -99,12 +149,19 @@ export const saveCID = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+/**
+ * GET /cid/:nonce
+ * Retrieves all CIDs associated with a specific nonce.
+ * Returns 404 if no CIDs found for the nonce.
+ */
 export const getCIDsByNonce = async (req, res) => {
     const { nonce } = req.params;
     try {
         const result = await pool.query('SELECT * FROM cids WHERE nonce = $1 ORDER BY timestamp DESC', [parseInt(nonce)]);
         if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'No CIDs found for the given nonce' });
+            return res
+                .status(404)
+                .json({ error: 'No CIDs found for the given nonce' });
         }
         res.status(200).json(result.rows);
     }
@@ -113,12 +170,16 @@ export const getCIDsByNonce = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
-// Handle GET request to fetch nonce
+/**
+ * GET /nonce/:vault
+ * Gets the current nonce for a vault.
+ * Returns 404 if vault has no nonce set.
+ */
 export const getVaultNonce = async (req, res) => {
     const { vault } = req.params;
     try {
         const result = await pool.query('SELECT nonce FROM nonces WHERE LOWER(vault) = LOWER($1)', [vault]);
-        console.log("Getting vault nonce:", result.rows);
+        console.log('Getting vault nonce:', result.rows);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Nonce not found' });
         }
@@ -129,7 +190,11 @@ export const getVaultNonce = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
-// Handle POST request to set nonce
+/**
+ * POST /nonce/:vault
+ * Sets or updates the nonce for a vault.
+ * Creates new entry or updates existing one.
+ */
 export const setVaultNonce = async (req, res) => {
     const { vault } = req.params;
     const { nonce } = req.body;
