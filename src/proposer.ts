@@ -379,7 +379,7 @@ async function publishBundle(data: string, signature: string, from: string) {
 			compressedData.length
 		)
 	} catch (error) {
-		diagnostic.error('Compression failed', { error: error.message })
+		diagnostic.error('Compression failed', { error: error instanceof Error ? error.message : String(error) })
 		logger.error('Compression failed:', error)
 		throw new Error('Bundle data compression failed')
 	}
@@ -706,7 +706,7 @@ async function createAndPublishBundle() {
 		logger.info('Latest nonce retrieved:', nonce)
 	} catch (error) {
 		diagnostic.error('Failed to get nonce', {
-			error: error.message,
+			error: error instanceof Error ? error.message : String(error),
 			cycleNumber: bundleCycleCount
 		})
 		logger.error('Failed to get latest nonce:', error)
@@ -749,7 +749,7 @@ async function createAndPublishBundle() {
 		logger.info('Bundle published successfully')
 	} catch (error) {
 		diagnostic.error('Bundle publish failed', {
-			error: error.message,
+			error: error instanceof Error ? error.message : String(error),
 			cycleNumber: bundleCycleCount,
 			cycleTime: Date.now() - cycleStartTime,
 			intentionsLost: cachedIntentions.length,

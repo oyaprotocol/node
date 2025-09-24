@@ -39,6 +39,9 @@ import { bearerAuth } from './auth.js'
 
 dotenv.config()
 
+// Display banner first thing
+displayBanner()
+
 /** Express application instance for the Oya node server */
 const app = express()
 
@@ -99,11 +102,24 @@ export const pool = new Pool({
 	},
 })
 
+// Test database connection on startup
+pool.connect()
+	.then(client => {
+		logger.info('Database pool initialized successfully')
+		client.release()
+	})
+	.catch(err => {
+		logger.error('Failed to initialize database pool:', err)
+		logger.warn('Server will continue but database operations may fail')
+	})
+
 // Mount route handlers
+logger.debug('Mounting route handlers')
 app.use('/bundle', bundleRouter)
 app.use('/cid', cidRouter)
 app.use('/balance', balanceRouter)
 app.use('/nonce', vaultNonceRouter)
+logger.debug('All routes mounted successfully')
 
 /**
  * POST endpoint for receiving signed intentions.
@@ -144,7 +160,7 @@ app.post('/intention', bearerAuth, async (req, res) => {
 		res.status(200).json(response)
 	} catch (error) {
 		diagnostic.error('Intention processing failed', {
-			error: error.message,
+			error: error instanceof Error ? error.message : String(error),
 			processingTime: Date.now() - startTime
 		})
 		logger.error('Error handling intention', error)
@@ -170,7 +186,6 @@ setInterval(async () => {
  * Start the Express server on the configured port
  */
 app.listen(port, () => {
-	displayBanner()
 	logger.info(`Server running on port ${port}`)
 })
 

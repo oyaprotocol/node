@@ -68,7 +68,7 @@ export const saveBundle = async (req: Request, res: Response) => {
 	} catch (err) {
 		diagnostic.error('Database error', {
 			operation: 'saveBundle',
-			error: err.message,
+			error: err instanceof Error ? err.message : String(err),
 			nonce
 		})
 		logger.error('Database insertion error (bundle):', err)
@@ -173,7 +173,7 @@ export const getBalanceForOneToken = async (req: Request, res: Response) => {
 	} catch (err) {
 		diagnostic.error('Database error', {
 			operation: 'getBalanceForOneToken',
-			error: err.message,
+			error: err instanceof Error ? err.message : String(err),
 			vault,
 			token
 		})
