@@ -1,0 +1,38 @@
+name: CI Pipeline
+on: [push, pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-ci:
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Run Install
+        run: npm ci
+
+      - name: Check Formatting
+        run: npm run format.check
+
+      - name: Pass Linting
+        run: npm run lint
+
+      - name: Check Types
+        run: npm run types.check
+
+      - name: Pass Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
