@@ -14,18 +14,41 @@
  *
  * @packageDocumentation
  */
+import { diagnostic } from './utils/logger.js';
 const API_BEARER_TOKEN = process.env.API_BEARER_TOKEN;
 /**
  * Middleware to protect endpoints with Bearer token authorization.
  * Expects Authorization: Bearer <token> header matching API_BEARER_TOKEN.
  */
 export function bearerAuth(req, res, next) {
+    const startTime = Date.now();
     const authHeader = req.headers['authorization'];
     if (!authHeader || typeof authHeader !== 'string') {
+        diagnostic.debug('Auth failed - missing header', {
+            path: req.path,
+            method: req.method,
+            hasAuthHeader: !!authHeader,
+            authHeaderType: typeof authHeader,
+        });
         return res.status(401).json({ error: 'Missing Authorization header' });
     }
     const [scheme, token] = authHeader.split(' ');
-    if (scheme !== 'Bearer' || token !== API_BEARER_TOKEN) {
+    const tokenValid = scheme === 'Bearer' && token === API_BEARER_TOKEN;
+    diagnostic.trace('Bearer auth check', {
+        path: req.path,
+        method: req.method,
+        scheme,
+        tokenPreview: token ? token.substring(0, 8) + '...' : 'none',
+        authTime: Date.now() - startTime,
+        authenticated: tokenValid,
+    });
+    if (!tokenValid) {
+        diagnostic.info('Auth failed - invalid token', {
+            path: req.path,
+            method: req.method,
+            scheme,
+            tokenLength: token?.length || 0,
+        });
         return res.status(403).json({ error: 'Invalid or missing token' });
     }
     next();

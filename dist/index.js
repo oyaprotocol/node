@@ -11,11 +11,13 @@
  * @packageDocumentation
  */
 import { JSDOM } from 'jsdom';
+import { displayBanner } from './utils/banner.js';
+import { logger, diagnostic } from './utils/logger.js';
 // Polyfill for CustomEvent in Node.js environment (required by Helia)
 if (typeof globalThis.CustomEvent === 'undefined') {
     const { window } = new JSDOM();
     globalThis.CustomEvent = window.CustomEvent;
-    console.log('CustomEvent polyfill via jsdom applied.');
+    logger.debug('CustomEvent polyfill via jsdom applied.');
 }
 import express from 'express';
 import bppkg from 'body-parser';
@@ -27,11 +29,39 @@ import { bundleRouter, cidRouter, balanceRouter, vaultNonceRouter, } from './rou
 import { handleIntention, createAndPublishBundle } from './proposer.js';
 import { bearerAuth } from './auth.js';
 dotenv.config();
+// Display banner first thing
+displayBanner();
 /** Express application instance for the Oya node server */
 const app = express();
 /** Port number for the server to listen on (defaults to 3000) */
 const port = process.env.PORT || 3000;
 app.use(json());
+/**
+ * Diagnostic logging middleware for all HTTP requests
+ */
+app.use((req, res, next) => {
+    const startTime = Date.now();
+    const requestId = Math.random().toString(36).substring(7);
+    diagnostic.trace('HTTP request received', {
+        requestId,
+        method: req.method,
+        path: req.path,
+        query: req.query,
+        headers: req.headers,
+        bodySize: req.body ? JSON.stringify(req.body).length : 0,
+    });
+    // Capture response on finish
+    res.on('finish', () => {
+        diagnostic.debug('HTTP response sent', {
+            requestId,
+            method: req.method,
+            path: req.path,
+            statusCode: res.statusCode,
+            responseTime: Date.now() - startTime,
+        });
+    });
+    next();
+});
 /**
  * Global middleware to protect all POST endpoints with Bearer token authorization.
  * Ensures that only authenticated requests can modify state.
@@ -52,11 +82,24 @@ export const pool = new Pool({
         rejectUnauthorized: false,
     },
 });
+// Test database connection on startup
+pool
+    .connect()
+    .then((client) => {
+    logger.info('Database pool initialized successfully');
+    client.release();
+})
+    .catch((err) => {
+    logger.error('Failed to initialize database pool:', err);
+    logger.warn('Server will continue but database operations may fail');
+});
 // Mount route handlers
+logger.debug('Mounting route handlers');
 app.use('/bundle', bundleRouter);
 app.use('/cid', cidRouter);
 app.use('/balance', balanceRouter);
 app.use('/nonce', vaultNonceRouter);
+logger.debug('All routes mounted successfully');
 /**
  * POST endpoint for receiving signed intentions.
  * Validates the intention, signature, and vault address before processing.
@@ -66,17 +109,40 @@ app.use('/nonce', vaultNonceRouter);
  * @returns Response indicating success or failure
  */
 app.post('/intention', bearerAuth, async (req, res) => {
+    const startTime = Date.now();
     try {
         const { intention, signature, from } = req.body;
         if (!intention || !signature || !from) {
+            diagnostic.debug('Missing intention fields', {
+                hasIntention: !!intention,
+                hasSignature: !!signature,
+                hasFrom: !!from,
+            });
             throw new Error('Missing required fields');
         }
-        console.log('Received signed intention:', intention, signature, from);
+        diagnostic.info('Intention endpoint called', {
+            from,
+            intentionType: intention.action_type || 'legacy',
+            signaturePreview: signature.slice(0, 10) + '...',
+        });
+        logger.info('Received signed intention', {
+            from,
+            signature: signature.slice(0, 10) + '...',
+        });
         const response = await handleIntention(intention, signature, from);
+        diagnostic.info('Intention processed', {
+            from,
+            processingTime: Date.now() - startTime,
+            success: true,
+        });
         res.status(200).json(response);
     }
     catch (error) {
-        console.error('Error handling intention:', error);
+        diagnostic.error('Intention processing failed', {
+            error: error instanceof Error ? error.message : String(error),
+            processingTime: Date.now() - startTime,
+        });
+        logger.error('Error handling intention', error);
         res
             .status(500)
             .json({ error: error instanceof Error ? error.message : 'Unknown error' });
@@ -91,13 +157,13 @@ setInterval(async () => {
         await createAndPublishBundle();
     }
     catch (error) {
-        console.error('Error creating and publishing bundle:', error);
+        logger.error('Error creating and publishing bundle', error);
     }
 }, 10 * 1000);
 /**
  * Start the Express server on the configured port
  */
 app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+    logger.info(`Server running on port ${port}`);
 });
 export { app };
