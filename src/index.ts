@@ -12,12 +12,14 @@
  */
 
 import { JSDOM } from 'jsdom'
+import { displayBanner } from './utils/banner.js'
+import { logger } from './utils/logger.js'
 
 // Polyfill for CustomEvent in Node.js environment (required by Helia)
 if (typeof globalThis.CustomEvent === 'undefined') {
 	const { window } = new JSDOM()
 	globalThis.CustomEvent = window.CustomEvent
-	console.log('CustomEvent polyfill via jsdom applied.')
+	logger.debug('CustomEvent polyfill via jsdom applied.')
 }
 
 import express from 'express'
@@ -87,11 +89,11 @@ app.post('/intention', bearerAuth, async (req, res) => {
 		if (!intention || !signature || !from) {
 			throw new Error('Missing required fields')
 		}
-		console.log('Received signed intention:', intention, signature, from)
+		logger.info('Received signed intention', { from, signature: signature.slice(0, 10) + '...' })
 		const response = await handleIntention(intention, signature, from)
 		res.status(200).json(response)
 	} catch (error) {
-		console.error('Error handling intention:', error)
+		logger.error('Error handling intention', error)
 		res
 			.status(500)
 			.json({ error: error instanceof Error ? error.message : 'Unknown error' })
@@ -106,7 +108,7 @@ setInterval(async () => {
 	try {
 		await createAndPublishBundle()
 	} catch (error) {
-		console.error('Error creating and publishing bundle:', error)
+		logger.error('Error creating and publishing bundle', error)
 	}
 }, 10 * 1000)
 
@@ -114,7 +116,8 @@ setInterval(async () => {
  * Start the Express server on the configured port
  */
 app.listen(port, () => {
-	console.log(`Server running on port ${port}`)
+	displayBanner()
+	logger.info(`Server running on port ${port}`)
 })
 
 export { app }
