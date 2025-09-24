@@ -69,28 +69,28 @@ export const logger = new Logger<ILogObj>({
  *
  * @internal
  */
-const debugEnabled = process.env.DEBUG_LOGGER === 'true'
+const diagnosticEnabled = process.env.DIAGNOSTIC_LOGGER === 'true'
 
 /**
- * Debug logger for diagnostic output
+ * Diagnostic logger for detailed output
  *
- * Outputs detailed JSON logs with source locations when DEBUG_LOGGER
+ * Outputs detailed JSON logs with source locations when DIAGNOSTIC_LOGGER
  * environment variable is set to 'true'. When disabled, all methods are no-ops
  * for zero performance overhead.
  *
  * @example
  * ```typescript
- * // Enable with: DEBUG_LOGGER=true
- * debug.trace('Entering processIntentions', { cache: intentionCache })
- * debug.debug('Signature verification', { address, signature })
+ * // Enable with: DIAGNOSTIC_LOGGER=true
+ * diagnostic.trace('Entering processIntentions', { cache: intentionCache })
+ * diagnostic.debug('Signature verification', { address, signature })
  * // Output (JSON): {"_meta": {"date": "...", "path": {...}}, "msg": "...", ...}
  * ```
  *
  * @public
  */
-export const debug = debugEnabled
+export const diagnostic = diagnosticEnabled
 	? new Logger<ILogObj>({
-			name: 'DEBUG',
+			name: 'DIAGNOSTIC',
 			type: 'json',
 			minLevel: 0, // Show all levels
 			hideLogPositionForProduction: false, // Always show source locations

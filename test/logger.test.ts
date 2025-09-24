@@ -1,4 +1,4 @@
-import { logger, debug, createLogger, LogLevel } from '../src/utils/logger.js'
+import { logger, diagnostic, createLogger, LogLevel } from '../src/utils/logger.js'
 
 describe('Logger Tests', () => {
 	it('should log at different levels', () => {
@@ -44,13 +44,13 @@ describe('Logger Tests', () => {
 		logger.info('Processing block', complexData)
 	})
 
-	it('should test debug logger', () => {
-		console.log('\n=== Testing Debug Logger ===\n')
-		console.log('Debug mode enabled:', process.env.DEBUG_LOGGER === 'true')
+	it('should test diagnostic logger', () => {
+		console.log('\n=== Testing Diagnostic Logger ===\n')
+		console.log('Diagnostic mode enabled:', process.env.DIAGNOSTIC_LOGGER === 'true')
 
-		debug.trace('Trace level debug', { step: 1 })
-		debug.debug('Debug level', { cache: ['item1', 'item2'] })
-		debug.info('Info level debug', { performance: { cpu: 0.8, memory: 0.6 } })
+		diagnostic.trace('Trace level diagnostic', { step: 1 })
+		diagnostic.debug('Debug level', { cache: ['item1', 'item2'] })
+		diagnostic.info('Info level diagnostic', { performance: { cpu: 0.8, memory: 0.6 } })
 	})
 
 	it('should demonstrate log levels', () => {
