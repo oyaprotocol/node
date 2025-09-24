@@ -1,47 +1,71 @@
-// Polyfill for CustomEvent in Node.js
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
+ * ║                            Main Entry Point                               ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Main entry point for the Oya Natural Language Protocol Node.
+ * Sets up Express server with routes for handling signed intentions, creating bundles,
+ * and managing blockchain interactions.
+ *
+ * @packageDocumentation
+ */
+import { JSDOM } from 'jsdom';
+// Polyfill for CustomEvent in Node.js environment (required by Helia)
 if (typeof globalThis.CustomEvent === 'undefined') {
-    class CustomEvent {
-      type: string;
-      detail: any;
-      bubbles: boolean;
-      cancelable: boolean;
-      constructor(type: string, eventInitDict: { detail?: any; bubbles?: boolean; cancelable?: boolean } = {}) {
-        this.type = type;
-        this.detail = eventInitDict.detail || null;
-        this.bubbles = eventInitDict.bubbles || false;
-        this.cancelable = eventInitDict.cancelable || false;
-      }
-    }
-    globalThis.CustomEvent = CustomEvent;
-    console.log("CustomEvent polyfill applied at entry point.");
-  }
-
+    const { window } = new JSDOM();
+    globalThis.CustomEvent = window.CustomEvent;
+    console.log('CustomEvent polyfill via jsdom applied.');
+}
 import express from 'express';
 import bppkg from 'body-parser';
 const { json } = bppkg;
 import dotenv from 'dotenv';
 import pgpkg from 'pg';
 const { Pool } = pgpkg;
-import { bundleRouter, cidRouter, balanceRouter, vaultNonceRouter } from './routes.js';
+import { bundleRouter, cidRouter, balanceRouter, vaultNonceRouter, } from './routes.js';
 import { handleIntention, createAndPublishBundle } from './proposer.js';
+import { bearerAuth } from './auth.js';
 dotenv.config();
+/** Express application instance for the Oya node server */
 const app = express();
+/** Port number for the server to listen on (defaults to 3000) */
 const port = process.env.PORT || 3000;
 app.use(json());
-// Database connection
+/**
+ * Global middleware to protect all POST endpoints with Bearer token authorization.
+ * Ensures that only authenticated requests can modify state.
+ */
+app.use((req, res, next) => {
+    if (req.method === 'POST') {
+        return bearerAuth(req, res, next);
+    }
+    next();
+});
+/**
+ * PostgreSQL connection pool for database operations.
+ * Configured with SSL for secure connections.
+ */
 export const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
-        rejectUnauthorized: false
-    }
+        rejectUnauthorized: false,
+    },
 });
-// Routes
+// Mount route handlers
 app.use('/bundle', bundleRouter);
 app.use('/cid', cidRouter);
 app.use('/balance', balanceRouter);
 app.use('/nonce', vaultNonceRouter);
-// This endpoint receives an intention (with signature and from) and passes it to the bundle proposer logic.
-app.post('/intention', async (req, res) => {
+/**
+ * POST endpoint for receiving signed intentions.
+ * Validates the intention, signature, and vault address before processing.
+ *
+ * @param req - Express request object with body containing intention, signature, and from
+ * @param res - Express response object
+ * @returns Response indicating success or failure
+ */
+app.post('/intention', bearerAuth, async (req, res) => {
     try {
         const { intention, signature, from } = req.body;
         if (!intention || !signature || !from) {
@@ -53,10 +77,15 @@ app.post('/intention', async (req, res) => {
     }
     catch (error) {
         console.error('Error handling intention:', error);
-        res.status(500).json({ error: error.message });
+        res
+            .status(500)
+            .json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
 });
-// Every 10 seconds, try to publish a new bundle if there are cached intentions.
+/**
+ * Interval timer that creates and publishes bundles every 10 seconds.
+ * Bundles cached intentions, uploads to IPFS, and submits CIDs to blockchain.
+ */
 setInterval(async () => {
     try {
         await createAndPublishBundle();
@@ -65,6 +94,9 @@ setInterval(async () => {
         console.error('Error creating and publishing bundle:', error);
     }
 }, 10 * 1000);
+/**
+ * Start the Express server on the configured port
+ */
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });

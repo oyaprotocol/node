@@ -1,3 +1,22 @@
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
+ * ║                           Bundle Proposer                                 ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Handles the bundle proposer logic for the Oya Protocol.
+ * Manages intention verification, bundle creation, IPFS uploads, and blockchain interactions.
+ *
+ * Key responsibilities:
+ * - Verify intention signatures using ethers.js
+ * - Cache intentions until bundle creation
+ * - Compress and upload bundles to IPFS via Helia
+ * - Submit bundle CIDs to the BundleTracker smart contract
+ * - Update database with bundles, balances, and nonces
+ *
+ * @packageDocumentation
+ */
+
 import { ethers, parseUnits, verifyMessage } from 'ethers'
 import { Alchemy, Wallet, Network } from 'alchemy-sdk'
 import { createHelia } from 'helia'
@@ -18,11 +37,18 @@ const __dirname = path.dirname(__filename)
 
 dotenv.config()
 
+/**
+ * Safely converts a string to BigInt, handling decimal values.
+ * Truncates to integer part to avoid BigInt decimal errors.
+ */
 function safeBigInt(value: string): bigint {
 	const integerPart = value.split('.')[0]
 	return BigInt(integerPart)
 }
 
+/**
+ * Contract interface for the BundleTracker on Sepolia.
+ */
 export interface BundleTrackerContract extends ethers.BaseContract {
 	proposeBundle(
 		_bundleData: string,
@@ -51,6 +77,10 @@ initializeWalletAndContract()
 		console.error('Initialization failed:', error)
 	})
 
+/**
+ * Initializes the BundleTracker contract with ABI and provider.
+ * Connects the wallet for transaction signing.
+ */
 async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
 	const abiPath = path.join(__dirname, 'abi', 'BundleTracker.json')
 	const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'))
@@ -66,6 +96,10 @@ async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
 	) as BundleTrackerContract
 }
 
+/**
+ * Sets up Alchemy SDK instances for mainnet and Sepolia.
+ * Initializes wallet with private key for blockchain transactions.
+ */
 async function buildAlchemyInstances() {
 	const mainnet = new Alchemy({
 		apiKey: process.env.ALCHEMY_API_KEY as string,
@@ -89,6 +123,10 @@ async function buildAlchemyInstances() {
 	}
 }
 
+/**
+ * Retrieves the latest bundle nonce from the database.
+ * Returns 0 if no bundles exist yet.
+ */
 async function getLatestNonce(): Promise<number> {
 	const result = await pool.query(
 		'SELECT nonce FROM bundles ORDER BY timestamp DESC LIMIT 1'
@@ -97,6 +135,10 @@ async function getLatestNonce(): Promise<number> {
 	return result.rows[0].nonce + 1
 }
 
+/**
+ * Fetches token decimals from mainnet for proper amount calculations.
+ * Returns 18 for ETH (zero address).
+ */
 async function getTokenDecimals(tokenAddress: string): Promise<bigint> {
 	try {
 		if (tokenAddress === '0x0000000000000000000000000000000000000000') {
@@ -121,6 +163,10 @@ async function getTokenDecimals(tokenAddress: string): Promise<bigint> {
 	}
 }
 
+/**
+ * Gets the current balance for a vault/token pair from the database.
+ * Returns 0n if no balance exists.
+ */
 async function getBalance(vault: string, token: string): Promise<bigint> {
 	const result = await pool.query(
 		'SELECT balance FROM balances WHERE LOWER(vault) = LOWER($1) AND LOWER(token) = LOWER($2) ORDER BY timestamp DESC LIMIT 1',
@@ -130,6 +176,10 @@ async function getBalance(vault: string, token: string): Promise<bigint> {
 	return safeBigInt(result.rows[0].balance.toString())
 }
 
+/**
+ * Updates or inserts a balance record for a vault/token pair.
+ * Handles case-insensitive vault and token addresses.
+ */
 async function updateBalance(
 	vault: string,
 	token: string,
@@ -152,6 +202,9 @@ async function updateBalance(
 	}
 }
 
+/**
+ * Checks if a vault has any balance records in the database.
+ */
 async function vaultExists(vault: string): Promise<boolean> {
 	const result = await pool.query(
 		'SELECT 1 FROM balances WHERE LOWER(vault)=LOWER($1) LIMIT 1',
@@ -160,12 +213,19 @@ async function vaultExists(vault: string): Promise<boolean> {
 	return result.rows.length > 0
 }
 
+/**
+ * Initializes a new vault with default token balances if it doesn't exist.
+ */
 async function initializeVault(vault: string) {
 	if (!(await vaultExists(vault))) {
 		await initializeBalancesForVault(vault)
 	}
 }
 
+/**
+ * Sets up initial test token balances for a new vault.
+ * Includes ETH, USDC, and OYA tokens with different decimal places.
+ */
 async function initializeBalancesForVault(vault: string) {
 	const initialBalance18 = parseUnits('10000', 18)
 	const initialBalance6 = parseUnits('1000000', 6)
@@ -201,6 +261,10 @@ async function initializeBalancesForVault(vault: string) {
 	console.log(`Vault ${vault} initialized with test tokens`)
 }
 
+/**
+ * Records proposer activity in the database.
+ * Updates last_seen timestamp for monitoring.
+ */
 async function saveProposerData(proposer: string): Promise<void> {
 	await pool.query(
 		`INSERT INTO proposers (proposer, last_seen)
@@ -212,6 +276,10 @@ async function saveProposerData(proposer: string): Promise<void> {
 	console.log(`Proposer data saved/updated for ${proposer}`)
 }
 
+/**
+ * Persists bundle data, CID, and vault nonces to the database.
+ * Handles bundle storage as BYTEA and CID tracking.
+ */
 async function saveBundleData(
 	bundleData: BundleData,
 	cidToString: string,
@@ -254,6 +322,10 @@ async function saveBundleData(
 	}
 }
 
+/**
+ * Publishes a bundle to IPFS and submits the CID to the blockchain.
+ * Compresses data with gzip before IPFS upload.
+ */
 async function publishBundle(data: string, signature: string, from: string) {
 	await ensureHeliaSetup()
 
@@ -339,17 +411,27 @@ async function publishBundle(data: string, signature: string, from: string) {
 	return cid
 }
 
+/**
+ * Ensures Helia IPFS node is initialized before use.
+ */
 async function ensureHeliaSetup() {
 	if (!s) {
 		await setupHelia()
 	}
 }
 
+/**
+ * Creates and configures the Helia IPFS node with string codec.
+ */
 async function setupHelia() {
 	const heliaNode = await createHelia()
 	s = strings(heliaNode)
 }
 
+/**
+ * Processes balance changes from an intention proof.
+ * Handles transfers between vaults with balance validation.
+ */
 async function updateBalances(
 	from: string,
 	to: string,
@@ -384,6 +466,10 @@ async function updateBalances(
 	)
 }
 
+/**
+ * Verifies and processes an incoming intention.
+ * Validates signature, checks balances, and caches for bundling.
+ */
 async function handleIntention(
 	intention: Intention,
 	signature: string,
@@ -511,6 +597,10 @@ async function handleIntention(
 	return executionObject
 }
 
+/**
+ * Creates a bundle from cached intentions and publishes to IPFS/blockchain.
+ * Runs every 10 seconds via interval timer.
+ */
 async function createAndPublishBundle() {
 	if (cachedIntentions.length === 0) {
 		console.log('No intentions to propose.')
@@ -549,6 +639,9 @@ async function createAndPublishBundle() {
 	cachedIntentions = []
 }
 
+/**
+ * Initializes Alchemy instances, wallet, and smart contract on startup.
+ */
 async function initializeWalletAndContract() {
 	const {
 		mainnetAlchemy: mainAlchemy,
@@ -561,7 +654,16 @@ async function initializeWalletAndContract() {
 	bundleTrackerContract = await buildBundleTrackerContract()
 }
 
+/**
+ * Testing utility to inspect cached intentions.
+ * @internal
+ */
 const _getCachedIntentions = () => cachedIntentions
+
+/**
+ * Testing utility to clear cached intentions.
+ * @internal
+ */
 const _clearCachedIntentions = () => {
 	cachedIntentions = []
 }

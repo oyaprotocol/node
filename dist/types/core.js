@@ -1,21 +1,12 @@
 /**
  * ╔═══════════════════════════════════════════════════════════════════════════╗
  * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
- * ║                       TypeScript Declarations                             ║
+ * ║                          Core Type Definitions                            ║
  * ╚═══════════════════════════════════════════════════════════════════════════╝
  *
- * Module declarations for packages without TypeScript definitions.
- * Enables TypeScript compilation for JavaScript-only dependencies.
- *
- * Declared modules:
- * - helia - IPFS implementation in JavaScript
- * - \@helia/strings - String handling for Helia IPFS
- * - dotenv - Environment variable management
+ * TypeScript type definitions for the Oya Protocol.
+ * Defines the structure of intentions, bundles, and related data types.
  *
  * @packageDocumentation
  */
-
-declare module 'helia'
-declare module 'helia/dist/index.min.js'
-declare module '@helia/strings'
-declare module 'dotenv'
+export {};

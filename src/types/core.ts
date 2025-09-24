@@ -1,5 +1,19 @@
-// Core types for the Oya Natural Language Protocol Node
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
+ * ║                          Core Type Definitions                            ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * TypeScript type definitions for the Oya Protocol.
+ * Defines the structure of intentions, bundles, and related data types.
+ *
+ * @packageDocumentation
+ */
 
+/**
+ * Represents a user's intention in the Oya Protocol.
+ * Supports both legacy format and new inputs/outputs format.
+ */
 export interface Intention {
 	action_type?: string
 	from_token_address?: string
@@ -17,11 +31,17 @@ export interface Intention {
 	[key: string]: unknown
 }
 
+/**
+ * Represents a token amount with its contract address.
+ */
 export interface TokenAmount {
 	token: string
 	amount: string
 }
 
+/**
+ * Defines output specifications for an intention.
+ */
 export interface IntentionOutput {
 	asset?: string
 	amount?: number | string
@@ -30,17 +50,26 @@ export interface IntentionOutput {
 	digits?: number
 }
 
+/**
+ * Represents a bundle of intentions with a unique nonce.
+ */
 export interface BundleData {
 	bundle: unknown
 	nonce: number
 }
 
+/**
+ * Represents an executed intention with its proof.
+ */
 export interface Execution {
 	intention: Intention
 	signature?: string
 	proof?: unknown[]
 }
 
+/**
+ * Request body structure for bundle submissions.
+ */
 export interface RequestBody {
 	bundle?: unknown
 	nonce?: unknown

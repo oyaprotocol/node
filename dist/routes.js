@@ -1,6 +1,24 @@
-// Need to add authorization to routes, so that only the bundle proposer can call POST routes.
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
+ * ║                            Route Handlers                                 ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Express route handlers for all API endpoints.
+ * Defines RESTful routes for bundles, CIDs, balances, and vault nonces.
+ *
+ * Route groups:
+ * - /bundle - Bundle management endpoints
+ * - /cid - IPFS CID tracking endpoints
+ * - /balance - Vault balance endpoints
+ * - /nonce - Vault nonce management endpoints
+ *
+ * Note: POST routes are protected by bearer auth middleware applied globally.
+ *
+ * @packageDocumentation
+ */
 import { Router } from 'express';
-import { saveBundle, getBundle, getAllBundles, saveCID, getCIDsByNonce, updateBalanceForOneToken, getBalanceForOneToken, getBalanceForAllTokens, getVaultNonce, setVaultNonce } from './controllers.js';
+import { saveBundle, getBundle, getAllBundles, saveCID, getCIDsByNonce, updateBalanceForOneToken, getBalanceForOneToken, getBalanceForAllTokens, getVaultNonce, setVaultNonce, } from './controllers.js';
 const bundleRouter = Router();
 const cidRouter = Router();
 const balanceRouter = Router();
