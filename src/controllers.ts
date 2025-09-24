@@ -19,6 +19,10 @@
 import { Request, Response } from 'express'
 import { pool } from './index.js'
 import { RequestBody } from './types/core.js'
+import { createLogger } from './utils/logger.js'
+
+/** Logger instance for controllers module */
+const logger = createLogger('Controller')
 
 /**
  * POST /bundle
@@ -28,8 +32,8 @@ import { RequestBody } from './types/core.js'
 export const saveBundle = async (req: Request, res: Response) => {
 	const { bundle, nonce } = req.body as RequestBody
 
-	console.log('Received bundle:', JSON.stringify(bundle, null, 2))
-	console.log('Received nonce:', nonce)
+	logger.info('Received bundle:', JSON.stringify(bundle, null, 2))
+	logger.info('Received nonce:', nonce)
 
 	if (!bundle || typeof nonce !== 'number') {
 		return res.status(400).json({ error: 'Invalid bundle data' })
@@ -38,7 +42,7 @@ export const saveBundle = async (req: Request, res: Response) => {
 	try {
 		const bundleString = JSON.stringify(bundle)
 
-		console.log('Stringified bundle for DB:', bundleString)
+		logger.info('Stringified bundle for DB:', bundleString)
 
 		const result = await pool.query(
 			'INSERT INTO bundles (bundle, nonce) VALUES ($1::jsonb, $2) RETURNING *',
@@ -47,7 +51,7 @@ export const saveBundle = async (req: Request, res: Response) => {
 
 		res.status(201).json(result.rows[0])
 	} catch (err) {
-		console.error('Database insertion error (bundle):', err)
+		logger.error('Database insertion error (bundle):', err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
 }
@@ -72,7 +76,7 @@ export const getBundle = async (req: Request, res: Response) => {
 
 		res.status(200).json(result.rows)
 	} catch (err) {
-		console.error(err)
+		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
 }
@@ -88,7 +92,7 @@ export const getAllBundles = async (req: Request, res: Response) => {
 		)
 		res.status(200).json(result.rows)
 	} catch (err) {
-		console.error(err)
+		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
 }
@@ -105,10 +109,10 @@ export const getBalanceForAllTokens = async (req: Request, res: Response) => {
 			'SELECT * FROM balances WHERE LOWER(vault) = LOWER($1) ORDER BY timestamp DESC',
 			[vault]
 		)
-		console.log('Getting all token balances:', result.rows)
+		logger.info('Getting all token balances:', result.rows)
 		res.status(200).json(result.rows)
 	} catch (err) {
-		console.error(err)
+		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
 }
@@ -126,7 +130,7 @@ export const getBalanceForOneToken = async (req: Request, res: Response) => {
 			'SELECT * FROM balances WHERE LOWER(vault) = LOWER($1) AND LOWER(token) = LOWER($2) ORDER BY timestamp DESC',
 			[vault, token]
 		)
-		console.log('Getting balance for one token:', result.rows)
+		logger.info('Getting balance for one token:', result.rows)
 
 		if (result.rows.length === 0) {
 			return res.status(404).json({ error: 'Balance not found' })
@@ -134,7 +138,7 @@ export const getBalanceForOneToken = async (req: Request, res: Response) => {
 
 		res.status(200).json(result.rows)
 	} catch (err) {
-		console.error(err)
+		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
 }
@@ -158,7 +162,7 @@ export const updateBalanceForOneToken = async (req: Request, res: Response) => {
 				'INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3) RETURNING *',
 				[vault, token, balance]
 			)
-			console.log(
+			logger.info(
 				`Inserted new balance: ${JSON.stringify(insertResult.rows[0])}`
 			)
 			return res.status(201).json(insertResult.rows[0])
@@ -167,13 +171,13 @@ export const updateBalanceForOneToken = async (req: Request, res: Response) => {
 				'UPDATE balances SET balance = $1, timestamp = CURRENT_TIMESTAMP WHERE LOWER(vault) = LOWER($2) AND LOWER(token) = LOWER($3) RETURNING *',
 				[balance, vault, token]
 			)
-			console.log(
+			logger.info(
 				`Updated existing balance: ${JSON.stringify(updateResult.rows[0])}`
 			)
 			return res.status(200).json(updateResult.rows[0])
 		}
 	} catch (err) {
-		console.error('Error updating balance:', err)
+		logger.error('Error updating balance:', err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
 }
@@ -193,7 +197,7 @@ export const saveCID = async (req: Request, res: Response) => {
 		)
 		res.status(201).json(result.rows[0])
 	} catch (err) {
-		console.error(err)
+		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
 }
@@ -220,7 +224,7 @@ export const getCIDsByNonce = async (req: Request, res: Response) => {
 
 		res.status(200).json(result.rows)
 	} catch (err) {
-		console.error(err)
+		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
 }
@@ -237,13 +241,13 @@ export const getVaultNonce = async (req: Request, res: Response) => {
 			'SELECT nonce FROM nonces WHERE LOWER(vault) = LOWER($1)',
 			[vault]
 		)
-		console.log('Getting vault nonce:', result.rows)
+		logger.info('Getting vault nonce:', result.rows)
 		if (result.rows.length === 0) {
 			return res.status(404).json({ error: 'Nonce not found' })
 		}
 		res.status(200).json(result.rows[0])
 	} catch (err) {
-		console.error(err)
+		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
 }
@@ -268,7 +272,7 @@ export const setVaultNonce = async (req: Request, res: Response) => {
 		)
 		res.status(201).json(result.rows[0])
 	} catch (err) {
-		console.error(err)
+		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
 }
