@@ -19,7 +19,7 @@
 import { Request, Response } from 'express'
 import { pool } from './index.js'
 import { RequestBody } from './types/core.js'
-import { createLogger } from './utils/logger.js'
+import { createLogger, diagnostic } from './utils/logger.js'
 
 /** Logger instance for controllers module */
 const logger = createLogger('Controller')
@@ -30,12 +30,17 @@ const logger = createLogger('Controller')
  * Returns the created bundle or 400/500 on error.
  */
 export const saveBundle = async (req: Request, res: Response) => {
+	const startTime = Date.now()
 	const { bundle, nonce } = req.body as RequestBody
 
 	logger.info('Received bundle:', JSON.stringify(bundle, null, 2))
 	logger.info('Received nonce:', nonce)
 
 	if (!bundle || typeof nonce !== 'number') {
+		diagnostic.debug('Invalid bundle data', {
+			hasBundle: !!bundle,
+			nonceType: typeof nonce
+		})
 		return res.status(400).json({ error: 'Invalid bundle data' })
 	}
 
@@ -44,13 +49,28 @@ export const saveBundle = async (req: Request, res: Response) => {
 
 		logger.info('Stringified bundle for DB:', bundleString)
 
+		const queryStart = Date.now()
 		const result = await pool.query(
 			'INSERT INTO bundles (bundle, nonce) VALUES ($1::jsonb, $2) RETURNING *',
 			[bundleString, nonce]
 		)
 
+		diagnostic.info('Database operation', {
+			operation: 'INSERT',
+			table: 'bundles',
+			queryTime: Date.now() - queryStart,
+			totalTime: Date.now() - startTime,
+			nonce,
+			bundleSize: bundleString.length
+		})
+
 		res.status(201).json(result.rows[0])
 	} catch (err) {
+		diagnostic.error('Database error', {
+			operation: 'saveBundle',
+			error: err.message,
+			nonce
+		})
 		logger.error('Database insertion error (bundle):', err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
@@ -123,13 +143,26 @@ export const getBalanceForAllTokens = async (req: Request, res: Response) => {
  * Returns 404 if balance not found.
  */
 export const getBalanceForOneToken = async (req: Request, res: Response) => {
+	const startTime = Date.now()
 	const { vault, token } = req.params
 
 	try {
+		const queryStart = Date.now()
 		const result = await pool.query(
 			'SELECT * FROM balances WHERE LOWER(vault) = LOWER($1) AND LOWER(token) = LOWER($2) ORDER BY timestamp DESC',
 			[vault, token]
 		)
+
+		diagnostic.debug('Balance query', {
+			operation: 'SELECT',
+			table: 'balances',
+			vault: vault.toLowerCase(),
+			token: token.toLowerCase(),
+			queryTime: Date.now() - queryStart,
+			rowCount: result.rows.length,
+			found: result.rows.length > 0
+		})
+
 		logger.info('Getting balance for one token:', result.rows)
 
 		if (result.rows.length === 0) {
@@ -138,6 +171,12 @@ export const getBalanceForOneToken = async (req: Request, res: Response) => {
 
 		res.status(200).json(result.rows)
 	} catch (err) {
+		diagnostic.error('Database error', {
+			operation: 'getBalanceForOneToken',
+			error: err.message,
+			vault,
+			token
+		})
 		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
