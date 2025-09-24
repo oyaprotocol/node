@@ -16,26 +16,48 @@
  * @packageDocumentation
  */
 import { pool } from './index.js';
+import { createLogger, diagnostic } from './utils/logger.js';
+/** Logger instance for controllers module */
+const logger = createLogger('Controller');
 /**
  * POST /bundle
  * Saves a new bundle with its nonce to the database.
  * Returns the created bundle or 400/500 on error.
  */
 export const saveBundle = async (req, res) => {
+    const startTime = Date.now();
     const { bundle, nonce } = req.body;
-    console.log('Received bundle:', JSON.stringify(bundle, null, 2));
-    console.log('Received nonce:', nonce);
+    logger.info('Received bundle:', JSON.stringify(bundle, null, 2));
+    logger.info('Received nonce:', nonce);
     if (!bundle || typeof nonce !== 'number') {
+        diagnostic.debug('Invalid bundle data', {
+            hasBundle: !!bundle,
+            nonceType: typeof nonce,
+        });
         return res.status(400).json({ error: 'Invalid bundle data' });
     }
     try {
         const bundleString = JSON.stringify(bundle);
-        console.log('Stringified bundle for DB:', bundleString);
+        logger.info('Stringified bundle for DB:', bundleString);
+        const queryStart = Date.now();
         const result = await pool.query('INSERT INTO bundles (bundle, nonce) VALUES ($1::jsonb, $2) RETURNING *', [bundleString, nonce]);
+        diagnostic.info('Database operation', {
+            operation: 'INSERT',
+            table: 'bundles',
+            queryTime: Date.now() - queryStart,
+            totalTime: Date.now() - startTime,
+            nonce,
+            bundleSize: bundleString.length,
+        });
         res.status(201).json(result.rows[0]);
     }
     catch (err) {
-        console.error('Database insertion error (bundle):', err);
+        diagnostic.error('Database error', {
+            operation: 'saveBundle',
+            error: err instanceof Error ? err.message : String(err),
+            nonce,
+        });
+        logger.error('Database insertion error (bundle):', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -54,7 +76,7 @@ export const getBundle = async (req, res) => {
         res.status(200).json(result.rows);
     }
     catch (err) {
-        console.error(err);
+        logger.error(err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -68,7 +90,7 @@ export const getAllBundles = async (req, res) => {
         res.status(200).json(result.rows);
     }
     catch (err) {
-        console.error(err);
+        logger.error(err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -80,11 +102,11 @@ export const getBalanceForAllTokens = async (req, res) => {
     const { vault } = req.params;
     try {
         const result = await pool.query('SELECT * FROM balances WHERE LOWER(vault) = LOWER($1) ORDER BY timestamp DESC', [vault]);
-        console.log('Getting all token balances:', result.rows);
+        logger.info('Getting all token balances:', result.rows);
         res.status(200).json(result.rows);
     }
     catch (err) {
-        console.error(err);
+        logger.error(err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -96,15 +118,31 @@ export const getBalanceForAllTokens = async (req, res) => {
 export const getBalanceForOneToken = async (req, res) => {
     const { vault, token } = req.params;
     try {
+        const queryStart = Date.now();
         const result = await pool.query('SELECT * FROM balances WHERE LOWER(vault) = LOWER($1) AND LOWER(token) = LOWER($2) ORDER BY timestamp DESC', [vault, token]);
-        console.log('Getting balance for one token:', result.rows);
+        diagnostic.debug('Balance query', {
+            operation: 'SELECT',
+            table: 'balances',
+            vault: vault.toLowerCase(),
+            token: token.toLowerCase(),
+            queryTime: Date.now() - queryStart,
+            rowCount: result.rows.length,
+            found: result.rows.length > 0,
+        });
+        logger.info('Getting balance for one token:', result.rows);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Balance not found' });
         }
         res.status(200).json(result.rows);
     }
     catch (err) {
-        console.error(err);
+        diagnostic.error('Database error', {
+            operation: 'getBalanceForOneToken',
+            error: err instanceof Error ? err.message : String(err),
+            vault,
+            token,
+        });
+        logger.error(err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -119,17 +157,17 @@ export const updateBalanceForOneToken = async (req, res) => {
         const checkResult = await pool.query('SELECT * FROM balances WHERE LOWER(vault) = LOWER($1) AND LOWER(token) = LOWER($2)', [vault, token]);
         if (checkResult.rows.length === 0) {
             const insertResult = await pool.query('INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3) RETURNING *', [vault, token, balance]);
-            console.log(`Inserted new balance: ${JSON.stringify(insertResult.rows[0])}`);
+            logger.info(`Inserted new balance: ${JSON.stringify(insertResult.rows[0])}`);
             return res.status(201).json(insertResult.rows[0]);
         }
         else {
             const updateResult = await pool.query('UPDATE balances SET balance = $1, timestamp = CURRENT_TIMESTAMP WHERE LOWER(vault) = LOWER($2) AND LOWER(token) = LOWER($3) RETURNING *', [balance, vault, token]);
-            console.log(`Updated existing balance: ${JSON.stringify(updateResult.rows[0])}`);
+            logger.info(`Updated existing balance: ${JSON.stringify(updateResult.rows[0])}`);
             return res.status(200).json(updateResult.rows[0]);
         }
     }
     catch (err) {
-        console.error('Error updating balance:', err);
+        logger.error('Error updating balance:', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -145,7 +183,7 @@ export const saveCID = async (req, res) => {
         res.status(201).json(result.rows[0]);
     }
     catch (err) {
-        console.error(err);
+        logger.error(err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -166,7 +204,7 @@ export const getCIDsByNonce = async (req, res) => {
         res.status(200).json(result.rows);
     }
     catch (err) {
-        console.error(err);
+        logger.error(err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -179,14 +217,14 @@ export const getVaultNonce = async (req, res) => {
     const { vault } = req.params;
     try {
         const result = await pool.query('SELECT nonce FROM nonces WHERE LOWER(vault) = LOWER($1)', [vault]);
-        console.log('Getting vault nonce:', result.rows);
+        logger.info('Getting vault nonce:', result.rows);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Nonce not found' });
         }
         res.status(200).json(result.rows[0]);
     }
     catch (err) {
-        console.error(err);
+        logger.error(err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -207,7 +245,7 @@ export const setVaultNonce = async (req, res) => {
         res.status(201).json(result.rows[0]);
     }
     catch (err) {
-        console.error(err);
+        logger.error(err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };

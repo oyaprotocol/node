@@ -27,10 +27,16 @@ import { pool } from './index.js';
 import { fileURLToPath } from 'url';
 import zlib from 'zlib';
 import { promisify } from 'util';
+import { createLogger, diagnostic } from './utils/logger.js';
 const gzip = promisify(zlib.gzip);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config();
+/** Logger instance for proposer module */
+const logger = createLogger('Proposer');
+/** Bundle cycle counter for diagnostics */
+let bundleCycleCount = 0;
+let lastSuccessfulBundleTime = 0;
 /**
  * Safely converts a string to BigInt, handling decimal values.
  * Truncates to integer part to avoid BigInt decimal errors.
@@ -48,10 +54,10 @@ let bundleTrackerContract;
 let s;
 initializeWalletAndContract()
     .then(() => {
-    console.log('Bundle proposer initialization complete. Ready to handle proposals.');
+    logger.info('Bundle proposer initialization complete. Ready to handle proposals.');
 })
     .catch((error) => {
-    console.error('Initialization failed:', error);
+    logger.error('Initialization failed:', error);
 });
 /**
  * Initializes the BundleTracker contract with ABI and provider.
@@ -107,13 +113,13 @@ async function getTokenDecimals(tokenAddress) {
         const tokenMetadata = await mainnetAlchemy.core.getTokenMetadata(tokenAddress);
         if (tokenMetadata.decimals === null ||
             tokenMetadata.decimals === undefined) {
-            console.error('Token metadata decimals is missing for token:', tokenAddress);
+            logger.error('Token metadata decimals is missing for token:', tokenAddress);
             throw new Error('Token decimals missing');
         }
         return BigInt(tokenMetadata.decimals);
     }
     catch (error) {
-        console.error(`Failed to get token metadata for ${tokenAddress}:`, error);
+        logger.error(`Failed to get token metadata for ${tokenAddress}:`, error);
         throw new Error('Failed to retrieve token decimals');
     }
 }
@@ -182,7 +188,7 @@ async function initializeBalancesForVault(vault) {
             /* Note: Removed initialOyaBalance since rewards are not minted */ '0',
         ]);
     }
-    console.log(`Vault ${vault} initialized with test tokens`);
+    logger.info(`Vault ${vault} initialized with test tokens`);
 }
 /**
  * Records proposer activity in the database.
@@ -193,7 +199,7 @@ async function saveProposerData(proposer) {
      VALUES (LOWER($1), CURRENT_TIMESTAMP)
      ON CONFLICT (proposer)
      DO UPDATE SET last_seen = EXCLUDED.last_seen`, [proposer]);
-    console.log(`Proposer data saved/updated for ${proposer}`);
+    logger.info(`Proposer data saved/updated for ${proposer}`);
 }
 /**
  * Persists bundle data, CID, and vault nonces to the database.
@@ -210,10 +216,10 @@ async function saveBundleData(bundleData, cidToString, proposerSignature) {
         proposerSignature,
         cidToString,
     ]);
-    console.log('Bundle data saved to DB');
+    logger.info('Bundle data saved to DB');
     // Also insert into the cids table, now including the proposer
     await pool.query('INSERT INTO cids (cid, nonce, proposer) VALUES ($1, $2, $3)', [cidToString, bundleData.nonce, PROPOSER_ADDRESS]);
-    console.log('CID saved to DB');
+    logger.info('CID saved to DB');
     if (Array.isArray(bundleData.bundle)) {
         for (const execution of bundleData.bundle) {
             const vaultNonce = execution.intention.nonce;
@@ -230,75 +236,98 @@ async function saveBundleData(bundleData, cidToString, proposerSignature) {
  * Compresses data with gzip before IPFS upload.
  */
 async function publishBundle(data, signature, from) {
+    const startTime = Date.now();
     await ensureHeliaSetup();
-    console.log('Publishing bundle. Data length (before compression):', data.length);
+    const originalSize = data.length;
+    logger.info('Publishing bundle. Data length (before compression):', originalSize);
+    diagnostic.info('Bundle publish started', {
+        dataSize: originalSize,
+        from,
+        timestamp: startTime,
+    });
     if (from !== PROPOSER_ADDRESS) {
         throw new Error('Unauthorized: Only the proposer can publish new bundles.');
     }
     const signerAddress = verifyMessage(data, signature);
-    console.log('Recovered signer address:', signerAddress);
+    logger.info('Recovered signer address:', signerAddress);
     if (signerAddress !== from) {
-        console.error('Expected signer:', from, 'but got:', signerAddress);
+        logger.error('Expected signer:', from, 'but got:', signerAddress);
         throw new Error('Signature verification failed');
     }
     let compressedData;
     try {
-        console.log('Starting compression of bundle data...');
+        const compressionStart = Date.now();
+        logger.info('Starting compression of bundle data...');
         compressedData = await gzip(data);
-        console.log('Compression successful. Compressed data length:', compressedData.length);
+        diagnostic.debug('Compression metrics', {
+            originalSize,
+            compressedSize: compressedData.length,
+            compressionRatio: (compressedData.length / originalSize).toFixed(3),
+            compressionTime: Date.now() - compressionStart,
+        });
+        logger.info('Compression successful. Compressed data length:', compressedData.length);
     }
     catch (error) {
-        console.error('Compression failed:', error);
+        diagnostic.error('Compression failed', {
+            error: error instanceof Error ? error.message : String(error),
+        });
+        logger.error('Compression failed:', error);
         throw new Error('Bundle data compression failed');
     }
+    const ipfsUploadStart = Date.now();
     const cid = await s.add(compressedData.toString('base64'));
     const cidToString = cid.toString();
-    console.log('Bundle published to IPFS, CID:', cidToString);
+    diagnostic.info('IPFS upload completed', {
+        cid: cidToString,
+        uploadTime: Date.now() - ipfsUploadStart,
+        compressedSize: compressedData.length,
+    });
+    logger.info('Bundle published to IPFS, CID:', cidToString);
     try {
         const tx = await bundleTrackerContract.proposeBundle(cidToString);
         await sepoliaAlchemy.transact.waitForTransaction(tx.hash);
-        console.log('Blockchain transaction successful');
+        logger.info('Blockchain transaction successful');
         // Save proposer data after successful blockchain transaction.
         await saveProposerData(PROPOSER_ADDRESS);
     }
     catch (error) {
-        console.error('Failed to propose bundle:', error);
+        logger.error('Failed to propose bundle:', error);
         throw new Error('Blockchain transaction failed');
     }
     let bundleData;
     try {
         bundleData = JSON.parse(data);
-        console.log('Bundle data parsed successfully');
+        logger.info('Bundle data parsed successfully');
     }
     catch (error) {
-        console.error('Failed to parse bundle data:', error);
+        logger.error('Failed to parse bundle data:', error);
         throw new Error('Invalid bundle data');
     }
     if (!Array.isArray(bundleData.bundle)) {
-        console.error('Invalid bundle data structure:', bundleData);
+        logger.error('Invalid bundle data structure:', bundleData);
         throw new Error('Invalid bundle data structure');
     }
     try {
         await saveBundleData(bundleData, cidToString, signature);
     }
     catch (error) {
-        console.error('Failed to save bundle/CID data:', error);
+        logger.error('Failed to save bundle/CID data:', error);
         throw new Error('Database operation failed');
     }
     try {
         for (const execution of bundleData.bundle) {
             if (!Array.isArray(execution.proof)) {
-                console.error('Invalid proof structure in execution:', execution);
+                logger.error('Invalid proof structure in execution:', execution);
                 throw new Error('Invalid proof structure');
             }
             for (const proof of execution.proof) {
                 await updateBalances(proof.from, proof.to, proof.token, proof.amount);
             }
         }
-        console.log('Balances updated successfully');
+        logger.info('Balances updated successfully');
     }
     catch (error) {
-        console.error('Failed to update balances:', error);
+        logger.error('Failed to update balances:', error);
         throw new Error('Balance update failed');
     }
     return cid;
@@ -329,7 +358,7 @@ async function updateBalances(from, to, token, amount) {
     if (from.toLowerCase() === PROPOSER_ADDRESS.toLowerCase()) {
         const largeBalance = parseUnits('1000000000000', 18);
         await updateBalance(from, token, safeBigInt(largeBalance.toString()));
-        console.log(`Bundle proposer balance updated to a large amount for token ${token}`);
+        logger.info(`Bundle proposer balance updated to a large amount for token ${token}`);
     }
     const fromBalance = await getBalance(from, token);
     const toBalance = await getBalance(to, token);
@@ -338,24 +367,43 @@ async function updateBalances(from, to, token, amount) {
     if (newFromBalance < 0n) {
         throw new Error('Insufficient balance in from vault');
     }
-    console.log(`New balance for from vault (${from}): ${newFromBalance.toString()}`);
-    console.log(`New balance for to vault (${to}): ${newToBalance.toString()}`);
+    logger.info(`New balance for from vault (${from}): ${newFromBalance.toString()}`);
+    logger.info(`New balance for to vault (${to}): ${newToBalance.toString()}`);
     await updateBalance(from, token, newFromBalance);
     await updateBalance(to, token, newToBalance);
-    console.log(`Balances updated: from ${from} to ${to} for token ${token} amount ${amount}`);
+    logger.info(`Balances updated: from ${from} to ${to} for token ${token} amount ${amount}`);
 }
 /**
  * Verifies and processes an incoming intention.
  * Validates signature, checks balances, and caches for bundling.
  */
 async function handleIntention(intention, signature, from) {
+    const startTime = Date.now();
+    diagnostic.trace('Starting intention processing', {
+        from,
+        intentionType: 'action_type' in intention ? intention.action_type : 'legacy',
+        intentionNonce: intention.nonce,
+        timestamp: startTime,
+    });
     await initializeVault(from);
-    console.log('Handling intention. Raw intention:', JSON.stringify(intention));
-    console.log('Received signature:', signature);
+    logger.info('Handling intention. Raw intention:', JSON.stringify(intention));
+    logger.info('Received signature:', signature);
+    const verifyStartTime = Date.now();
     const signerAddress = verifyMessage(JSON.stringify(intention), signature);
-    console.log('Recovered signer address from intention:', signerAddress);
+    diagnostic.debug('Signature verification completed', {
+        recoveredAddress: signerAddress,
+        expectedAddress: from,
+        verificationTime: Date.now() - verifyStartTime,
+        signatureValid: signerAddress === from,
+    });
+    logger.info('Recovered signer address from intention:', signerAddress);
     if (signerAddress !== from) {
-        console.log('Signature verification failed. Expected:', from, 'Got:', signerAddress);
+        logger.info('Signature verification failed. Expected:', from, 'Got:', signerAddress);
+        diagnostic.error('Signature mismatch', {
+            expected: from,
+            received: signerAddress,
+            intention: intention,
+        });
         throw new Error('Signature verification failed');
     }
     const proof = [];
@@ -374,9 +422,24 @@ async function handleIntention(intention, signature, from) {
         }
         const amountSentBigInt = safeBigInt(amountSent.toString());
         const currentBalance = await getBalance(from, tokenAddress);
-        console.log(`Current balance for ${from} and token ${tokenAddress}: ${currentBalance.toString()}`);
+        diagnostic.trace('Balance check', {
+            vault: from,
+            token: tokenAddress,
+            currentBalance: currentBalance.toString(),
+            requiredAmount: amountSentBigInt.toString(),
+            remainingBalance: (currentBalance - amountSentBigInt).toString(),
+            sufficient: currentBalance >= amountSentBigInt,
+        });
+        logger.info(`Current balance for ${from} and token ${tokenAddress}: ${currentBalance.toString()}`);
         if (currentBalance < amountSentBigInt) {
-            console.error(`Insufficient balance. Current: ${currentBalance.toString()}, Required: ${amountSent.toString()}`);
+            diagnostic.error('Insufficient balance', {
+                vault: from,
+                token: tokenAddress,
+                currentBalance: currentBalance.toString(),
+                requiredAmount: amountSent.toString(),
+                deficit: (amountSentBigInt - currentBalance).toString(),
+            });
+            logger.error(`Insufficient balance. Current: ${currentBalance.toString()}, Required: ${amountSent.toString()}`);
             throw new Error('Insufficient balance');
         }
         if (intention.action_type === 'swap') {
@@ -436,7 +499,7 @@ async function handleIntention(intention, signature, from) {
         }
     }
     else {
-        console.error('Unexpected intention format:', intention);
+        logger.error('Unexpected intention format:', intention);
     }
     const executionObject = {
         execution: [
@@ -447,7 +510,14 @@ async function handleIntention(intention, signature, from) {
         ],
     };
     cachedIntentions.push(executionObject);
-    console.log('Cached intention added. Total cached intentions:', cachedIntentions.length);
+    diagnostic.info('Intention processed successfully', {
+        from,
+        intentionType: 'action_type' in intention ? intention.action_type : 'legacy',
+        processingTime: Date.now() - startTime,
+        totalCachedIntentions: cachedIntentions.length,
+        proofCount: proof.length,
+    });
+    logger.info('Cached intention added. Total cached intentions:', cachedIntentions.length);
     return executionObject;
 }
 /**
@@ -455,17 +525,32 @@ async function handleIntention(intention, signature, from) {
  * Runs every 10 seconds via interval timer.
  */
 async function createAndPublishBundle() {
+    bundleCycleCount++;
+    const cycleStartTime = Date.now();
+    diagnostic.info('Bundle cycle started', {
+        cycleNumber: bundleCycleCount,
+        memoryUsage: process.memoryUsage(),
+        pendingIntentions: cachedIntentions.length,
+        lastSuccessTime: lastSuccessfulBundleTime,
+        timeSinceLastSuccess: lastSuccessfulBundleTime
+            ? Date.now() - lastSuccessfulBundleTime
+            : 0,
+    });
     if (cachedIntentions.length === 0) {
-        console.log('No intentions to propose.');
+        logger.info('No intentions to propose.');
         return;
     }
     let nonce;
     try {
         nonce = await getLatestNonce();
-        console.log('Latest nonce retrieved:', nonce);
+        logger.info('Latest nonce retrieved:', nonce);
     }
     catch (error) {
-        console.error('Failed to get latest nonce:', error);
+        diagnostic.error('Failed to get nonce', {
+            error: error instanceof Error ? error.message : String(error),
+            cycleNumber: bundleCycleCount,
+        });
+        logger.error('Failed to get latest nonce:', error);
         return;
     }
     const bundle = cachedIntentions.map(({ execution }) => execution).flat();
@@ -473,15 +558,36 @@ async function createAndPublishBundle() {
         bundle: bundle,
         nonce: nonce,
     };
-    console.log('Bundle object to be signed:', JSON.stringify(bundleObject));
+    diagnostic.debug('Bundle creation metrics', {
+        intentionCount: cachedIntentions.length,
+        bundleSize: JSON.stringify(bundleObject).length,
+        nonce,
+        cycleNumber: bundleCycleCount,
+    });
+    logger.info('Bundle object to be signed:', JSON.stringify(bundleObject));
     const proposerSignature = await wallet.signMessage(JSON.stringify(bundleObject));
-    console.log('Generated bundle proposer signature:', proposerSignature);
+    logger.info('Generated bundle proposer signature:', proposerSignature);
     try {
         await publishBundle(JSON.stringify(bundleObject), proposerSignature, PROPOSER_ADDRESS);
-        console.log('Bundle published successfully');
+        lastSuccessfulBundleTime = Date.now();
+        diagnostic.info('Bundle cycle completed', {
+            cycleNumber: bundleCycleCount,
+            cycleTime: Date.now() - cycleStartTime,
+            intentionsProcessed: cachedIntentions.length,
+            nonce,
+            success: true,
+        });
+        logger.info('Bundle published successfully');
     }
     catch (error) {
-        console.error('Failed to publish bundle:', error);
+        diagnostic.error('Bundle publish failed', {
+            error: error instanceof Error ? error.message : String(error),
+            cycleNumber: bundleCycleCount,
+            cycleTime: Date.now() - cycleStartTime,
+            intentionsLost: cachedIntentions.length,
+            nonce,
+        });
+        logger.error('Failed to publish bundle:', error);
         cachedIntentions = [];
         return;
     }
