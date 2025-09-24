@@ -28,7 +28,7 @@ import { pool } from './index.js'
 import { fileURLToPath } from 'url'
 import zlib from 'zlib'
 import { promisify } from 'util'
-import { createLogger } from './utils/logger.js'
+import { createLogger, diagnostic } from './utils/logger.js'
 import { Intention, BundleData, IntentionOutput } from './types/core.js'
 
 const gzip = promisify(zlib.gzip)
@@ -40,6 +40,10 @@ dotenv.config()
 
 /** Logger instance for proposer module */
 const logger = createLogger('Proposer')
+
+/** Bundle cycle counter for diagnostics */
+let bundleCycleCount = 0
+let lastSuccessfulBundleTime = 0
 
 /**
  * Safely converts a string to BigInt, handling decimal values.
@@ -331,12 +335,20 @@ async function saveBundleData(
  * Compresses data with gzip before IPFS upload.
  */
 async function publishBundle(data: string, signature: string, from: string) {
+	const startTime = Date.now()
 	await ensureHeliaSetup()
 
+	const originalSize = data.length
 	logger.info(
 		'Publishing bundle. Data length (before compression):',
-		data.length
+		originalSize
 	)
+
+	diagnostic.info('Bundle publish started', {
+		dataSize: originalSize,
+		from,
+		timestamp: startTime
+	})
 
 	if (from !== PROPOSER_ADDRESS) {
 		throw new Error('Unauthorized: Only the proposer can publish new bundles.')
@@ -351,19 +363,37 @@ async function publishBundle(data: string, signature: string, from: string) {
 
 	let compressedData: Buffer
 	try {
+		const compressionStart = Date.now()
 		logger.info('Starting compression of bundle data...')
 		compressedData = await gzip(data)
+
+		diagnostic.debug('Compression metrics', {
+			originalSize,
+			compressedSize: compressedData.length,
+			compressionRatio: (compressedData.length / originalSize).toFixed(3),
+			compressionTime: Date.now() - compressionStart
+		})
+
 		logger.info(
 			'Compression successful. Compressed data length:',
 			compressedData.length
 		)
 	} catch (error) {
+		diagnostic.error('Compression failed', { error: error.message })
 		logger.error('Compression failed:', error)
 		throw new Error('Bundle data compression failed')
 	}
 
+	const ipfsUploadStart = Date.now()
 	const cid = await s.add(compressedData.toString('base64'))
 	const cidToString = cid.toString()
+
+	diagnostic.info('IPFS upload completed', {
+		cid: cidToString,
+		uploadTime: Date.now() - ipfsUploadStart,
+		compressedSize: compressedData.length
+	})
+
 	logger.info('Bundle published to IPFS, CID:', cidToString)
 
 	try {
@@ -479,11 +509,29 @@ async function handleIntention(
 	signature: string,
 	from: string
 ): Promise<Intention> {
+	const startTime = Date.now()
+
+	diagnostic.trace('Starting intention processing', {
+		from,
+		intentionType: 'action_type' in intention ? intention.action_type : 'legacy',
+		intentionNonce: intention.nonce,
+		timestamp: startTime
+	})
+
 	await initializeVault(from)
 	logger.info('Handling intention. Raw intention:', JSON.stringify(intention))
 	logger.info('Received signature:', signature)
 
+	const verifyStartTime = Date.now()
 	const signerAddress = verifyMessage(JSON.stringify(intention), signature)
+
+	diagnostic.debug('Signature verification completed', {
+		recoveredAddress: signerAddress,
+		expectedAddress: from,
+		verificationTime: Date.now() - verifyStartTime,
+		signatureValid: signerAddress === from
+	})
+
 	logger.info('Recovered signer address from intention:', signerAddress)
 	if (signerAddress !== from) {
 		logger.info(
@@ -492,6 +540,11 @@ async function handleIntention(
 			'Got:',
 			signerAddress
 		)
+		diagnostic.error('Signature mismatch', {
+			expected: from,
+			received: signerAddress,
+			intention: intention
+		})
 		throw new Error('Signature verification failed')
 	}
 	const proof: unknown[] = []
@@ -520,10 +573,27 @@ async function handleIntention(
 		}
 		const amountSentBigInt = safeBigInt(amountSent.toString())
 		const currentBalance = await getBalance(from, tokenAddress)
+
+		diagnostic.trace('Balance check', {
+			vault: from,
+			token: tokenAddress,
+			currentBalance: currentBalance.toString(),
+			requiredAmount: amountSentBigInt.toString(),
+			remainingBalance: (currentBalance - amountSentBigInt).toString(),
+			sufficient: currentBalance >= amountSentBigInt
+		})
+
 		logger.info(
 			`Current balance for ${from} and token ${tokenAddress}: ${currentBalance.toString()}`
 		)
 		if (currentBalance < amountSentBigInt) {
+			diagnostic.error('Insufficient balance', {
+				vault: from,
+				token: tokenAddress,
+				currentBalance: currentBalance.toString(),
+				requiredAmount: amountSent.toString(),
+				deficit: (amountSentBigInt - currentBalance).toString()
+			})
 			logger.error(
 				`Insufficient balance. Current: ${currentBalance.toString()}, Required: ${amountSent.toString()}`
 			)
@@ -594,6 +664,15 @@ async function handleIntention(
 		],
 	}
 	cachedIntentions.push(executionObject)
+
+	diagnostic.info('Intention processed successfully', {
+		from,
+		intentionType: 'action_type' in intention ? intention.action_type : 'legacy',
+		processingTime: Date.now() - startTime,
+		totalCachedIntentions: cachedIntentions.length,
+		proofCount: proof.length
+	})
+
 	logger.info(
 		'Cached intention added. Total cached intentions:',
 		cachedIntentions.length
@@ -606,6 +685,17 @@ async function handleIntention(
  * Runs every 10 seconds via interval timer.
  */
 async function createAndPublishBundle() {
+	bundleCycleCount++
+	const cycleStartTime = Date.now()
+
+	diagnostic.info('Bundle cycle started', {
+		cycleNumber: bundleCycleCount,
+		memoryUsage: process.memoryUsage(),
+		pendingIntentions: cachedIntentions.length,
+		lastSuccessTime: lastSuccessfulBundleTime,
+		timeSinceLastSuccess: lastSuccessfulBundleTime ? Date.now() - lastSuccessfulBundleTime : 0
+	})
+
 	if (cachedIntentions.length === 0) {
 		logger.info('No intentions to propose.')
 		return
@@ -615,6 +705,10 @@ async function createAndPublishBundle() {
 		nonce = await getLatestNonce()
 		logger.info('Latest nonce retrieved:', nonce)
 	} catch (error) {
+		diagnostic.error('Failed to get nonce', {
+			error: error.message,
+			cycleNumber: bundleCycleCount
+		})
 		logger.error('Failed to get latest nonce:', error)
 		return
 	}
@@ -623,6 +717,14 @@ async function createAndPublishBundle() {
 		bundle: bundle,
 		nonce: nonce,
 	}
+
+	diagnostic.debug('Bundle creation metrics', {
+		intentionCount: cachedIntentions.length,
+		bundleSize: JSON.stringify(bundleObject).length,
+		nonce,
+		cycleNumber: bundleCycleCount
+	})
+
 	logger.info('Bundle object to be signed:', JSON.stringify(bundleObject))
 	const proposerSignature = await wallet.signMessage(
 		JSON.stringify(bundleObject)
@@ -634,8 +736,25 @@ async function createAndPublishBundle() {
 			proposerSignature,
 			PROPOSER_ADDRESS
 		)
+		lastSuccessfulBundleTime = Date.now()
+
+		diagnostic.info('Bundle cycle completed', {
+			cycleNumber: bundleCycleCount,
+			cycleTime: Date.now() - cycleStartTime,
+			intentionsProcessed: cachedIntentions.length,
+			nonce,
+			success: true
+		})
+
 		logger.info('Bundle published successfully')
 	} catch (error) {
+		diagnostic.error('Bundle publish failed', {
+			error: error.message,
+			cycleNumber: bundleCycleCount,
+			cycleTime: Date.now() - cycleStartTime,
+			intentionsLost: cachedIntentions.length,
+			nonce
+		})
 		logger.error('Failed to publish bundle:', error)
 		cachedIntentions = []
 		return
