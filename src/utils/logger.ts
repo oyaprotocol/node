@@ -4,15 +4,11 @@
  * ║                           Logger Utility                                  ║
  * ╚═══════════════════════════════════════════════════════════════════════════╝
  *
- * Centralized logging utility wrapper around tslog providing structured logging
- * with environment-aware configuration and debug mode support.
+ * Centralized logging utility providing structured output with tslog.
  *
- * Features:
- * - Branded console output with OYA NODE prefix
- * - Environment-based log level configuration
- * - Separate debug logger for diagnostic data
- * - JSON output in debug mode with source locations
- * - No-op debug logger when disabled for zero overhead
+ * - Main logger: Branded console output controlled by LOG_LEVEL
+ * - Diagnostic logger: JSON output with source locations via DIAGNOSTIC_LOGGER
+ * - Child loggers: Module-specific loggers with name prefixes
  *
  * @packageDocumentation
  */
