@@ -33,7 +33,7 @@ export function bearerAuth(req: Request, res: Response, next: NextFunction) {
 			path: req.path,
 			method: req.method,
 			hasAuthHeader: !!authHeader,
-			authHeaderType: typeof authHeader
+			authHeaderType: typeof authHeader,
 		})
 		return res.status(401).json({ error: 'Missing Authorization header' })
 	}
@@ -47,7 +47,7 @@ export function bearerAuth(req: Request, res: Response, next: NextFunction) {
 		scheme,
 		tokenPreview: token ? token.substring(0, 8) + '...' : 'none',
 		authTime: Date.now() - startTime,
-		authenticated: tokenValid
+		authenticated: tokenValid,
 	})
 
 	if (!tokenValid) {
@@ -55,7 +55,7 @@ export function bearerAuth(req: Request, res: Response, next: NextFunction) {
 			path: req.path,
 			method: req.method,
 			scheme,
-			tokenLength: token?.length || 0
+			tokenLength: token?.length || 0,
 		})
 		return res.status(403).json({ error: 'Invalid or missing token' })
 	}

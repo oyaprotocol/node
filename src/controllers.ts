@@ -39,7 +39,7 @@ export const saveBundle = async (req: Request, res: Response) => {
 	if (!bundle || typeof nonce !== 'number') {
 		diagnostic.debug('Invalid bundle data', {
 			hasBundle: !!bundle,
-			nonceType: typeof nonce
+			nonceType: typeof nonce,
 		})
 		return res.status(400).json({ error: 'Invalid bundle data' })
 	}
@@ -61,7 +61,7 @@ export const saveBundle = async (req: Request, res: Response) => {
 			queryTime: Date.now() - queryStart,
 			totalTime: Date.now() - startTime,
 			nonce,
-			bundleSize: bundleString.length
+			bundleSize: bundleString.length,
 		})
 
 		res.status(201).json(result.rows[0])
@@ -69,7 +69,7 @@ export const saveBundle = async (req: Request, res: Response) => {
 		diagnostic.error('Database error', {
 			operation: 'saveBundle',
 			error: err instanceof Error ? err.message : String(err),
-			nonce
+			nonce,
 		})
 		logger.error('Database insertion error (bundle):', err)
 		res.status(500).json({ error: 'Internal Server Error' })
@@ -143,7 +143,6 @@ export const getBalanceForAllTokens = async (req: Request, res: Response) => {
  * Returns 404 if balance not found.
  */
 export const getBalanceForOneToken = async (req: Request, res: Response) => {
-	const startTime = Date.now()
 	const { vault, token } = req.params
 
 	try {
@@ -160,7 +159,7 @@ export const getBalanceForOneToken = async (req: Request, res: Response) => {
 			token: token.toLowerCase(),
 			queryTime: Date.now() - queryStart,
 			rowCount: result.rows.length,
-			found: result.rows.length > 0
+			found: result.rows.length > 0,
 		})
 
 		logger.info('Getting balance for one token:', result.rows)
@@ -175,7 +174,7 @@ export const getBalanceForOneToken = async (req: Request, res: Response) => {
 			operation: 'getBalanceForOneToken',
 			error: err instanceof Error ? err.message : String(err),
 			vault,
-			token
+			token,
 		})
 		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })

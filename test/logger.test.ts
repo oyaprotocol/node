@@ -1,4 +1,9 @@
-import { logger, diagnostic, createLogger, LogLevel } from '../src/utils/logger.js'
+import {
+	logger,
+	diagnostic,
+	createLogger,
+	LogLevel,
+} from '../src/utils/logger.js'
 
 describe('Logger Tests', () => {
 	it('should log at different levels', () => {
@@ -32,13 +37,13 @@ describe('Logger Tests', () => {
 				hash: '0xabc...def',
 				intentions: [
 					{ from: '0x111', to: '0x222', amount: 1000 },
-					{ from: '0x333', to: '0x444', amount: 2000 }
-				]
+					{ from: '0x333', to: '0x444', amount: 2000 },
+				],
 			},
 			metadata: {
 				timestamp: new Date(),
-				proposer: '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'
-			}
+				proposer: '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf',
+			},
 		}
 
 		logger.info('Processing block', complexData)
@@ -46,11 +51,16 @@ describe('Logger Tests', () => {
 
 	it('should test diagnostic logger', () => {
 		console.log('\n=== Testing Diagnostic Logger ===\n')
-		console.log('Diagnostic mode enabled:', process.env.DIAGNOSTIC_LOGGER === 'true')
+		console.log(
+			'Diagnostic mode enabled:',
+			process.env.DIAGNOSTIC_LOGGER === 'true'
+		)
 
 		diagnostic.trace('Trace level diagnostic', { step: 1 })
 		diagnostic.debug('Debug level', { cache: ['item1', 'item2'] })
-		diagnostic.info('Info level diagnostic', { performance: { cpu: 0.8, memory: 0.6 } })
+		diagnostic.info('Info level diagnostic', {
+			performance: { cpu: 0.8, memory: 0.6 },
+		})
 	})
 
 	it('should demonstrate log levels', () => {
@@ -62,6 +72,9 @@ describe('Logger Tests', () => {
 		console.log('LogLevel.WARN =', LogLevel.WARN)
 		console.log('LogLevel.ERROR =', LogLevel.ERROR)
 		console.log('LogLevel.FATAL =', LogLevel.FATAL)
-		console.log('\nCurrent LOG_LEVEL env var:', process.env.LOG_LEVEL || '3 (default)')
+		console.log(
+			'\nCurrent LOG_LEVEL env var:',
+			process.env.LOG_LEVEL || '3 (default)'
+		)
 	})
 })

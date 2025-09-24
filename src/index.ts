@@ -63,7 +63,7 @@ app.use((req, res, next) => {
 		path: req.path,
 		query: req.query,
 		headers: req.headers,
-		bodySize: req.body ? JSON.stringify(req.body).length : 0
+		bodySize: req.body ? JSON.stringify(req.body).length : 0,
 	})
 
 	// Capture response on finish
@@ -73,7 +73,7 @@ app.use((req, res, next) => {
 			method: req.method,
 			path: req.path,
 			statusCode: res.statusCode,
-			responseTime: Date.now() - startTime
+			responseTime: Date.now() - startTime,
 		})
 	})
 
@@ -103,12 +103,13 @@ export const pool = new Pool({
 })
 
 // Test database connection on startup
-pool.connect()
-	.then(client => {
+pool
+	.connect()
+	.then((client) => {
 		logger.info('Database pool initialized successfully')
 		client.release()
 	})
-	.catch(err => {
+	.catch((err) => {
 		logger.error('Failed to initialize database pool:', err)
 		logger.warn('Server will continue but database operations may fail')
 	})
@@ -137,7 +138,7 @@ app.post('/intention', bearerAuth, async (req, res) => {
 			diagnostic.debug('Missing intention fields', {
 				hasIntention: !!intention,
 				hasSignature: !!signature,
-				hasFrom: !!from
+				hasFrom: !!from,
 			})
 			throw new Error('Missing required fields')
 		}
@@ -145,23 +146,26 @@ app.post('/intention', bearerAuth, async (req, res) => {
 		diagnostic.info('Intention endpoint called', {
 			from,
 			intentionType: intention.action_type || 'legacy',
-			signaturePreview: signature.slice(0, 10) + '...'
+			signaturePreview: signature.slice(0, 10) + '...',
 		})
 
-		logger.info('Received signed intention', { from, signature: signature.slice(0, 10) + '...' })
+		logger.info('Received signed intention', {
+			from,
+			signature: signature.slice(0, 10) + '...',
+		})
 		const response = await handleIntention(intention, signature, from)
 
 		diagnostic.info('Intention processed', {
 			from,
 			processingTime: Date.now() - startTime,
-			success: true
+			success: true,
 		})
 
 		res.status(200).json(response)
 	} catch (error) {
 		diagnostic.error('Intention processing failed', {
 			error: error instanceof Error ? error.message : String(error),
-			processingTime: Date.now() - startTime
+			processingTime: Date.now() - startTime,
 		})
 		logger.error('Error handling intention', error)
 		res

@@ -347,7 +347,7 @@ async function publishBundle(data: string, signature: string, from: string) {
 	diagnostic.info('Bundle publish started', {
 		dataSize: originalSize,
 		from,
-		timestamp: startTime
+		timestamp: startTime,
 	})
 
 	if (from !== PROPOSER_ADDRESS) {
@@ -371,7 +371,7 @@ async function publishBundle(data: string, signature: string, from: string) {
 			originalSize,
 			compressedSize: compressedData.length,
 			compressionRatio: (compressedData.length / originalSize).toFixed(3),
-			compressionTime: Date.now() - compressionStart
+			compressionTime: Date.now() - compressionStart,
 		})
 
 		logger.info(
@@ -379,7 +379,9 @@ async function publishBundle(data: string, signature: string, from: string) {
 			compressedData.length
 		)
 	} catch (error) {
-		diagnostic.error('Compression failed', { error: error instanceof Error ? error.message : String(error) })
+		diagnostic.error('Compression failed', {
+			error: error instanceof Error ? error.message : String(error),
+		})
 		logger.error('Compression failed:', error)
 		throw new Error('Bundle data compression failed')
 	}
@@ -391,7 +393,7 @@ async function publishBundle(data: string, signature: string, from: string) {
 	diagnostic.info('IPFS upload completed', {
 		cid: cidToString,
 		uploadTime: Date.now() - ipfsUploadStart,
-		compressedSize: compressedData.length
+		compressedSize: compressedData.length,
 	})
 
 	logger.info('Bundle published to IPFS, CID:', cidToString)
@@ -513,9 +515,10 @@ async function handleIntention(
 
 	diagnostic.trace('Starting intention processing', {
 		from,
-		intentionType: 'action_type' in intention ? intention.action_type : 'legacy',
+		intentionType:
+			'action_type' in intention ? intention.action_type : 'legacy',
 		intentionNonce: intention.nonce,
-		timestamp: startTime
+		timestamp: startTime,
 	})
 
 	await initializeVault(from)
@@ -529,7 +532,7 @@ async function handleIntention(
 		recoveredAddress: signerAddress,
 		expectedAddress: from,
 		verificationTime: Date.now() - verifyStartTime,
-		signatureValid: signerAddress === from
+		signatureValid: signerAddress === from,
 	})
 
 	logger.info('Recovered signer address from intention:', signerAddress)
@@ -543,7 +546,7 @@ async function handleIntention(
 		diagnostic.error('Signature mismatch', {
 			expected: from,
 			received: signerAddress,
-			intention: intention
+			intention: intention,
 		})
 		throw new Error('Signature verification failed')
 	}
@@ -580,7 +583,7 @@ async function handleIntention(
 			currentBalance: currentBalance.toString(),
 			requiredAmount: amountSentBigInt.toString(),
 			remainingBalance: (currentBalance - amountSentBigInt).toString(),
-			sufficient: currentBalance >= amountSentBigInt
+			sufficient: currentBalance >= amountSentBigInt,
 		})
 
 		logger.info(
@@ -592,7 +595,7 @@ async function handleIntention(
 				token: tokenAddress,
 				currentBalance: currentBalance.toString(),
 				requiredAmount: amountSent.toString(),
-				deficit: (amountSentBigInt - currentBalance).toString()
+				deficit: (amountSentBigInt - currentBalance).toString(),
 			})
 			logger.error(
 				`Insufficient balance. Current: ${currentBalance.toString()}, Required: ${amountSent.toString()}`
@@ -667,10 +670,11 @@ async function handleIntention(
 
 	diagnostic.info('Intention processed successfully', {
 		from,
-		intentionType: 'action_type' in intention ? intention.action_type : 'legacy',
+		intentionType:
+			'action_type' in intention ? intention.action_type : 'legacy',
 		processingTime: Date.now() - startTime,
 		totalCachedIntentions: cachedIntentions.length,
-		proofCount: proof.length
+		proofCount: proof.length,
 	})
 
 	logger.info(
@@ -693,7 +697,9 @@ async function createAndPublishBundle() {
 		memoryUsage: process.memoryUsage(),
 		pendingIntentions: cachedIntentions.length,
 		lastSuccessTime: lastSuccessfulBundleTime,
-		timeSinceLastSuccess: lastSuccessfulBundleTime ? Date.now() - lastSuccessfulBundleTime : 0
+		timeSinceLastSuccess: lastSuccessfulBundleTime
+			? Date.now() - lastSuccessfulBundleTime
+			: 0,
 	})
 
 	if (cachedIntentions.length === 0) {
@@ -707,7 +713,7 @@ async function createAndPublishBundle() {
 	} catch (error) {
 		diagnostic.error('Failed to get nonce', {
 			error: error instanceof Error ? error.message : String(error),
-			cycleNumber: bundleCycleCount
+			cycleNumber: bundleCycleCount,
 		})
 		logger.error('Failed to get latest nonce:', error)
 		return
@@ -722,7 +728,7 @@ async function createAndPublishBundle() {
 		intentionCount: cachedIntentions.length,
 		bundleSize: JSON.stringify(bundleObject).length,
 		nonce,
-		cycleNumber: bundleCycleCount
+		cycleNumber: bundleCycleCount,
 	})
 
 	logger.info('Bundle object to be signed:', JSON.stringify(bundleObject))
@@ -743,7 +749,7 @@ async function createAndPublishBundle() {
 			cycleTime: Date.now() - cycleStartTime,
 			intentionsProcessed: cachedIntentions.length,
 			nonce,
-			success: true
+			success: true,
 		})
 
 		logger.info('Bundle published successfully')
@@ -753,7 +759,7 @@ async function createAndPublishBundle() {
 			cycleNumber: bundleCycleCount,
 			cycleTime: Date.now() - cycleStartTime,
 			intentionsLost: cachedIntentions.length,
-			nonce
+			nonce,
 		})
 		logger.error('Failed to publish bundle:', error)
 		cachedIntentions = []
