@@ -17,7 +17,8 @@ import { logger, diagnostic } from './utils/logger.js'
 import {
 	validateEnv,
 	printEnvValidationReport,
-	setConfigCache,
+	setEnvConfigCache,
+	getEnvConfig,
 } from './utils/env.js'
 import type { EnvironmentConfig } from './types/setup.js'
 import dotenv from 'dotenv'
@@ -38,7 +39,7 @@ if (!envValidationResult.valid) {
 
 // Cache the validated config for use throughout the application
 // Safe to cast here because validation passed
-setConfigCache(envValidationResult.config as unknown as EnvironmentConfig)
+setEnvConfigCache(envValidationResult.config as unknown as EnvironmentConfig)
 
 // Polyfill for CustomEvent in Node.js environment (required by Helia)
 if (typeof globalThis.CustomEvent === 'undefined') {
@@ -64,8 +65,8 @@ import { bearerAuth } from './auth.js'
 /** Express application instance for the Oya node server */
 const app = express()
 
-/** Port number for the server to listen on (defaults to 3000) */
-const port = process.env.PORT || 3000
+/** Get validated environment configuration */
+const { PORT, DATABASE_URL } = getEnvConfig()
 
 app.use(json())
 
@@ -115,7 +116,7 @@ app.use((req, res, next) => {
  * Configured with SSL for secure connections.
  */
 export const pool = new Pool({
-	connectionString: process.env.DATABASE_URL,
+	connectionString: DATABASE_URL,
 	ssl: {
 		rejectUnauthorized: false,
 	},
@@ -208,8 +209,8 @@ setInterval(async () => {
 /**
  * Start the Express server on the configured port
  */
-app.listen(port, () => {
-	logger.info(`Server running on port ${port}`)
+app.listen(PORT, () => {
+	logger.info(`Server running on port ${PORT}`)
 })
 
 export { app }
