@@ -116,10 +116,7 @@ async function buildAlchemyInstances() {
 	await mainnet.core.getTokenMetadata(
 		'0x04Fa0d235C4abf4BcF4787aF4CF447DE572eF828'
 	)
-	const walletInstance = new Wallet(
-		TEST_PRIVATE_KEY,
-		sepolia
-	)
+	const walletInstance = new Wallet(TEST_PRIVATE_KEY, sepolia)
 	return {
 		mainnetAlchemy: mainnet,
 		sepoliaAlchemy: sepolia,
