@@ -114,7 +114,7 @@ let cachedConfig: EnvironmentConfig | null = null
  * Called by index.ts after successful validation.
  * @param config - The validated environment configuration
  */
-export function setConfigCache(config: EnvironmentConfig): void {
+export function setEnvConfigCache(config: EnvironmentConfig): void {
 	cachedConfig = config
 }
 
@@ -124,7 +124,7 @@ export function setConfigCache(config: EnvironmentConfig): void {
  * Exits the process if validation fails.
  * @returns Validated environment configuration
  */
-export function getConfig(): EnvironmentConfig {
+export function getEnvConfig(): EnvironmentConfig {
 	// Return cached config if already validated
 	if (cachedConfig) {
 		return cachedConfig
@@ -132,7 +132,7 @@ export function getConfig(): EnvironmentConfig {
 
 	// Fallback validation - this shouldn't normally happen
 	logger.warn(
-		'⚠️  getConfig() called before environment validation completed in index.ts'
+		'⚠️  getEnvConfig() called before environment validation completed in index.ts'
 	)
 	logger.warn(
 		'Running fallback validation - this may indicate an initialization order issue'
