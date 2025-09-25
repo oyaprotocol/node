@@ -14,6 +14,26 @@
 import { JSDOM } from 'jsdom'
 import { displayBanner } from './utils/banner.js'
 import { logger, diagnostic } from './utils/logger.js'
+import { validateEnv, printEnvValidationReport, setConfigCache } from './utils/env.js'
+import type { EnvironmentConfig } from './types/setup.js'
+import dotenv from 'dotenv'
+
+// Load environment variables first
+dotenv.config()
+
+// Display banner first thing
+displayBanner()
+
+// Validate environment configuration
+const envValidationResult = validateEnv()
+printEnvValidationReport(envValidationResult)
+
+if (!envValidationResult.valid) {
+	process.exit(1)
+}
+
+// Cache the validated config for use throughout the application
+setConfigCache(envValidationResult.config as EnvironmentConfig)
 
 // Polyfill for CustomEvent in Node.js environment (required by Helia)
 if (typeof globalThis.CustomEvent === 'undefined') {
@@ -25,7 +45,6 @@ if (typeof globalThis.CustomEvent === 'undefined') {
 import express from 'express'
 import bppkg from 'body-parser'
 const { json } = bppkg
-import dotenv from 'dotenv'
 import pgpkg from 'pg'
 const { Pool } = pgpkg
 import {
@@ -36,11 +55,6 @@ import {
 } from './routes.js'
 import { handleIntention, createAndPublishBundle } from './proposer.js'
 import { bearerAuth } from './auth.js'
-
-dotenv.config()
-
-// Display banner first thing
-displayBanner()
 
 /** Express application instance for the Oya node server */
 const app = express()
