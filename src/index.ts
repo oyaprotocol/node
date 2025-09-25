@@ -46,7 +46,12 @@ const envConfig = setupEnvironment()
 const { PORT, DATABASE_URL } = envConfig
 
 // Initialize proposer module
-await initializeProposer()
+try {
+	await initializeProposer()
+} catch (error) {
+	logger.error('Failed to initialize proposer:', error)
+	process.exit(1)
+}
 
 // Polyfill for CustomEvent in Node.js environment (required by Helia)
 if (typeof globalThis.CustomEvent === 'undefined') {
