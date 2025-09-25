@@ -26,7 +26,7 @@ export interface EnvVariable {
 	/** Optional validation function that returns true or an error message */
 	validator?: (value: string) => boolean | string
 	/** Optional transformer to convert the string value to the appropriate type */
-	transformer?: (value: string) => any
+	transformer?: (value: string) => string | number | boolean
 	/** Default value if the environment variable is not set (only for optional vars) */
 	defaultValue?: string | number | boolean
 	/** Whether this value should be masked in logs (e.g., private keys, tokens) */
@@ -50,7 +50,7 @@ export interface EnvValidationResult {
 		description: string
 	}>
 	/** The validated and transformed configuration object */
-	config: Record<string, any>
+	config: Record<string, unknown>
 }
 
 /**

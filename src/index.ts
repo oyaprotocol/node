@@ -33,7 +33,8 @@ if (!envValidationResult.valid) {
 }
 
 // Cache the validated config for use throughout the application
-setConfigCache(envValidationResult.config as EnvironmentConfig)
+// Safe to cast here because validation passed
+setConfigCache(envValidationResult.config as unknown as EnvironmentConfig)
 
 // Polyfill for CustomEvent in Node.js environment (required by Helia)
 if (typeof globalThis.CustomEvent === 'undefined') {

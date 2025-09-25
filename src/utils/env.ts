@@ -10,10 +10,9 @@
  * @packageDocumentation
  */
 
-import chalk from 'chalk'
 import { logger } from './logger.js'
 import { envSchema } from '../config/envSchema.js'
-import type { EnvVariable, EnvValidationResult, EnvironmentConfig } from '../types/setup.js'
+import type { EnvValidationResult, EnvironmentConfig } from '../types/setup.js'
 
 /**
  * Validates all environment variables against the schema.
@@ -21,7 +20,7 @@ import type { EnvVariable, EnvValidationResult, EnvironmentConfig } from '../typ
  */
 export function validateEnv(): EnvValidationResult {
 	const errors: EnvValidationResult['errors'] = []
-	const config: Record<string, any> = {}
+	const config: Record<string, unknown> = {}
 
 	logger.info('🔍 Validating environment configuration...')
 
@@ -133,6 +132,6 @@ export function getConfig(): EnvironmentConfig {
 		process.exit(1)
 	}
 
-	cachedConfig = result.config as EnvironmentConfig
+	cachedConfig = result.config as unknown as EnvironmentConfig
 	return cachedConfig
 }
