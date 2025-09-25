@@ -1,11 +1,12 @@
 /**
  * ╔═══════════════════════════════════════════════════════════════════════════╗
  * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
- * ║                    Environment Configuration Validator                     ║
+ * ║                     Environment Configuration Utilities                    ║
  * ╚═══════════════════════════════════════════════════════════════════════════╝
  *
- * Validates environment variables at startup to ensure all required
- * configuration is present and valid before the node begins operation.
+ * Provides utilities for validating, caching, and accessing environment
+ * configuration. Ensures all required variables are present and valid at
+ * startup, with cached access throughout the application lifecycle.
  *
  * @packageDocumentation
  */
