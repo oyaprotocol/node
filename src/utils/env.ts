@@ -34,7 +34,7 @@ export function validateEnv(): EnvValidationResult {
 			errors.push({
 				variable: envVar.name,
 				error: 'Missing required environment variable',
-				description: envVar.description
+				description: envVar.description,
 			})
 			logger.error(`✗ ${displayName}: Missing`)
 			continue
@@ -52,7 +52,7 @@ export function validateEnv(): EnvValidationResult {
 				errors.push({
 					variable: envVar.name,
 					error: validationResult as string,
-					description: envVar.description
+					description: envVar.description,
 				})
 				logger.error(`✗ ${displayName}: ${validationResult}`)
 				continue
@@ -60,10 +60,14 @@ export function validateEnv(): EnvValidationResult {
 		}
 
 		if (value) {
-			config[envVar.name] = envVar.transformer ? envVar.transformer(value) : value
+			config[envVar.name] = envVar.transformer
+				? envVar.transformer(value)
+				: value
 			const displayValue = envVar.sensitive
 				? '***' + value.slice(-4)
-				: (envVar.transformer ? envVar.transformer(value) : value)
+				: envVar.transformer
+					? envVar.transformer(value)
+					: value
 			logger.info(`✓ ${displayName}: ${displayValue}`)
 		}
 	}
@@ -71,7 +75,7 @@ export function validateEnv(): EnvValidationResult {
 	return {
 		valid: errors.length === 0,
 		errors,
-		config
+		config,
 	}
 }
 
@@ -84,11 +88,14 @@ export function printEnvValidationReport(result: EnvValidationResult): void {
 
 	if (result.errors.length > 0) {
 		// Build complete error message
-		const errorDetails = result.errors.map(error =>
-			`  • ${error.variable}:\n    Error: ${error.error}\n    Description: ${error.description}`
-		).join('\n\n')
+		const errorDetails = result.errors
+			.map(
+				(error) =>
+					`  • ${error.variable}:\n    Error: ${error.error}\n    Description: ${error.description}`
+			)
+			.join('\n\n')
 
-		const errorMessage = `❌ Environment Validation Failed\n${separator}\nFound ${result.errors.length} error(s):\n\n${errorDetails}\n${separator}`;
+		const errorMessage = `❌ Environment Validation Failed\n${separator}\nFound ${result.errors.length} error(s):\n\n${errorDetails}\n${separator}`
 		logger.fatal(errorMessage)
 
 		logger.warn('Please fix the errors above and restart the application.')
@@ -123,8 +130,12 @@ export function getConfig(): EnvironmentConfig {
 	}
 
 	// Fallback validation - this shouldn't normally happen
-	logger.warn('⚠️  getConfig() called before environment validation completed in index.ts')
-	logger.warn('Running fallback validation - this may indicate an initialization order issue')
+	logger.warn(
+		'⚠️  getConfig() called before environment validation completed in index.ts'
+	)
+	logger.warn(
+		'Running fallback validation - this may indicate an initialization order issue'
+	)
 
 	const result = validateEnv()
 	if (!result.valid) {

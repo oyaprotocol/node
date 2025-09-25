@@ -24,7 +24,9 @@ export const envSchema: EnvVariable[] = [
 		type: 'string',
 		description: 'Bearer token for POST endpoint authentication',
 		sensitive: true,
-		validator: (value) => value.length >= 32 || 'Token should be at least 32 characters for security'
+		validator: (value) =>
+			value.length >= 32 ||
+			'Token should be at least 32 characters for security',
 	},
 	{
 		name: 'DATABASE_URL',
@@ -33,11 +35,14 @@ export const envSchema: EnvVariable[] = [
 		description: 'PostgreSQL connection string',
 		sensitive: true,
 		validator: (value) => {
-			if (!value.startsWith('postgres://') && !value.startsWith('postgresql://')) {
+			if (
+				!value.startsWith('postgres://') &&
+				!value.startsWith('postgresql://')
+			) {
 				return 'Must be a valid PostgreSQL connection string'
 			}
 			return true
-		}
+		},
 	},
 	{
 		name: 'ALCHEMY_API_KEY',
@@ -45,7 +50,8 @@ export const envSchema: EnvVariable[] = [
 		type: 'string',
 		description: 'Alchemy API key for blockchain interactions',
 		sensitive: true,
-		validator: (value) => value.length === 32 || 'Alchemy API key should be 32 characters'
+		validator: (value) =>
+			value.length === 32 || 'Alchemy API key should be 32 characters',
 	},
 	{
 		name: 'BUNDLE_TRACKER_ADDRESS',
@@ -60,7 +66,7 @@ export const envSchema: EnvVariable[] = [
 				return 'Must be a valid Ethereum address'
 			}
 		},
-		transformer: (value) => ethers.getAddress(value)
+		transformer: (value) => ethers.getAddress(value),
 	},
 	{
 		name: 'TEST_PRIVATE_KEY',
@@ -75,7 +81,7 @@ export const envSchema: EnvVariable[] = [
 			} catch {
 				return 'Must be a valid Ethereum private key'
 			}
-		}
+		},
 	},
 	{
 		name: 'PORT',
@@ -90,13 +96,14 @@ export const envSchema: EnvVariable[] = [
 			}
 			return true
 		},
-		transformer: (value) => parseInt(value)
+		transformer: (value) => parseInt(value),
 	},
 	{
 		name: 'LOG_LEVEL',
 		required: false,
 		type: 'number',
-		description: 'Logging level (0=silly, 1=trace, 2=debug, 3=info, 4=warn, 5=error, 6=fatal)',
+		description:
+			'Logging level (0=silly, 1=trace, 2=debug, 3=info, 4=warn, 5=error, 6=fatal)',
 		defaultValue: 3,
 		validator: (value) => {
 			const level = parseInt(value)
@@ -105,7 +112,7 @@ export const envSchema: EnvVariable[] = [
 			}
 			return true
 		},
-		transformer: (value) => parseInt(value)
+		transformer: (value) => parseInt(value),
 	},
 	{
 		name: 'DIAGNOSTIC_LOGGER',
@@ -113,6 +120,6 @@ export const envSchema: EnvVariable[] = [
 		type: 'boolean',
 		description: 'Enable diagnostic logging',
 		defaultValue: false,
-		transformer: (value) => value === 'true'
-	}
+		transformer: (value) => value === 'true',
+	},
 ]

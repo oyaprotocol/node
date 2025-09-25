@@ -14,7 +14,11 @@
 import { JSDOM } from 'jsdom'
 import { displayBanner } from './utils/banner.js'
 import { logger, diagnostic } from './utils/logger.js'
-import { validateEnv, printEnvValidationReport, setConfigCache } from './utils/env.js'
+import {
+	validateEnv,
+	printEnvValidationReport,
+	setConfigCache,
+} from './utils/env.js'
 import type { EnvironmentConfig } from './types/setup.js'
 import dotenv from 'dotenv'
 
