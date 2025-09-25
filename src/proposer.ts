@@ -28,6 +28,7 @@ import { pool } from './index.js'
 import { fileURLToPath } from 'url'
 import zlib from 'zlib'
 import { promisify } from 'util'
+import { getEnvConfig } from './utils/env.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { Intention, BundleData, IntentionOutput } from './types/core.js'
 
@@ -90,12 +91,13 @@ initializeWalletAndContract()
  * Connects the wallet for transaction signing.
  */
 async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
+	const { BUNDLE_TRACKER_ADDRESS } = getEnvConfig()
 	const abiPath = path.join(__dirname, 'abi', 'BundleTracker.json')
 	const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'))
 	const provider =
 		(await sepoliaAlchemy.config.getProvider()) as unknown as ethers.Provider
 	const contract = new ethers.Contract(
-		process.env.BUNDLE_TRACKER_ADDRESS as string,
+		BUNDLE_TRACKER_ADDRESS,
 		contractABI,
 		provider
 	)
@@ -109,19 +111,20 @@ async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
  * Initializes wallet with private key for blockchain transactions.
  */
 async function buildAlchemyInstances() {
+	const { ALCHEMY_API_KEY, TEST_PRIVATE_KEY } = getEnvConfig()
 	const mainnet = new Alchemy({
-		apiKey: process.env.ALCHEMY_API_KEY as string,
+		apiKey: ALCHEMY_API_KEY,
 		network: Network.ETH_MAINNET,
 	})
 	const sepolia = new Alchemy({
-		apiKey: process.env.ALCHEMY_API_KEY as string,
+		apiKey: ALCHEMY_API_KEY,
 		network: Network.ETH_SEPOLIA,
 	})
 	await mainnet.core.getTokenMetadata(
 		'0x04Fa0d235C4abf4BcF4787aF4CF447DE572eF828'
 	)
 	const walletInstance = new Wallet(
-		process.env.TEST_PRIVATE_KEY as string,
+		TEST_PRIVATE_KEY,
 		sepolia
 	)
 	return {
