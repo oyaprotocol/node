@@ -17,8 +17,9 @@
 
 import { Request, Response, NextFunction } from 'express'
 import { diagnostic } from './utils/logger.js'
+import { getEnvConfig } from './utils/env.js'
 
-const API_BEARER_TOKEN = process.env.API_BEARER_TOKEN
+const { API_BEARER_TOKEN } = getEnvConfig()
 
 /**
  * Middleware to protect endpoints with Bearer token authorization.
