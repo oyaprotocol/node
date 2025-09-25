@@ -11,6 +11,7 @@
  * @packageDocumentation
  */
 
+import dotenv from 'dotenv'
 import { logger } from './logger.js'
 import { envSchema } from '../config/envSchema.js'
 import type { EnvValidationResult, EnvironmentConfig } from '../types/setup.js'
@@ -146,4 +147,26 @@ export function getEnvConfig(): EnvironmentConfig {
 
 	cachedConfig = result.config as unknown as EnvironmentConfig
 	return cachedConfig
+}
+
+/**
+ * Sets up and validates the environment configuration.
+ * Loads .env file, validates all required variables, and caches the config.
+ * @returns Validated environment configuration
+ */
+export function setupEnvironment(): EnvironmentConfig {
+	// Load environment variables from .env file
+	dotenv.config()
+
+	// Validate environment configuration
+	const result = validateEnv()
+	printEnvValidationReport(result)
+
+	if (!result.valid) {
+		process.exit(1)
+	}
+
+	// Cache for use throughout application
+	setEnvConfigCache(result.config as unknown as EnvironmentConfig)
+	return result.config as unknown as EnvironmentConfig
 }

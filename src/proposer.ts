@@ -76,15 +76,8 @@ let bundleTrackerContract: BundleTrackerContract
 
 let s: ReturnType<typeof strings>
 
-initializeWalletAndContract()
-	.then(() => {
-		logger.info(
-			'Bundle proposer initialization complete. Ready to handle proposals.'
-		)
-	})
-	.catch((error) => {
-		logger.error('Initialization failed:', error)
-	})
+// Initialization flag
+let isInitialized = false
 
 /**
  * Initializes the BundleTracker contract with ABI and provider.
@@ -400,6 +393,11 @@ async function publishBundle(data: string, signature: string, from: string) {
 	})
 
 	logger.info('Bundle published to IPFS, CID:', cidToString)
+
+	// Ensure initialization before using contract
+	if (!isInitialized) {
+		throw new Error('Proposer not initialized. Call initializeProposer() first')
+	}
 
 	try {
 		const tx = await bundleTrackerContract.proposeBundle(cidToString)
@@ -735,6 +733,12 @@ async function createAndPublishBundle() {
 	})
 
 	logger.info('Bundle object to be signed:', JSON.stringify(bundleObject))
+
+	// Ensure initialization before using wallet
+	if (!isInitialized) {
+		throw new Error('Proposer not initialized. Call initializeProposer() first')
+	}
+
 	const proposerSignature = await wallet.signMessage(
 		JSON.stringify(bundleObject)
 	)
@@ -772,7 +776,28 @@ async function createAndPublishBundle() {
 }
 
 /**
- * Initializes Alchemy instances, wallet, and smart contract on startup.
+ * Initializes the proposer module.
+ * Must be called after environment validation.
+ * Sets up Alchemy instances, wallet, and smart contract.
+ */
+export async function initializeProposer() {
+	if (isInitialized) {
+		logger.warn('Proposer already initialized')
+		return
+	}
+
+	logger.info('Initializing proposer module...')
+
+	// Initialize wallet and contract
+	await initializeWalletAndContract()
+	isInitialized = true
+
+	logger.info('Proposer module initialized successfully')
+}
+
+/**
+ * Internal: Initializes Alchemy instances, wallet, and smart contract.
+ * @internal
  */
 async function initializeWalletAndContract() {
 	const {

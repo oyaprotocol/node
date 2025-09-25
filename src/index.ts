@@ -12,34 +12,41 @@
  */
 
 import { JSDOM } from 'jsdom'
+import express from 'express'
+import bppkg from 'body-parser'
+import pgpkg from 'pg'
+
 import { displayBanner } from './utils/banner.js'
 import { logger, diagnostic } from './utils/logger.js'
+import { setupEnvironment } from './utils/env.js'
 import {
-	validateEnv,
-	printEnvValidationReport,
-	setEnvConfigCache,
-	getEnvConfig,
-} from './utils/env.js'
-import type { EnvironmentConfig } from './types/setup.js'
-import dotenv from 'dotenv'
+	bundleRouter,
+	cidRouter,
+	balanceRouter,
+	vaultNonceRouter,
+} from './routes.js'
+import {
+	handleIntention,
+	createAndPublishBundle,
+	initializeProposer,
+} from './proposer.js'
+import { bearerAuth } from './auth.js'
 
-// Load environment variables first
-dotenv.config()
+/*
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                          ENVIRONMENT SETUP                                ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+*/
 
-// Display banner first thing
+// Display banner
 displayBanner()
 
-// Validate environment configuration
-const envValidationResult = validateEnv()
-printEnvValidationReport(envValidationResult)
+// Initialize and validate environment
+const envConfig = setupEnvironment()
+const { PORT, DATABASE_URL } = envConfig
 
-if (!envValidationResult.valid) {
-	process.exit(1)
-}
-
-// Cache the validated config for use throughout the application
-// Safe to cast here because validation passed
-setEnvConfigCache(envValidationResult.config as unknown as EnvironmentConfig)
+// Initialize proposer module
+await initializeProposer()
 
 // Polyfill for CustomEvent in Node.js environment (required by Helia)
 if (typeof globalThis.CustomEvent === 'undefined') {
@@ -48,26 +55,16 @@ if (typeof globalThis.CustomEvent === 'undefined') {
 	logger.debug('CustomEvent polyfill via jsdom applied.')
 }
 
-import express from 'express'
-import bppkg from 'body-parser'
+/*
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                           SERVER SETUP                                    ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+*/
+
 const { json } = bppkg
-import pgpkg from 'pg'
-const { Pool } = pgpkg
-import {
-	bundleRouter,
-	cidRouter,
-	balanceRouter,
-	vaultNonceRouter,
-} from './routes.js'
-import { handleIntention, createAndPublishBundle } from './proposer.js'
-import { bearerAuth } from './auth.js'
 
 /** Express application instance for the Oya node server */
 const app = express()
-
-/** Get validated environment configuration */
-const { PORT, DATABASE_URL } = getEnvConfig()
-
 app.use(json())
 
 /**
@@ -111,6 +108,14 @@ app.use((req, res, next) => {
 	next()
 })
 
+/*
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                          DATABASE CONNECTION                              ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+*/
+
+const { Pool } = pgpkg
+
 /**
  * PostgreSQL connection pool for database operations.
  * Configured with SSL for secure connections.
@@ -133,6 +138,12 @@ pool
 		logger.error('Failed to initialize database pool:', err)
 		logger.warn('Server will continue but database operations may fail')
 	})
+
+/*
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                            ROUTE HANDLERS                                 ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+*/
 
 // Mount route handlers
 logger.debug('Mounting route handlers')
@@ -194,6 +205,12 @@ app.post('/intention', bearerAuth, async (req, res) => {
 	}
 })
 
+/*
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                          BUNDLE PROCESSING                                ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+*/
+
 /**
  * Interval timer that creates and publishes bundles every 10 seconds.
  * Bundles cached intentions, uploads to IPFS, and submits CIDs to blockchain.
@@ -205,6 +222,12 @@ setInterval(async () => {
 		logger.error('Error creating and publishing bundle', error)
 	}
 }, 10 * 1000)
+
+/*
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                           SERVER STARTUP                                  ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+*/
 
 /**
  * Start the Express server on the configured port

@@ -10,6 +10,7 @@
  *
  * @packageDocumentation
  */
+import dotenv from 'dotenv';
 import { logger } from './logger.js';
 import { envSchema } from '../config/envSchema.js';
 /**
@@ -96,7 +97,7 @@ let cachedConfig = null;
  * Called by index.ts after successful validation.
  * @param config - The validated environment configuration
  */
-export function setConfigCache(config) {
+export function setEnvConfigCache(config) {
     cachedConfig = config;
 }
 /**
@@ -105,13 +106,13 @@ export function setConfigCache(config) {
  * Exits the process if validation fails.
  * @returns Validated environment configuration
  */
-export function getConfig() {
+export function getEnvConfig() {
     // Return cached config if already validated
     if (cachedConfig) {
         return cachedConfig;
     }
     // Fallback validation - this shouldn't normally happen
-    logger.warn('⚠️  getConfig() called before environment validation completed in index.ts');
+    logger.warn('⚠️  getEnvConfig() called before environment validation completed in index.ts');
     logger.warn('Running fallback validation - this may indicate an initialization order issue');
     const result = validateEnv();
     if (!result.valid) {
@@ -120,4 +121,22 @@ export function getConfig() {
     }
     cachedConfig = result.config;
     return cachedConfig;
+}
+/**
+ * Sets up and validates the environment configuration.
+ * Loads .env file, validates all required variables, and caches the config.
+ * @returns Validated environment configuration
+ */
+export function setupEnvironment() {
+    // Load environment variables from .env file
+    dotenv.config();
+    // Validate environment configuration
+    const result = validateEnv();
+    printEnvValidationReport(result);
+    if (!result.valid) {
+        process.exit(1);
+    }
+    // Cache for use throughout application
+    setEnvConfigCache(result.config);
+    return result.config;
 }

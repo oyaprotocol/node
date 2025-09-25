@@ -19,13 +19,12 @@ import { Request, Response, NextFunction } from 'express'
 import { diagnostic } from './utils/logger.js'
 import { getEnvConfig } from './utils/env.js'
 
-const { API_BEARER_TOKEN } = getEnvConfig()
-
 /**
  * Middleware to protect endpoints with Bearer token authorization.
  * Expects Authorization: Bearer <token> header matching API_BEARER_TOKEN.
  */
 export function bearerAuth(req: Request, res: Response, next: NextFunction) {
+	const { API_BEARER_TOKEN } = getEnvConfig()
 	const startTime = Date.now()
 	const authHeader = req.headers['authorization']
 
