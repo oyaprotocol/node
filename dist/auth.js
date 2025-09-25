@@ -15,12 +15,13 @@
  * @packageDocumentation
  */
 import { diagnostic } from './utils/logger.js';
-const API_BEARER_TOKEN = process.env.API_BEARER_TOKEN;
+import { getEnvConfig } from './utils/env.js';
 /**
  * Middleware to protect endpoints with Bearer token authorization.
  * Expects Authorization: Bearer <token> header matching API_BEARER_TOKEN.
  */
 export function bearerAuth(req, res, next) {
+    const { API_BEARER_TOKEN } = getEnvConfig();
     const startTime = Date.now();
     const authHeader = req.headers['authorization'];
     if (!authHeader || typeof authHeader !== 'string') {
