@@ -27,6 +27,7 @@ import { pool } from './index.js';
 import { fileURLToPath } from 'url';
 import zlib from 'zlib';
 import { promisify } from 'util';
+import { getEnvConfig } from './utils/env.js';
 import { createLogger, diagnostic } from './utils/logger.js';
 const gzip = promisify(zlib.gzip);
 const __filename = fileURLToPath(import.meta.url);
@@ -52,22 +53,18 @@ let sepoliaAlchemy;
 let wallet;
 let bundleTrackerContract;
 let s;
-initializeWalletAndContract()
-    .then(() => {
-    logger.info('Bundle proposer initialization complete. Ready to handle proposals.');
-})
-    .catch((error) => {
-    logger.error('Initialization failed:', error);
-});
+// Initialization flag
+let isInitialized = false;
 /**
  * Initializes the BundleTracker contract with ABI and provider.
  * Connects the wallet for transaction signing.
  */
 async function buildBundleTrackerContract() {
+    const { BUNDLE_TRACKER_ADDRESS } = getEnvConfig();
     const abiPath = path.join(__dirname, 'abi', 'BundleTracker.json');
     const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
     const provider = (await sepoliaAlchemy.config.getProvider());
-    const contract = new ethers.Contract(process.env.BUNDLE_TRACKER_ADDRESS, contractABI, provider);
+    const contract = new ethers.Contract(BUNDLE_TRACKER_ADDRESS, contractABI, provider);
     return contract.connect(wallet);
 }
 /**
@@ -75,16 +72,17 @@ async function buildBundleTrackerContract() {
  * Initializes wallet with private key for blockchain transactions.
  */
 async function buildAlchemyInstances() {
+    const { ALCHEMY_API_KEY, TEST_PRIVATE_KEY } = getEnvConfig();
     const mainnet = new Alchemy({
-        apiKey: process.env.ALCHEMY_API_KEY,
+        apiKey: ALCHEMY_API_KEY,
         network: Network.ETH_MAINNET,
     });
     const sepolia = new Alchemy({
-        apiKey: process.env.ALCHEMY_API_KEY,
+        apiKey: ALCHEMY_API_KEY,
         network: Network.ETH_SEPOLIA,
     });
     await mainnet.core.getTokenMetadata('0x04Fa0d235C4abf4BcF4787aF4CF447DE572eF828');
-    const walletInstance = new Wallet(process.env.TEST_PRIVATE_KEY, sepolia);
+    const walletInstance = new Wallet(TEST_PRIVATE_KEY, sepolia);
     return {
         mainnetAlchemy: mainnet,
         sepoliaAlchemy: sepolia,
@@ -283,6 +281,10 @@ async function publishBundle(data, signature, from) {
         compressedSize: compressedData.length,
     });
     logger.info('Bundle published to IPFS, CID:', cidToString);
+    // Ensure initialization before using contract
+    if (!isInitialized) {
+        throw new Error('Proposer not initialized. Call initializeProposer() first');
+    }
     try {
         const tx = await bundleTrackerContract.proposeBundle(cidToString);
         await sepoliaAlchemy.transact.waitForTransaction(tx.hash);
@@ -565,6 +567,10 @@ async function createAndPublishBundle() {
         cycleNumber: bundleCycleCount,
     });
     logger.info('Bundle object to be signed:', JSON.stringify(bundleObject));
+    // Ensure initialization before using wallet
+    if (!isInitialized) {
+        throw new Error('Proposer not initialized. Call initializeProposer() first');
+    }
     const proposerSignature = await wallet.signMessage(JSON.stringify(bundleObject));
     logger.info('Generated bundle proposer signature:', proposerSignature);
     try {
@@ -594,7 +600,24 @@ async function createAndPublishBundle() {
     cachedIntentions = [];
 }
 /**
- * Initializes Alchemy instances, wallet, and smart contract on startup.
+ * Initializes the proposer module.
+ * Must be called after environment validation.
+ * Sets up Alchemy instances, wallet, and smart contract.
+ */
+export async function initializeProposer() {
+    if (isInitialized) {
+        logger.warn('Proposer already initialized');
+        return;
+    }
+    logger.info('Initializing proposer module...');
+    // Initialize wallet and contract
+    await initializeWalletAndContract();
+    isInitialized = true;
+    logger.info('Proposer module initialized successfully');
+}
+/**
+ * Internal: Initializes Alchemy instances, wallet, and smart contract.
+ * @internal
  */
 async function initializeWalletAndContract() {
     const { mainnetAlchemy: mainAlchemy, sepoliaAlchemy: sepAlchemy, wallet: walletInstance, } = await buildAlchemyInstances();
