@@ -196,19 +196,26 @@ async function updateBalance(
 	token: string,
 	newBalance: bigint
 ): Promise<void> {
+	// Validate and normalize addresses
+	const validatedVault = validateAddress(vault, 'vault')
+	const validatedToken = validateAddress(token, 'token')
+
+	if (newBalance < 0n) {
+		throw new Error('Balance cannot be negative')
+	}
 	const result = await pool.query(
-		'SELECT * FROM balances WHERE LOWER(vault) = LOWER($1) AND LOWER(token) = LOWER($2)',
-		[vault, token]
+		'SELECT * FROM balances WHERE vault = $1 AND token = $2',
+		[validatedVault, validatedToken]
 	)
 	if (result.rows.length === 0) {
 		await pool.query(
-			'INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3)',
-			[vault, token, newBalance.toString()]
+			'INSERT INTO balances (vault, token, balance) VALUES ($1, $2, $3)',
+			[validatedVault, validatedToken, newBalance.toString()]
 		)
 	} else {
 		await pool.query(
-			'UPDATE balances SET balance = $1, timestamp = CURRENT_TIMESTAMP WHERE LOWER(vault) = LOWER($2) AND LOWER(token) = LOWER($3)',
-			[newBalance.toString(), vault, token]
+			'UPDATE balances SET balance = $1, timestamp = CURRENT_TIMESTAMP WHERE vault = $2 AND token = $3',
+			[newBalance.toString(), validatedVault, validatedToken]
 		)
 	}
 }
@@ -238,6 +245,8 @@ async function initializeVault(vault: string) {
  * Includes ETH, USDC, and OYA tokens with different decimal places.
  */
 async function initializeBalancesForVault(vault: string) {
+	// Validate vault address
+	const validatedVault = validateAddress(vault, 'vault')
 	const initialBalance18 = parseUnits('10000', 18)
 	const initialBalance6 = parseUnits('1000000', 6)
 	const supportedTokens18: string[] = [
@@ -249,27 +258,27 @@ async function initializeBalancesForVault(vault: string) {
 	const oyaTokens: string[] = ['0x0000000000000000000000000000000000000001']
 	for (const token of supportedTokens18) {
 		await pool.query(
-			'INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3)',
-			[vault, token, initialBalance18.toString()]
+			'INSERT INTO balances (vault, token, balance) VALUES ($1, LOWER($2), $3)',
+			[validatedVault, token, initialBalance18.toString()]
 		)
 	}
 	for (const token of supportedTokens6) {
 		await pool.query(
-			'INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3)',
-			[vault, token, initialBalance6.toString()]
+			'INSERT INTO balances (vault, token, balance) VALUES ($1, LOWER($2), $3)',
+			[validatedVault, token, initialBalance6.toString()]
 		)
 	}
 	for (const token of oyaTokens) {
 		await pool.query(
-			'INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3)',
+			'INSERT INTO balances (vault, token, balance) VALUES ($1, LOWER($2), $3)',
 			[
-				vault,
+				validatedVault,
 				token,
 				/* Note: Removed initialOyaBalance since rewards are not minted */ '0',
 			]
 		)
 	}
-	logger.info(`Vault ${vault} initialized with test tokens`)
+	logger.info(`Vault ${validatedVault} initialized with test tokens`)
 }
 
 /**
@@ -277,14 +286,17 @@ async function initializeBalancesForVault(vault: string) {
  * Updates last_seen timestamp for monitoring.
  */
 async function saveProposerData(proposer: string): Promise<void> {
+	// Validate proposer address
+	const validatedProposer = validateAddress(proposer, 'proposer')
+
 	await pool.query(
 		`INSERT INTO proposers (proposer, last_seen)
-     VALUES (LOWER($1), CURRENT_TIMESTAMP)
+     VALUES ($1, CURRENT_TIMESTAMP)
      ON CONFLICT (proposer)
      DO UPDATE SET last_seen = EXCLUDED.last_seen`,
-		[proposer]
+		[validatedProposer]
 	)
-	logger.info(`Proposer data saved/updated for ${proposer}`)
+	logger.info(`Proposer data saved/updated for ${validatedProposer}`)
 }
 
 /**
@@ -341,6 +353,10 @@ async function publishBundle(data: string, signature: string, from: string) {
 	const startTime = Date.now()
 	await ensureHeliaSetup()
 
+	// Validate and normalize the from address
+	const validatedFrom = validateAddress(from, 'from')
+	const validatedSignature = validateSignature(signature)
+
 	const originalSize = data.length
 	logger.info(
 		'Publishing bundle. Data length (before compression):',
@@ -349,18 +365,18 @@ async function publishBundle(data: string, signature: string, from: string) {
 
 	diagnostic.info('Bundle publish started', {
 		dataSize: originalSize,
-		from,
+		from: validatedFrom,
 		timestamp: startTime,
 	})
 
-	if (from !== PROPOSER_ADDRESS) {
+	if (validatedFrom !== PROPOSER_ADDRESS.toLowerCase()) {
 		throw new Error('Unauthorized: Only the proposer can publish new bundles.')
 	}
 
-	const signerAddress = verifyMessage(data, signature)
+	const signerAddress = verifyMessage(data, validatedSignature)
 	logger.info('Recovered signer address:', signerAddress)
-	if (signerAddress !== from) {
-		logger.error('Expected signer:', from, 'but got:', signerAddress)
+	if (signerAddress.toLowerCase() !== validatedFrom) {
+		logger.error('Expected signer:', validatedFrom, 'but got:', signerAddress)
 		throw new Error('Signature verification failed')
 	}
 
@@ -432,7 +448,7 @@ async function publishBundle(data: string, signature: string, from: string) {
 		throw new Error('Invalid bundle data structure')
 	}
 	try {
-		await saveBundleData(bundleData, cidToString, signature)
+		await saveBundleData(bundleData, cidToString, validatedSignature)
 	} catch (error) {
 		logger.error('Failed to save bundle/CID data:', error)
 		throw new Error('Database operation failed')
@@ -482,31 +498,36 @@ async function updateBalances(
 	token: string,
 	amount: string
 ) {
-	await initializeVault(from)
-	await initializeVault(to)
+	// Validate and normalize all inputs
+	const validatedFrom = validateAddress(from, 'from')
+	const validatedTo = validateAddress(to, 'to')
+	const validatedToken = validateAddress(token, 'token')
+
+	await initializeVault(validatedFrom)
+	await initializeVault(validatedTo)
 	const amountBigInt = safeBigInt(amount)
-	if (from.toLowerCase() === PROPOSER_ADDRESS.toLowerCase()) {
+	if (validatedFrom === PROPOSER_ADDRESS.toLowerCase()) {
 		const largeBalance = parseUnits('1000000000000', 18)
-		await updateBalance(from, token, safeBigInt(largeBalance.toString()))
+		await updateBalance(validatedFrom, validatedToken, safeBigInt(largeBalance.toString()))
 		logger.info(
-			`Bundle proposer balance updated to a large amount for token ${token}`
+			`Bundle proposer balance updated to a large amount for token ${validatedToken}`
 		)
 	}
-	const fromBalance = await getBalance(from, token)
-	const toBalance = await getBalance(to, token)
+	const fromBalance = await getBalance(validatedFrom, validatedToken)
+	const toBalance = await getBalance(validatedTo, validatedToken)
 	const newFromBalance = fromBalance - amountBigInt
 	const newToBalance = toBalance + amountBigInt
 	if (newFromBalance < 0n) {
 		throw new Error('Insufficient balance in from vault')
 	}
 	logger.info(
-		`New balance for from vault (${from}): ${newFromBalance.toString()}`
+		`New balance for from vault (${validatedFrom}): ${newFromBalance.toString()}`
 	)
-	logger.info(`New balance for to vault (${to}): ${newToBalance.toString()}`)
-	await updateBalance(from, token, newFromBalance)
-	await updateBalance(to, token, newToBalance)
+	logger.info(`New balance for to vault (${validatedTo}): ${newToBalance.toString()}`)
+	await updateBalance(validatedFrom, validatedToken, newFromBalance)
+	await updateBalance(validatedTo, validatedToken, newToBalance)
 	logger.info(
-		`Balances updated: from ${from} to ${to} for token ${token} amount ${amount}`
+		`Balances updated: from ${validatedFrom} to ${validatedTo} for token ${validatedToken} amount ${amount}`
 	)
 }
 
