@@ -4,7 +4,7 @@
  * ║                          Validation Utility                               ║
  * ╚═══════════════════════════════════════════════════════════════════════════╝
  *
- * Input validation for Oya Protocol operations.
+ * Lightweight Input validation for Oya Protocol operations.
  * Provides type-safe validation with detailed error reporting.
  *
  * Features:
@@ -115,14 +115,14 @@ export function validateBalance(
 /**
  * Validates a nonce value
  */
-export function validateNonce(nonce: unknown, fieldName: string = 'nonce'): number {
+export function validateNonce(
+	nonce: unknown,
+	fieldName: string = 'nonce'
+): number {
 	if (typeof nonce !== 'number') {
-		throw new ValidationError(
-			'Nonce must be a number',
-			fieldName,
-			nonce,
-			{ receivedType: typeof nonce }
-		)
+		throw new ValidationError('Nonce must be a number', fieldName, nonce, {
+			receivedType: typeof nonce,
+		})
 	}
 
 	if (!Number.isInteger(nonce)) {
@@ -190,7 +190,10 @@ export function validateIntention(intention: Intention): Intention {
 
 		// Validate new format inputs/outputs if present
 		if (intention.inputs) {
-			validated.inputs = validateTokenAmounts(intention.inputs, 'intention.inputs')
+			validated.inputs = validateTokenAmounts(
+				intention.inputs,
+				'intention.inputs'
+			)
 		}
 		if (intention.outputs) {
 			validated.outputs = intention.outputs.map((output, index) => {
@@ -244,7 +247,10 @@ function validateTokenAmounts(
 /**
  * Validates bundle data
  */
-export function validateBundle(bundle: unknown, nonce: unknown): { bundle: unknown; nonce: number } {
+export function validateBundle(
+	bundle: unknown,
+	nonce: unknown
+): { bundle: unknown; nonce: number } {
 	if (!bundle) {
 		throw new ValidationError('Bundle is required', 'bundle', bundle)
 	}
