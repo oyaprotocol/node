@@ -65,7 +65,7 @@ export interface BundleTrackerContract extends ethers.BaseContract {
 	): Promise<ethers.ContractTransaction>
 }
 
-const PROPOSER_ADDRESS = process.env.PROPOSER_ADDRESS as string
+const { PROPOSER_ADDRESS } = getEnvConfig()
 
 let cachedIntentions: Intention[] = []
 
