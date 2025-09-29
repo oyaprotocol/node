@@ -45,6 +45,14 @@ export const envSchema: EnvVariable[] = [
 		},
 	},
 	{
+		name: 'DATABASE_SSL',
+		required: false,
+		type: 'boolean',
+		description: 'Enable SSL for database connections',
+		defaultValue: true,
+		transformer: (value: string) => value.toLowerCase() !== 'false',
+	},
+	{
 		name: 'ALCHEMY_API_KEY',
 		required: true,
 		type: 'string',
