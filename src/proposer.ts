@@ -508,7 +508,11 @@ async function updateBalances(
 	const amountBigInt = safeBigInt(amount)
 	if (validatedFrom === PROPOSER_ADDRESS.toLowerCase()) {
 		const largeBalance = parseUnits('1000000000000', 18)
-		await updateBalance(validatedFrom, validatedToken, safeBigInt(largeBalance.toString()))
+		await updateBalance(
+			validatedFrom,
+			validatedToken,
+			safeBigInt(largeBalance.toString())
+		)
 		logger.info(
 			`Bundle proposer balance updated to a large amount for token ${validatedToken}`
 		)
@@ -523,7 +527,9 @@ async function updateBalances(
 	logger.info(
 		`New balance for from vault (${validatedFrom}): ${newFromBalance.toString()}`
 	)
-	logger.info(`New balance for to vault (${validatedTo}): ${newToBalance.toString()}`)
+	logger.info(
+		`New balance for to vault (${validatedTo}): ${newToBalance.toString()}`
+	)
 	await updateBalance(validatedFrom, validatedToken, newFromBalance)
 	await updateBalance(validatedTo, validatedToken, newToBalance)
 	logger.info(
