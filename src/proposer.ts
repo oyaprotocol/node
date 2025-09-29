@@ -30,7 +30,17 @@ import zlib from 'zlib'
 import { promisify } from 'util'
 import { getEnvConfig } from './utils/env.js'
 import { createLogger, diagnostic } from './utils/logger.js'
-import { Intention, BundleData, IntentionOutput } from './types/core.js'
+import {
+	validateIntention,
+	validateAddress,
+	validateSignature,
+} from './utils/validator.js'
+import type {
+	Intention,
+	BundleData,
+	IntentionOutput,
+	ExecutionWrapper,
+} from './types/core.js'
 
 const gzip = promisify(zlib.gzip)
 
@@ -67,7 +77,7 @@ export interface BundleTrackerContract extends ethers.BaseContract {
 
 const PROPOSER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf' // For testing
 
-let cachedIntentions: Intention[] = []
+let cachedIntentions: ExecutionWrapper[] = []
 
 let mainnetAlchemy: Alchemy
 let sepoliaAlchemy: Alchemy
@@ -508,72 +518,91 @@ async function handleIntention(
 	intention: Intention,
 	signature: string,
 	from: string
-): Promise<Intention> {
+): Promise<ExecutionWrapper> {
 	const startTime = Date.now()
 
+	// Validate inputs
+	const validatedIntention = validateIntention(intention)
+	const validatedSignature = validateSignature(signature)
+	const validatedFrom = validateAddress(from, 'from')
+
 	diagnostic.trace('Starting intention processing', {
-		from,
+		from: validatedFrom,
 		intentionType:
-			'action_type' in intention ? intention.action_type : 'legacy',
-		intentionNonce: intention.nonce,
+			'action_type' in validatedIntention
+				? validatedIntention.action_type
+				: 'legacy',
+		intentionNonce: validatedIntention.nonce,
 		timestamp: startTime,
 	})
 
-	await initializeVault(from)
-	logger.info('Handling intention. Raw intention:', JSON.stringify(intention))
-	logger.info('Received signature:', signature)
+	await initializeVault(validatedFrom)
+	logger.info(
+		'Handling intention. Raw intention:',
+		JSON.stringify(validatedIntention)
+	)
+	logger.info('Received signature:', validatedSignature)
 
 	const verifyStartTime = Date.now()
-	const signerAddress = verifyMessage(JSON.stringify(intention), signature)
+	const signerAddress = verifyMessage(
+		JSON.stringify(validatedIntention),
+		validatedSignature
+	)
 
 	diagnostic.debug('Signature verification completed', {
 		recoveredAddress: signerAddress,
-		expectedAddress: from,
+		expectedAddress: validatedFrom,
 		verificationTime: Date.now() - verifyStartTime,
-		signatureValid: signerAddress === from,
+		signatureValid: signerAddress.toLowerCase() === validatedFrom,
 	})
 
 	logger.info('Recovered signer address from intention:', signerAddress)
-	if (signerAddress !== from) {
+	if (signerAddress.toLowerCase() !== validatedFrom) {
 		logger.info(
 			'Signature verification failed. Expected:',
-			from,
+			validatedFrom,
 			'Got:',
 			signerAddress
 		)
 		diagnostic.error('Signature mismatch', {
-			expected: from,
+			expected: validatedFrom,
 			received: signerAddress,
-			intention: intention,
+			intention: validatedIntention,
 		})
 		throw new Error('Signature verification failed')
 	}
 	const proof: unknown[] = []
 	if (
-		intention.action_type === 'transfer' ||
-		intention.action_type === 'swap'
+		validatedIntention.action_type === 'transfer' ||
+		validatedIntention.action_type === 'swap'
 	) {
-		if (!intention.from_token_address || !intention.amount_sent) {
+		if (
+			!validatedIntention.from_token_address ||
+			!validatedIntention.amount_sent
+		) {
 			throw new Error('Missing required fields for transfer/swap')
 		}
-		const tokenAddress = intention.from_token_address
+		const tokenAddress = validatedIntention.from_token_address
 		const sentTokenDecimals = await getTokenDecimals(tokenAddress)
 		const amountSent = parseUnits(
-			intention.amount_sent,
+			validatedIntention.amount_sent,
 			Number(sentTokenDecimals)
 		)
 		let amountReceived
-		if (intention.amount_received && intention.to_token_address) {
+		if (
+			validatedIntention.amount_received &&
+			validatedIntention.to_token_address
+		) {
 			const receivedTokenDecimals = await getTokenDecimals(
-				intention.to_token_address
+				validatedIntention.to_token_address
 			)
 			amountReceived = parseUnits(
-				intention.amount_received,
+				validatedIntention.amount_received,
 				Number(receivedTokenDecimals)
 			)
 		}
 		const amountSentBigInt = safeBigInt(amountSent.toString())
-		const currentBalance = await getBalance(from, tokenAddress)
+		const currentBalance = await getBalance(validatedFrom, tokenAddress)
 
 		diagnostic.trace('Balance check', {
 			vault: from,
@@ -606,18 +635,18 @@ async function handleIntention(
 			}
 			const swapInput = {
 				token: tokenAddress,
-				chainId: intention.from_token_chainid,
-				from: intention.from,
+				chainId: validatedIntention.from_token_chainid,
+				from: validatedIntention.from,
 				to: PROPOSER_ADDRESS,
 				amount: amountSent.toString(),
 				tokenId: 0,
 			}
 			proof.push(swapInput)
 			const swapOutput = {
-				token: intention.to_token_address,
-				chainId: intention.to_token_chainid,
+				token: validatedIntention.to_token_address,
+				chainId: validatedIntention.to_token_chainid,
 				from: PROPOSER_ADDRESS,
-				to: intention.from,
+				to: validatedIntention.from,
 				amount: amountReceived.toString(),
 				tokenId: 0,
 			}
@@ -625,9 +654,9 @@ async function handleIntention(
 		} else {
 			const transfer = {
 				token: tokenAddress,
-				chainId: intention.from_token_chainid,
-				from: intention.from,
-				to: intention.to,
+				chainId: validatedIntention.from_token_chainid,
+				from: validatedIntention.from,
+				to: validatedIntention.to,
 				amount: amountSent.toString(),
 				tokenId: 0,
 			}
@@ -654,12 +683,12 @@ async function handleIntention(
 			})
 		}
 	} else {
-		logger.error('Unexpected intention format:', intention)
+		logger.error('Unexpected intention format:', validatedIntention)
 	}
-	const executionObject = {
+	const executionObject: ExecutionWrapper = {
 		execution: [
 			{
-				intention: intention,
+				intention: validatedIntention,
 				proof: proof,
 			},
 		],
@@ -667,9 +696,11 @@ async function handleIntention(
 	cachedIntentions.push(executionObject)
 
 	diagnostic.info('Intention processed successfully', {
-		from,
+		from: validatedFrom,
 		intentionType:
-			'action_type' in intention ? intention.action_type : 'legacy',
+			'action_type' in validatedIntention
+				? validatedIntention.action_type
+				: 'legacy',
 		processingTime: Date.now() - startTime,
 		totalCachedIntentions: cachedIntentions.length,
 		proofCount: proof.length,
