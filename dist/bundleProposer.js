@@ -17,7 +17,7 @@ function safeBigInt(value) {
     return BigInt(integerPart);
 }
 // Constants (from your original oya-node code)
-const PROPOSER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
+const PROPOSER_ADDRESS = process.env.PROPOSER_ADDRESS;
 // Global variables
 let cachedIntentions = [];
 let mainnetAlchemy;

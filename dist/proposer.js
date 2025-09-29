@@ -46,7 +46,7 @@ function safeBigInt(value) {
     const integerPart = value.split('.')[0];
     return BigInt(integerPart);
 }
-const PROPOSER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf'; // For testing
+const PROPOSER_ADDRESS = process.env.PROPOSER_ADDRESS;
 let cachedIntentions = [];
 let mainnetAlchemy;
 let sepoliaAlchemy;
