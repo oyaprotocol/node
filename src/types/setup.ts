@@ -68,7 +68,7 @@ export interface EnvironmentConfig {
 	BUNDLE_TRACKER_ADDRESS: string
 	/** Ethereum address of the bundle proposer */
 	PROPOSER_ADDRESS: string
-	/** Private key of the block proposer account */
+	/** Private key of the bundle proposer account */
 	TEST_PRIVATE_KEY: string
 	/** Port number for the Express server (default: 3000) */
 	PORT: number
