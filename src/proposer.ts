@@ -572,7 +572,7 @@ async function handleIntention(
 
 	const verifyStartTime = Date.now()
 	const signerAddress = verifyMessage(
-		JSON.stringify(validatedIntention),
+		JSON.stringify(intention),
 		validatedSignature
 	)
 
