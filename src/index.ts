@@ -31,6 +31,7 @@ import {
 	initializeProposer,
 } from './proposer.js'
 import { bearerAuth } from './auth.js'
+import { handleValidationError } from './utils/validator.js'
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -199,14 +200,13 @@ app.post('/intention', bearerAuth, async (req, res) => {
 
 		res.status(200).json(response)
 	} catch (error) {
+		const errorResponse = handleValidationError(error)
 		diagnostic.error('Intention processing failed', {
-			error: error instanceof Error ? error.message : String(error),
+			error: errorResponse.error,
 			processingTime: Date.now() - startTime,
 		})
 		logger.error('Error handling intention', error)
-		res
-			.status(500)
-			.json({ error: error instanceof Error ? error.message : 'Unknown error' })
+		res.status(errorResponse.status).json(errorResponse)
 	}
 })
 

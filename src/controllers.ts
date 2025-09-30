@@ -20,6 +20,7 @@ import { Request, Response } from 'express'
 import { pool } from './index.js'
 import { RequestBody } from './types/core.js'
 import { createLogger, diagnostic } from './utils/logger.js'
+import { validateBundle, handleValidationError } from './utils/validator.js'
 
 /** Logger instance for controllers module */
 const logger = createLogger('Controller')
@@ -31,17 +32,20 @@ const logger = createLogger('Controller')
  */
 export const saveBundle = async (req: Request, res: Response) => {
 	const startTime = Date.now()
-	const { bundle, nonce } = req.body as RequestBody
+	let { bundle, nonce } = req.body as RequestBody
 
 	logger.info('Received bundle:', JSON.stringify(bundle, null, 2))
 	logger.info('Received nonce:', nonce)
 
-	if (!bundle || typeof nonce !== 'number') {
-		diagnostic.debug('Invalid bundle data', {
-			hasBundle: !!bundle,
-			nonceType: typeof nonce,
-		})
-		return res.status(400).json({ error: 'Invalid bundle data' })
+	// Validate bundle data
+	try {
+		const validated = validateBundle(bundle, nonce)
+		bundle = validated.bundle
+		nonce = validated.nonce
+	} catch (error) {
+		const errorResponse = handleValidationError(error)
+		diagnostic.debug('Bundle validation failed', errorResponse)
+		return res.status(errorResponse.status).json(errorResponse)
 	}
 
 	try {
