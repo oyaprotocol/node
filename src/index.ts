@@ -11,7 +11,6 @@
  * @packageDocumentation
  */
 
-import { JSDOM } from 'jsdom'
 import express from 'express'
 import bppkg from 'body-parser'
 import pgpkg from 'pg'
@@ -52,13 +51,6 @@ try {
 } catch (error) {
 	logger.error('Failed to initialize proposer:', error)
 	process.exit(1)
-}
-
-// Polyfill for CustomEvent in Node.js environment (required by Helia)
-if (typeof globalThis.CustomEvent === 'undefined') {
-	const { window } = new JSDOM()
-	globalThis.CustomEvent = window.CustomEvent
-	logger.debug('CustomEvent polyfill via jsdom applied.')
 }
 
 /*
