@@ -93,8 +93,7 @@ export async function validateConnection(
 				lastError.message.includes('does not exist')
 			) {
 				logger.warn(
-					'‼️ Database does not exist. Create it with: ' +
-						'createdb oya_db (or use psql/pgAdmin)'
+					'‼️ Database does not exist. Create it with: npm run db:create'
 				)
 			} else if (lastError.message.includes('password authentication failed')) {
 				logger.warn(
@@ -171,6 +170,10 @@ export async function validateSchema(
 
 		if (missingTables.length > 0) {
 			logger.error('Missing database tables:', missingTables)
+			logger.warn(
+				'‼️ Database tables are missing. Create them with: npm run db:setup'
+			)
+
 			diagnostic.error('Schema validation failed', {
 				missingTables,
 				validationTime: Date.now() - startTime,
@@ -178,7 +181,7 @@ export async function validateSchema(
 
 			return {
 				success: false,
-				error: `Missing required tables: ${missingTables.join(', ')}`,
+				error: `Missing required tables: ${missingTables.join(', ')}. Run 'npm run db:setup' to create them`,
 				details: { missingTables },
 			}
 		}

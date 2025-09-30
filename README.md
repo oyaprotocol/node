@@ -97,7 +97,23 @@ TEST_PRIVATE_KEY=your_private_key
 
 ## Database Setup
 
-The database schema is managed via SQL migration scripts. For example, the `migrations/1_createTable.sh` script drops (if needed) and creates the following tables:
+The database can be created and set up using the provided scripts:
+
+```bash
+# Create the oya_db database (if it doesn't exist)
+npm run db:create
+
+# Set up database tables (safe to run multiple times)
+npm run db:setup
+
+# Drop and recreate all tables (WARNING: deletes all data!)
+npm run db:reset
+
+# Or run directly with custom DATABASE_URL
+DATABASE_URL=postgresql://user:pass@localhost:5432/oya_db node scripts/setup-db.js
+```
+
+The setup script creates the following tables:
 
 - **bundles:** Stores bundle data and nonce.
 - **cids:** Stores IPFS CIDs corresponding to bundles.

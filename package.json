@@ -13,6 +13,9 @@
 		"format.check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
 		"types.check": "tsc --noEmit",
 		"local-ci": "node scripts/local-ci.js",
+		"db:create": "node scripts/create-db.js",
+		"db:setup": "node scripts/setup-db.js",
+		"db:reset": "FORCE_DROP=true node scripts/setup-db.js --drop-existing",
 		"prepare": "husky"
 	},
 	"dependencies": {
