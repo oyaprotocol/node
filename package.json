@@ -13,7 +13,7 @@
 		"format.check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
 		"types.check": "tsc --noEmit",
 		"local-ci": "node scripts/local-ci.js",
-		"prepare": "husky"
+                "prepare": "command -v husky >/dev/null 2>&1 && husky || true"
 	},
 	"dependencies": {
 		"@helia/strings": "^4.1.0",
