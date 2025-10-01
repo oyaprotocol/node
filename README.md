@@ -91,7 +91,7 @@ BUNDLE_TRACKER_ADDRESS=your_bundle_tracker_contract_address
 
 # Public/Private key used by the bundle proposer for signing bundles (ensure this is kept secure)
 PROPOSER_ADDRESS=your_public_key
-TEST_PRIVATE_KEY=your_private_key
+PROPOSER_KEY=your_private_key
 ```
 
 (For testing purposes, you might also use a .env.test file.)

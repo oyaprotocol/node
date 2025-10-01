@@ -75,8 +75,6 @@ export interface BundleTrackerContract extends ethers.BaseContract {
 	): Promise<ethers.ContractTransaction>
 }
 
-const { PROPOSER_ADDRESS } = getEnvConfig()
-
 let cachedIntentions: ExecutionWrapper[] = []
 
 let mainnetAlchemy: Alchemy
@@ -114,7 +112,7 @@ async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
  * Initializes wallet with private key for blockchain transactions.
  */
 async function buildAlchemyInstances() {
-	const { ALCHEMY_API_KEY, TEST_PRIVATE_KEY } = getEnvConfig()
+	const { ALCHEMY_API_KEY, PROPOSER_KEY } = getEnvConfig()
 	const mainnet = new Alchemy({
 		apiKey: ALCHEMY_API_KEY,
 		network: Network.ETH_MAINNET,
@@ -126,7 +124,7 @@ async function buildAlchemyInstances() {
 	await mainnet.core.getTokenMetadata(
 		'0x04Fa0d235C4abf4BcF4787aF4CF447DE572eF828'
 	)
-	const walletInstance = new Wallet(TEST_PRIVATE_KEY, sepolia)
+	const walletInstance = new Wallet(PROPOSER_KEY, sepolia)
 	return {
 		mainnetAlchemy: mainnet,
 		sepoliaAlchemy: sepolia,
@@ -308,6 +306,7 @@ async function saveBundleData(
 	cidToString: string,
 	proposerSignature: string
 ) {
+	const { PROPOSER_ADDRESS } = getEnvConfig()
 	// Convert the bundle (JSON) to a Buffer for the BYTEA column
 	const bundleBuffer = Buffer.from(JSON.stringify(bundleData.bundle), 'utf8')
 	await pool.query(
@@ -369,6 +368,7 @@ async function publishBundle(data: string, signature: string, from: string) {
 		timestamp: startTime,
 	})
 
+	const { PROPOSER_ADDRESS } = getEnvConfig()
 	if (validatedFrom !== PROPOSER_ADDRESS.toLowerCase()) {
 		throw new Error('Unauthorized: Only the proposer can publish new bundles.')
 	}
@@ -429,6 +429,7 @@ async function publishBundle(data: string, signature: string, from: string) {
 		)
 		logger.info('Blockchain transaction successful')
 		// Save proposer data after successful blockchain transaction.
+		const { PROPOSER_ADDRESS } = getEnvConfig()
 		await saveProposerData(PROPOSER_ADDRESS)
 	} catch (error) {
 		logger.error('Failed to propose bundle:', error)
@@ -506,6 +507,7 @@ async function updateBalances(
 	await initializeVault(validatedFrom)
 	await initializeVault(validatedTo)
 	const amountBigInt = safeBigInt(amount)
+	const { PROPOSER_ADDRESS } = getEnvConfig()
 	if (validatedFrom === PROPOSER_ADDRESS.toLowerCase()) {
 		const largeBalance = parseUnits('1000000000000', 18)
 		await updateBalance(
@@ -660,6 +662,7 @@ async function handleIntention(
 			if (amountReceived === undefined || !intention.to_token_address) {
 				throw new Error('Missing amountReceived or to_token_address for swap')
 			}
+			const { PROPOSER_ADDRESS } = getEnvConfig()
 			const swapInput = {
 				token: tokenAddress,
 				chainId: validatedIntention.from_token_chainid,
@@ -799,6 +802,7 @@ async function createAndPublishBundle() {
 	)
 	logger.info('Generated bundle proposer signature:', proposerSignature)
 	try {
+		const { PROPOSER_ADDRESS } = getEnvConfig()
 		await publishBundle(
 			JSON.stringify(bundleObject),
 			proposerSignature,

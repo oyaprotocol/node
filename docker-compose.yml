@@ -9,7 +9,7 @@ services:
       - DATABASE_URL=postgres://postgres:password@db:5432/node
       - ALCHEMY_API_KEY=your_alchemy_api_key
       - BUNDLE_TRACKER_ADDRESS=your_bundle_tracker_contract_address
-      - TEST_PRIVATE_KEY=your_private_key
+      - PROPOSER_KEY=your_private_key
     depends_on:
       - db
     volumes:
