@@ -116,7 +116,7 @@ async function createDatabase() {
 		if (checkResult.rows.length > 0) {
 			console.log(chalk.green(`✓ Database '${DB_NAME}' already exists`))
 			console.log(chalk.cyan('\nDatabase is ready! You can now run:'))
-			console.log(chalk.gray(`  npm run db:setup`))
+			console.log(chalk.gray(`  bun run db:setup`))
 			console.log(chalk.gray(`\nTo create/update tables\n`))
 			process.exit(0)
 		}
@@ -134,7 +134,7 @@ async function createDatabase() {
 		console.log(chalk.gray('1. Ensure your .env file has:'))
 		console.log(chalk.gray(`   DATABASE_URL=${suggestedUrl}`))
 		console.log(chalk.gray('\n2. Create the tables:'))
-		console.log(chalk.gray(`   npm run db:setup\n`))
+		console.log(chalk.gray(`   bun run db:setup\n`))
 
 	} catch (error) {
 		console.error(chalk.red('\n❌ Database creation failed:'))
