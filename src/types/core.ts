@@ -68,6 +68,17 @@ export interface Execution {
 }
 
 /**
+ * Wrapper for execution objects that are cached before bundling.
+ * Used internally by the proposer to accumulate intentions.
+ */
+export interface ExecutionWrapper {
+	execution: Array<{
+		intention: Intention
+		proof: unknown[]
+	}>
+}
+
+/**
  * Request body structure for bundle submissions.
  */
 export interface RequestBody {

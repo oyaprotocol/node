@@ -68,8 +68,10 @@ export interface EnvironmentConfig {
 	ALCHEMY_API_KEY: string
 	/** Ethereum address of the BundleTracker smart contract */
 	BUNDLE_TRACKER_ADDRESS: string
-	/** Private key of the block proposer account */
-	TEST_PRIVATE_KEY: string
+	/** Ethereum address of the bundle proposer */
+	PROPOSER_ADDRESS: string
+	/** Private key of the bundle proposer account */
+	PROPOSER_KEY: string
 	/** Port number for the Express server (default: 3000) */
 	PORT: number
 	/** Logging verbosity level 0-6 (default: 3/info) */

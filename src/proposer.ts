@@ -30,7 +30,17 @@ import zlib from 'zlib'
 import { promisify } from 'util'
 import { getEnvConfig } from './utils/env.js'
 import { createLogger, diagnostic } from './utils/logger.js'
-import { Intention, BundleData, IntentionOutput } from './types/core.js'
+import {
+	validateIntention,
+	validateAddress,
+	validateSignature,
+} from './utils/validator.js'
+import type {
+	Intention,
+	BundleData,
+	IntentionOutput,
+	ExecutionWrapper,
+} from './types/core.js'
 
 const gzip = promisify(zlib.gzip)
 
@@ -65,9 +75,7 @@ export interface BundleTrackerContract extends ethers.BaseContract {
 	): Promise<ethers.ContractTransaction>
 }
 
-const PROPOSER_ADDRESS = '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf' // For testing
-
-let cachedIntentions: Intention[] = []
+let cachedIntentions: ExecutionWrapper[] = []
 
 let mainnetAlchemy: Alchemy
 let sepoliaAlchemy: Alchemy
@@ -104,7 +112,7 @@ async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
  * Initializes wallet with private key for blockchain transactions.
  */
 async function buildAlchemyInstances() {
-	const { ALCHEMY_API_KEY, TEST_PRIVATE_KEY } = getEnvConfig()
+	const { ALCHEMY_API_KEY, PROPOSER_KEY } = getEnvConfig()
 	const mainnet = new Alchemy({
 		apiKey: ALCHEMY_API_KEY,
 		network: Network.ETH_MAINNET,
@@ -116,7 +124,7 @@ async function buildAlchemyInstances() {
 	await mainnet.core.getTokenMetadata(
 		'0x04Fa0d235C4abf4BcF4787aF4CF447DE572eF828'
 	)
-	const walletInstance = new Wallet(TEST_PRIVATE_KEY, sepolia)
+	const walletInstance = new Wallet(PROPOSER_KEY, sepolia)
 	return {
 		mainnetAlchemy: mainnet,
 		sepoliaAlchemy: sepolia,
@@ -186,19 +194,26 @@ async function updateBalance(
 	token: string,
 	newBalance: bigint
 ): Promise<void> {
+	// Validate and normalize addresses
+	const validatedVault = validateAddress(vault, 'vault')
+	const validatedToken = validateAddress(token, 'token')
+
+	if (newBalance < 0n) {
+		throw new Error('Balance cannot be negative')
+	}
 	const result = await pool.query(
-		'SELECT * FROM balances WHERE LOWER(vault) = LOWER($1) AND LOWER(token) = LOWER($2)',
-		[vault, token]
+		'SELECT * FROM balances WHERE vault = $1 AND token = $2',
+		[validatedVault, validatedToken]
 	)
 	if (result.rows.length === 0) {
 		await pool.query(
-			'INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3)',
-			[vault, token, newBalance.toString()]
+			'INSERT INTO balances (vault, token, balance) VALUES ($1, $2, $3)',
+			[validatedVault, validatedToken, newBalance.toString()]
 		)
 	} else {
 		await pool.query(
-			'UPDATE balances SET balance = $1, timestamp = CURRENT_TIMESTAMP WHERE LOWER(vault) = LOWER($2) AND LOWER(token) = LOWER($3)',
-			[newBalance.toString(), vault, token]
+			'UPDATE balances SET balance = $1, timestamp = CURRENT_TIMESTAMP WHERE vault = $2 AND token = $3',
+			[newBalance.toString(), validatedVault, validatedToken]
 		)
 	}
 }
@@ -228,6 +243,8 @@ async function initializeVault(vault: string) {
  * Includes ETH, USDC, and OYA tokens with different decimal places.
  */
 async function initializeBalancesForVault(vault: string) {
+	// Validate vault address
+	const validatedVault = validateAddress(vault, 'vault')
 	const initialBalance18 = parseUnits('10000', 18)
 	const initialBalance6 = parseUnits('1000000', 6)
 	const supportedTokens18: string[] = [
@@ -239,27 +256,27 @@ async function initializeBalancesForVault(vault: string) {
 	const oyaTokens: string[] = ['0x0000000000000000000000000000000000000001']
 	for (const token of supportedTokens18) {
 		await pool.query(
-			'INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3)',
-			[vault, token, initialBalance18.toString()]
+			'INSERT INTO balances (vault, token, balance) VALUES ($1, LOWER($2), $3)',
+			[validatedVault, token, initialBalance18.toString()]
 		)
 	}
 	for (const token of supportedTokens6) {
 		await pool.query(
-			'INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3)',
-			[vault, token, initialBalance6.toString()]
+			'INSERT INTO balances (vault, token, balance) VALUES ($1, LOWER($2), $3)',
+			[validatedVault, token, initialBalance6.toString()]
 		)
 	}
 	for (const token of oyaTokens) {
 		await pool.query(
-			'INSERT INTO balances (vault, token, balance) VALUES (LOWER($1), LOWER($2), $3)',
+			'INSERT INTO balances (vault, token, balance) VALUES ($1, LOWER($2), $3)',
 			[
-				vault,
+				validatedVault,
 				token,
 				/* Note: Removed initialOyaBalance since rewards are not minted */ '0',
 			]
 		)
 	}
-	logger.info(`Vault ${vault} initialized with test tokens`)
+	logger.info(`Vault ${validatedVault} initialized with test tokens`)
 }
 
 /**
@@ -267,14 +284,17 @@ async function initializeBalancesForVault(vault: string) {
  * Updates last_seen timestamp for monitoring.
  */
 async function saveProposerData(proposer: string): Promise<void> {
+	// Validate proposer address
+	const validatedProposer = validateAddress(proposer, 'proposer')
+
 	await pool.query(
 		`INSERT INTO proposers (proposer, last_seen)
-     VALUES (LOWER($1), CURRENT_TIMESTAMP)
+     VALUES ($1, CURRENT_TIMESTAMP)
      ON CONFLICT (proposer)
      DO UPDATE SET last_seen = EXCLUDED.last_seen`,
-		[proposer]
+		[validatedProposer]
 	)
-	logger.info(`Proposer data saved/updated for ${proposer}`)
+	logger.info(`Proposer data saved/updated for ${validatedProposer}`)
 }
 
 /**
@@ -286,6 +306,7 @@ async function saveBundleData(
 	cidToString: string,
 	proposerSignature: string
 ) {
+	const { PROPOSER_ADDRESS } = getEnvConfig()
 	// Convert the bundle (JSON) to a Buffer for the BYTEA column
 	const bundleBuffer = Buffer.from(JSON.stringify(bundleData.bundle), 'utf8')
 	await pool.query(
@@ -331,6 +352,10 @@ async function publishBundle(data: string, signature: string, from: string) {
 	const startTime = Date.now()
 	await ensureHeliaSetup()
 
+	// Validate and normalize the from address
+	const validatedFrom = validateAddress(from, 'from')
+	const validatedSignature = validateSignature(signature)
+
 	const originalSize = data.length
 	logger.info(
 		'Publishing bundle. Data length (before compression):',
@@ -339,18 +364,19 @@ async function publishBundle(data: string, signature: string, from: string) {
 
 	diagnostic.info('Bundle publish started', {
 		dataSize: originalSize,
-		from,
+		from: validatedFrom,
 		timestamp: startTime,
 	})
 
-	if (from !== PROPOSER_ADDRESS) {
+	const { PROPOSER_ADDRESS } = getEnvConfig()
+	if (validatedFrom !== PROPOSER_ADDRESS.toLowerCase()) {
 		throw new Error('Unauthorized: Only the proposer can publish new bundles.')
 	}
 
-	const signerAddress = verifyMessage(data, signature)
+	const signerAddress = verifyMessage(data, validatedSignature)
 	logger.info('Recovered signer address:', signerAddress)
-	if (signerAddress !== from) {
-		logger.error('Expected signer:', from, 'but got:', signerAddress)
+	if (signerAddress.toLowerCase() !== validatedFrom) {
+		logger.error('Expected signer:', validatedFrom, 'but got:', signerAddress)
 		throw new Error('Signature verification failed')
 	}
 
@@ -403,6 +429,7 @@ async function publishBundle(data: string, signature: string, from: string) {
 		)
 		logger.info('Blockchain transaction successful')
 		// Save proposer data after successful blockchain transaction.
+		const { PROPOSER_ADDRESS } = getEnvConfig()
 		await saveProposerData(PROPOSER_ADDRESS)
 	} catch (error) {
 		logger.error('Failed to propose bundle:', error)
@@ -422,7 +449,7 @@ async function publishBundle(data: string, signature: string, from: string) {
 		throw new Error('Invalid bundle data structure')
 	}
 	try {
-		await saveBundleData(bundleData, cidToString, signature)
+		await saveBundleData(bundleData, cidToString, validatedSignature)
 	} catch (error) {
 		logger.error('Failed to save bundle/CID data:', error)
 		throw new Error('Database operation failed')
@@ -472,31 +499,43 @@ async function updateBalances(
 	token: string,
 	amount: string
 ) {
-	await initializeVault(from)
-	await initializeVault(to)
+	// Validate and normalize all inputs
+	const validatedFrom = validateAddress(from, 'from')
+	const validatedTo = validateAddress(to, 'to')
+	const validatedToken = validateAddress(token, 'token')
+
+	await initializeVault(validatedFrom)
+	await initializeVault(validatedTo)
 	const amountBigInt = safeBigInt(amount)
-	if (from.toLowerCase() === PROPOSER_ADDRESS.toLowerCase()) {
+	const { PROPOSER_ADDRESS } = getEnvConfig()
+	if (validatedFrom === PROPOSER_ADDRESS.toLowerCase()) {
 		const largeBalance = parseUnits('1000000000000', 18)
-		await updateBalance(from, token, safeBigInt(largeBalance.toString()))
+		await updateBalance(
+			validatedFrom,
+			validatedToken,
+			safeBigInt(largeBalance.toString())
+		)
 		logger.info(
-			`Bundle proposer balance updated to a large amount for token ${token}`
+			`Bundle proposer balance updated to a large amount for token ${validatedToken}`
 		)
 	}
-	const fromBalance = await getBalance(from, token)
-	const toBalance = await getBalance(to, token)
+	const fromBalance = await getBalance(validatedFrom, validatedToken)
+	const toBalance = await getBalance(validatedTo, validatedToken)
 	const newFromBalance = fromBalance - amountBigInt
 	const newToBalance = toBalance + amountBigInt
 	if (newFromBalance < 0n) {
 		throw new Error('Insufficient balance in from vault')
 	}
 	logger.info(
-		`New balance for from vault (${from}): ${newFromBalance.toString()}`
+		`New balance for from vault (${validatedFrom}): ${newFromBalance.toString()}`
 	)
-	logger.info(`New balance for to vault (${to}): ${newToBalance.toString()}`)
-	await updateBalance(from, token, newFromBalance)
-	await updateBalance(to, token, newToBalance)
 	logger.info(
-		`Balances updated: from ${from} to ${to} for token ${token} amount ${amount}`
+		`New balance for to vault (${validatedTo}): ${newToBalance.toString()}`
+	)
+	await updateBalance(validatedFrom, validatedToken, newFromBalance)
+	await updateBalance(validatedTo, validatedToken, newToBalance)
+	logger.info(
+		`Balances updated: from ${validatedFrom} to ${validatedTo} for token ${validatedToken} amount ${amount}`
 	)
 }
 
@@ -508,72 +547,91 @@ async function handleIntention(
 	intention: Intention,
 	signature: string,
 	from: string
-): Promise<Intention> {
+): Promise<ExecutionWrapper> {
 	const startTime = Date.now()
 
+	// Validate inputs
+	const validatedIntention = validateIntention(intention)
+	const validatedSignature = validateSignature(signature)
+	const validatedFrom = validateAddress(from, 'from')
+
 	diagnostic.trace('Starting intention processing', {
-		from,
+		from: validatedFrom,
 		intentionType:
-			'action_type' in intention ? intention.action_type : 'legacy',
-		intentionNonce: intention.nonce,
+			'action_type' in validatedIntention
+				? validatedIntention.action_type
+				: 'legacy',
+		intentionNonce: validatedIntention.nonce,
 		timestamp: startTime,
 	})
 
-	await initializeVault(from)
-	logger.info('Handling intention. Raw intention:', JSON.stringify(intention))
-	logger.info('Received signature:', signature)
+	await initializeVault(validatedFrom)
+	logger.info(
+		'Handling intention. Raw intention:',
+		JSON.stringify(validatedIntention)
+	)
+	logger.info('Received signature:', validatedSignature)
 
 	const verifyStartTime = Date.now()
-	const signerAddress = verifyMessage(JSON.stringify(intention), signature)
+	const signerAddress = verifyMessage(
+		JSON.stringify(intention),
+		validatedSignature
+	)
 
 	diagnostic.debug('Signature verification completed', {
 		recoveredAddress: signerAddress,
-		expectedAddress: from,
+		expectedAddress: validatedFrom,
 		verificationTime: Date.now() - verifyStartTime,
-		signatureValid: signerAddress === from,
+		signatureValid: signerAddress.toLowerCase() === validatedFrom,
 	})
 
 	logger.info('Recovered signer address from intention:', signerAddress)
-	if (signerAddress !== from) {
+	if (signerAddress.toLowerCase() !== validatedFrom) {
 		logger.info(
 			'Signature verification failed. Expected:',
-			from,
+			validatedFrom,
 			'Got:',
 			signerAddress
 		)
 		diagnostic.error('Signature mismatch', {
-			expected: from,
+			expected: validatedFrom,
 			received: signerAddress,
-			intention: intention,
+			intention: validatedIntention,
 		})
 		throw new Error('Signature verification failed')
 	}
 	const proof: unknown[] = []
 	if (
-		intention.action_type === 'transfer' ||
-		intention.action_type === 'swap'
+		validatedIntention.action_type === 'transfer' ||
+		validatedIntention.action_type === 'swap'
 	) {
-		if (!intention.from_token_address || !intention.amount_sent) {
+		if (
+			!validatedIntention.from_token_address ||
+			!validatedIntention.amount_sent
+		) {
 			throw new Error('Missing required fields for transfer/swap')
 		}
-		const tokenAddress = intention.from_token_address
+		const tokenAddress = validatedIntention.from_token_address
 		const sentTokenDecimals = await getTokenDecimals(tokenAddress)
 		const amountSent = parseUnits(
-			intention.amount_sent,
+			validatedIntention.amount_sent,
 			Number(sentTokenDecimals)
 		)
 		let amountReceived
-		if (intention.amount_received && intention.to_token_address) {
+		if (
+			validatedIntention.amount_received &&
+			validatedIntention.to_token_address
+		) {
 			const receivedTokenDecimals = await getTokenDecimals(
-				intention.to_token_address
+				validatedIntention.to_token_address
 			)
 			amountReceived = parseUnits(
-				intention.amount_received,
+				validatedIntention.amount_received,
 				Number(receivedTokenDecimals)
 			)
 		}
 		const amountSentBigInt = safeBigInt(amountSent.toString())
-		const currentBalance = await getBalance(from, tokenAddress)
+		const currentBalance = await getBalance(validatedFrom, tokenAddress)
 
 		diagnostic.trace('Balance check', {
 			vault: from,
@@ -604,20 +662,21 @@ async function handleIntention(
 			if (amountReceived === undefined || !intention.to_token_address) {
 				throw new Error('Missing amountReceived or to_token_address for swap')
 			}
+			const { PROPOSER_ADDRESS } = getEnvConfig()
 			const swapInput = {
 				token: tokenAddress,
-				chainId: intention.from_token_chainid,
-				from: intention.from,
+				chainId: validatedIntention.from_token_chainid,
+				from: validatedIntention.from,
 				to: PROPOSER_ADDRESS,
 				amount: amountSent.toString(),
 				tokenId: 0,
 			}
 			proof.push(swapInput)
 			const swapOutput = {
-				token: intention.to_token_address,
-				chainId: intention.to_token_chainid,
+				token: validatedIntention.to_token_address,
+				chainId: validatedIntention.to_token_chainid,
 				from: PROPOSER_ADDRESS,
-				to: intention.from,
+				to: validatedIntention.from,
 				amount: amountReceived.toString(),
 				tokenId: 0,
 			}
@@ -625,9 +684,9 @@ async function handleIntention(
 		} else {
 			const transfer = {
 				token: tokenAddress,
-				chainId: intention.from_token_chainid,
-				from: intention.from,
-				to: intention.to,
+				chainId: validatedIntention.from_token_chainid,
+				from: validatedIntention.from,
+				to: validatedIntention.to,
 				amount: amountSent.toString(),
 				tokenId: 0,
 			}
@@ -654,12 +713,12 @@ async function handleIntention(
 			})
 		}
 	} else {
-		logger.error('Unexpected intention format:', intention)
+		logger.error('Unexpected intention format:', validatedIntention)
 	}
-	const executionObject = {
+	const executionObject: ExecutionWrapper = {
 		execution: [
 			{
-				intention: intention,
+				intention: validatedIntention,
 				proof: proof,
 			},
 		],
@@ -667,9 +726,11 @@ async function handleIntention(
 	cachedIntentions.push(executionObject)
 
 	diagnostic.info('Intention processed successfully', {
-		from,
+		from: validatedFrom,
 		intentionType:
-			'action_type' in intention ? intention.action_type : 'legacy',
+			'action_type' in validatedIntention
+				? validatedIntention.action_type
+				: 'legacy',
 		processingTime: Date.now() - startTime,
 		totalCachedIntentions: cachedIntentions.length,
 		proofCount: proof.length,
@@ -741,6 +802,7 @@ async function createAndPublishBundle() {
 	)
 	logger.info('Generated bundle proposer signature:', proposerSignature)
 	try {
+		const { PROPOSER_ADDRESS } = getEnvConfig()
 		await publishBundle(
 			JSON.stringify(bundleObject),
 			proposerSignature,

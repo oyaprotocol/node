@@ -12,9 +12,42 @@
  */
 
 import dotenv from 'dotenv'
-import { logger } from './logger.js'
+import { logger, LogLevel } from './logger.js'
 import { envSchema } from '../config/envSchema.js'
 import type { EnvValidationResult, EnvironmentConfig } from '../types/setup.js'
+
+/**
+ * Obfuscates sensitive values based on the current log level.
+ * Uses process.env.LOG_LEVEL directly to avoid circular dependency during validation.
+ *
+ * - SILLY (0): Shows full unobfuscated value
+ * - TRACE/DEBUG (1-2): Shows partial obfuscation (last 4 chars)
+ * - INFO and above (3+): Shows full obfuscation
+ *
+ * @param value - The sensitive value to obfuscate
+ * @param isSensitive - Whether the value is marked as sensitive
+ * @returns The obfuscated or original value based on log level
+ */
+function obfuscateSensitiveValue(value: string, isSensitive: boolean): string {
+	if (!isSensitive) {
+		return value
+	}
+
+	// We use process.env directly here because this runs during env validation,
+	// before getEnvConfig() is available
+	const logLevel = parseInt(process.env.LOG_LEVEL || String(LogLevel.INFO))
+
+	if (logLevel === LogLevel.SILLY) {
+		// SILLY level: show full unobfuscated value for debugging
+		return value
+	} else if (logLevel <= LogLevel.DEBUG) {
+		// TRACE/DEBUG level: partial obfuscation (show last 4 chars)
+		return '***' + value.slice(-4)
+	} else {
+		// INFO and above: full obfuscation for security
+		return '********'
+	}
+}
 
 /**
  * Validates all environment variables against the schema.
@@ -65,11 +98,15 @@ export function validateEnv(): EnvValidationResult {
 			config[envVar.name] = envVar.transformer
 				? envVar.transformer(value)
 				: value
-			const displayValue = envVar.sensitive
-				? '***' + value.slice(-4)
-				: envVar.transformer
-					? envVar.transformer(value)
-					: value
+
+			const transformedValue = envVar.transformer
+				? String(envVar.transformer(value))
+				: value
+			const displayValue = obfuscateSensitiveValue(
+				transformedValue,
+				envVar.sensitive || false
+			)
+
 			logger.info(`✓ ${displayName}: ${displayValue}`)
 		}
 	}

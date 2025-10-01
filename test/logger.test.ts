@@ -42,7 +42,9 @@ describe('Logger Tests', () => {
 			},
 			metadata: {
 				timestamp: new Date(),
-				proposer: '0x42fA5d9E5b0B1c039b08853cF62f8E869e8E5bAf',
+				proposer:
+					process.env.PROPOSER_ADDRESS ||
+					'0x536d259A6D175b4c971d2e6a8d5191087363c724',
 			},
 		}
 

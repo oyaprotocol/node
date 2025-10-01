@@ -11,7 +11,6 @@
  * @packageDocumentation
  */
 
-import { JSDOM } from 'jsdom'
 import express from 'express'
 import bppkg from 'body-parser'
 import pgpkg from 'pg'
@@ -34,6 +33,7 @@ import {
 	initializeProposer,
 } from './proposer.js'
 import { bearerAuth } from './auth.js'
+import { handleValidationError } from './utils/validator.js'
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -54,13 +54,6 @@ try {
 } catch (error) {
 	logger.error('Failed to initialize proposer:', error)
 	process.exit(1)
-}
-
-// Polyfill for CustomEvent in Node.js environment (required by Helia)
-if (typeof globalThis.CustomEvent === 'undefined') {
-	const { window } = new JSDOM()
-	globalThis.CustomEvent = window.CustomEvent
-	logger.debug('CustomEvent polyfill via jsdom applied.')
 }
 
 /*
@@ -208,14 +201,13 @@ app.post('/intention', bearerAuth, async (req, res) => {
 
 		res.status(200).json(response)
 	} catch (error) {
+		const errorResponse = handleValidationError(error)
 		diagnostic.error('Intention processing failed', {
-			error: error instanceof Error ? error.message : String(error),
+			error: errorResponse.error,
 			processingTime: Date.now() - startTime,
 		})
 		logger.error('Error handling intention', error)
-		res
-			.status(500)
-			.json({ error: error instanceof Error ? error.message : 'Unknown error' })
+		res.status(errorResponse.status).json(errorResponse)
 	}
 })
 

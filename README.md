@@ -89,8 +89,9 @@ ALCHEMY_API_KEY=your_alchemy_api_key
 BUNDLE_TRACKER_ADDRESS=your_bundle_tracker_contract_address
 (This will be 0xd4af8d53a8fccacd1dc8abe8ddf7dfbc4b81546c on Sepolia.)
 
-# Private key used by the bundle proposer for signing bundles (ensure this is kept secure)
-TEST_PRIVATE_KEY=your_private_key
+# Public/Private key used by the bundle proposer for signing bundles (ensure this is kept secure)
+PROPOSER_ADDRESS=your_public_key
+PROPOSER_KEY=your_private_key
 ```
 
 (For testing purposes, you might also use a .env.test file.)

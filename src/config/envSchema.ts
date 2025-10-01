@@ -77,7 +77,22 @@ export const envSchema: EnvVariable[] = [
 		transformer: (value) => ethers.getAddress(value),
 	},
 	{
-		name: 'TEST_PRIVATE_KEY',
+		name: 'PROPOSER_ADDRESS',
+		required: true,
+		type: 'address',
+		description: 'Ethereum address of the bundle proposer',
+		validator: (value) => {
+			try {
+				ethers.getAddress(value)
+				return true
+			} catch {
+				return 'Must be a valid Ethereum address'
+			}
+		},
+		transformer: (value) => ethers.getAddress(value),
+	},
+	{
+		name: 'PROPOSER_KEY',
 		required: true,
 		type: 'privateKey',
 		description: "Block proposer's private key",
