@@ -2,4 +2,4 @@ build:
   docker:
     web: Dockerfile
 run:
-  web: node --require ./polyfill.cjs dist/index.js
+  web: bun run src/index.ts
