@@ -9,9 +9,9 @@
  * It can be run safely multiple times as it uses IF NOT EXISTS clauses.
  *
  * Usage:
- *   node scripts/setup-db.js                    # Uses DATABASE_URL from .env
- *   DATABASE_URL=postgres://... node scripts/setup-db.js  # Override connection string
- *   node scripts/setup-db.js --drop-existing    # Drop and recreate all tables (DESTRUCTIVE!)
+ *   bun run scripts/setup-db.js                    # Uses DATABASE_URL from .env
+ *   DATABASE_URL=postgres://... bun run scripts/setup-db.js  # Override connection string
+ *   bun run scripts/setup-db.js --drop-existing    # Drop and recreate all tables (DESTRUCTIVE!)
  */
 
 import pg from 'pg'
@@ -39,10 +39,14 @@ if (showHelp) {
 ${chalk.cyan('Oya Node Database Setup Script')}
 
 ${chalk.yellow('Usage:')}
-  node scripts/setup-db.js                    # Uses DATABASE_URL from .env
-  DATABASE_URL=postgres://... node scripts/setup-db.js  # Override connection string
-  node scripts/setup-db.js --drop-existing    # Drop and recreate all tables (DESTRUCTIVE!)
-  node scripts/setup-db.js --help            # Show this help message
+  bun run db:setup                            # Uses DATABASE_URL from .env
+  bun run db:reset                            # Drop and recreate all tables (DESTRUCTIVE!)
+  bun run scripts/setup-db.js --help          # Show this help message
+
+${chalk.yellow('Direct usage:')}
+  bun run scripts/setup-db.js                 # Uses DATABASE_URL from .env
+  DATABASE_URL=postgres://... bun run scripts/setup-db.js  # Override connection string
+  bun run scripts/setup-db.js --drop-existing # Drop and recreate all tables
 
 ${chalk.yellow('Required Environment:')}
   DATABASE_URL - PostgreSQL connection string
