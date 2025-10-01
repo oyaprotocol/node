@@ -13,7 +13,7 @@
 		"format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
 		"format.check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
 		"types.check": "tsc --noEmit",
-		"local-ci": "bun run scripts/local-ci.js",
+		"ci:local": "bun run scripts/local-ci.js",
 		"db:create": "bun run scripts/create-db.js",
 		"db:setup": "bun run scripts/setup-db.js",
 		"db:reset": "FORCE_DROP=true bun run scripts/setup-db.js --drop-existing",
