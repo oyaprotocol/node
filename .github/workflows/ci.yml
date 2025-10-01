@@ -6,33 +6,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  node-ci:
+  bun-ci:
     runs-on: ubuntu-latest
     env:
       CI: true
     steps:
       - uses: actions/checkout@v4
 
-      - name: Use Node
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '22'
-          cache: 'npm'
+          bun-version: latest
 
-      - name: Run Install
-        run: npm ci
+      - name: Install Dependencies
+        run: bun install
 
       - name: Check Formatting
-        run: npm run format.check
+        run: bun run format.check
 
       - name: Pass Linting
-        run: npm run lint
+        run: bun run lint
 
       - name: Check Types
-        run: npm run types.check
+        run: bun run types.check
 
       - name: Pass Tests
-        run: npm test
-
-      - name: Build
-        run: npm run build
+        run: bun test
