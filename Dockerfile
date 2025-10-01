@@ -1,36 +1,20 @@
-# Stage 1: Build Stage
-FROM node:18-alpine AS builder
+# Bun-optimized Dockerfile for Oya Protocol Node
+# Runs TypeScript directly without compilation for faster startup
+
+FROM oven/bun:1-alpine
 
 WORKDIR /usr/src/app
 
-# Copy package files and install all dependencies (including devDependencies)
-COPY package*.json ./
-RUN apk add --no-cache python3 make g++ && ln -sf python3 /usr/bin/python
-RUN npm install   # Install both production and devDependencies
+# Copy package files and install dependencies
+COPY package.json bun.lockb* ./
+RUN bun install --production
 
-# Copy source code and build the application
-COPY . .
-RUN npm run build
+# Copy source code (no build step needed - Bun runs TS directly)
+COPY src ./src
 
-# Stage 2: Production Stage
-FROM node:18-alpine
-
-WORKDIR /usr/src/app
-
-# Copy only production package files
-COPY package*.json ./
-RUN apk add --no-cache python3 make g++ && ln -sf python3 /usr/bin/python
-RUN npm install --production
-
-# Copy the compiled output from the builder stage
-COPY --from=builder /usr/src/app/dist ./dist
-
-# Copy the polyfill file (make sure polyfill.js is in the root of your project)
-COPY polyfill.cjs .
-
-# Expose the port and set environment variable
+# Expose the port
 EXPOSE 3000
 ENV NODE_ENV=production
 
-# Preload the polyfill before starting the application
-CMD ["node", "--require", "./polyfill.cjs", "dist/index.js"]
+# Run TypeScript directly with Bun
+CMD ["bun", "run", "src/index.ts"]
