@@ -16,7 +16,7 @@
 		"db:create": "node scripts/create-db.js",
 		"db:setup": "node scripts/setup-db.js",
 		"db:reset": "FORCE_DROP=true node scripts/setup-db.js --drop-existing",
-    "prepare": "command -v husky >/dev/null 2>&1 && husky || true"
+    	"prepare": "command -v husky >/dev/null 2>&1 && husky || true"
 	},
 	"dependencies": {
 		"@helia/strings": "^4.1.0",
