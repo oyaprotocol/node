@@ -7,6 +7,7 @@
 		"oya": "./bin/oya_cli"
 	},
 	"scripts": {
+		"setup": "bun run scripts/setup.js",
 		"start": "bun run src/index.ts",
 		"test": "bun test",
 		"lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
