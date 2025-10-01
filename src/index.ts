@@ -18,6 +18,9 @@ import pgpkg from 'pg'
 import { displayBanner } from './utils/banner.js'
 import { logger, diagnostic } from './utils/logger.js'
 import { setupEnvironment } from './utils/env.js'
+import { initializeDatabase } from './utils/database.js'
+import { registerShutdownHandlers } from './utils/gracefulShutdown.js'
+import type { DatabaseHealthMonitor } from './utils/database.js'
 import {
 	bundleRouter,
 	cidRouter,
@@ -43,7 +46,7 @@ displayBanner()
 
 // Initialize and validate environment
 const envConfig = setupEnvironment()
-const { PORT, DATABASE_URL } = envConfig
+const { PORT, DATABASE_URL, DATABASE_SSL } = envConfig
 
 // Initialize proposer module
 try {
@@ -116,26 +119,32 @@ const { Pool } = pgpkg
 
 /**
  * PostgreSQL connection pool for database operations.
- * Configured with SSL for secure connections.
+ * SSL configuration is determined by DATABASE_SSL environment variable.
  */
 export const pool = new Pool({
 	connectionString: DATABASE_URL,
-	ssl: {
-		rejectUnauthorized: false,
-	},
+	ssl: DATABASE_SSL ? { rejectUnauthorized: false } : false,
 })
 
-// Test database connection on startup
-pool
-	.connect()
-	.then((client) => {
-		logger.info('Database pool initialized successfully')
-		client.release()
+if (!DATABASE_SSL) {
+	logger.debug('Database SSL disabled (DATABASE_SSL=false)')
+}
+
+/** Database health monitor instance */
+let dbHealthMonitor: DatabaseHealthMonitor | undefined
+
+// Initialize database with validation and monitoring
+try {
+	dbHealthMonitor = await initializeDatabase(pool, {
+		validateSchema: true,
+		startHealthMonitoring: true,
+		healthCheckInterval: 30000,
 	})
-	.catch((err) => {
-		logger.error('Failed to initialize database pool:', err)
-		logger.warn('Server will continue but database operations may fail')
-	})
+	logger.info('Database validation and monitoring initialized')
+} catch (error) {
+	logger.fatal('Failed to initialize database:', error)
+	process.exit(1)
+}
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -212,7 +221,7 @@ app.post('/intention', bearerAuth, async (req, res) => {
  * Interval timer that creates and publishes bundles every 10 seconds.
  * Bundles cached intentions, uploads to IPFS, and submits CIDs to blockchain.
  */
-setInterval(async () => {
+const bundleInterval = setInterval(async () => {
 	try {
 		await createAndPublishBundle()
 	} catch (error) {
@@ -229,8 +238,16 @@ setInterval(async () => {
 /**
  * Start the Express server on the configured port
  */
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
 	logger.info(`Server running on port ${PORT}`)
+})
+
+// Register graceful shutdown handlers
+registerShutdownHandlers({
+	server,
+	pool,
+	dbHealthMonitor,
+	bundleInterval,
 })
 
 export { app }
