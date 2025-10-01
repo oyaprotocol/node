@@ -2,20 +2,21 @@
 	"name": "oya-fullnode",
 	"version": "1.0.0",
 	"type": "module",
-	"main": "dist/index.js",
+	"main": "src/index.ts",
+	"bin": {
+		"oya": "./oya.js"
+	},
 	"scripts": {
-		"build": "tsc",
-		"start": "node dist/index.js",
-		"heroku-postbuild": "npm run build",
-		"test": "ts-mocha --project tsconfig.test.json 'test/*.test.ts' --exclude 'test/old/**'",
+		"start": "bun run src/index.ts",
+		"test": "bun test test/*.test.ts",
 		"lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
 		"format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
 		"format.check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
 		"types.check": "tsc --noEmit",
-		"local-ci": "node scripts/local-ci.js",
-		"db:create": "node scripts/create-db.js",
-		"db:setup": "node scripts/setup-db.js",
-		"db:reset": "FORCE_DROP=true node scripts/setup-db.js --drop-existing",
+		"local-ci": "bun run scripts/local-ci.js",
+		"db:create": "bun run scripts/create-db.js",
+		"db:setup": "bun run scripts/setup-db.js",
+		"db:reset": "FORCE_DROP=true bun run scripts/setup-db.js --drop-existing",
     	"prepare": "command -v husky >/dev/null 2>&1 && husky || true"
 	},
 	"dependencies": {
