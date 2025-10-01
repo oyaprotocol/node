@@ -1,6 +1,6 @@
 # Oya Node
 
-`node` is a Node.js–based full node for the Oya natural language protocol. It allows nodes to both propose new bundles (containing signed, natural language intentions) and in the near future will be able to verify and dispute bundles from other proposers. In addition, the API exposes endpoints for querying the protocol’s current state—including bundles, CIDs, balances, and vault nonces.
+`node` is a Bun-based full node for the Oya natural language protocol. It allows nodes to both propose new bundles (containing signed, natural language intentions) and in the near future will be able to verify and dispute bundles from other proposers. In addition, the API exposes endpoints for querying the protocol's current state—including bundles, CIDs, balances, and vault nonces.
 
 **WARNING: This software is early-stage and experimental and under active development. It should not be used in production. The underlying Oya Protocol has not been deployed to mainnet, and is itself experimental. The current node implementation supports bundle proposals and processing for a single bundle proposer only. Functionality to view and verify bundles from other proposers is not yet implemented. Users and developers should expect many breaking changes as the codebase evolves. Contributions and feedback are very welcome!**
 
@@ -43,13 +43,12 @@
 
 ## Prerequisites
 
-- **Node.js:** Version supporting ES2020 (or later)
-- **npm:** Package manager for installing dependencies
+- **Bun:** Version 1.0 or later ([install from bun.sh](https://bun.sh))
 - **PostgreSQL Database:** Either local or hosted (e.g., via Heroku)
 - **Alchemy API Key:** For interacting with Ethereum networks
 - **BundleTracker Contract:** A deployed BundleTracker contract (its address must be provided)
 - **IPFS (Helia):** Used internally to store bundle data
-- **Docker:** Installed and configured for building and running containers
+- **Docker:** (Optional) For containerized deployment
 
 ## Installation
 
@@ -60,17 +59,13 @@
    cd node
    ```
 
-2. **Install dependencies:**
+2. **Run setup (installs dependencies and links the `oya` command):**
 
-  ```bash
-  npm install
-  ```
+   ```bash
+   bun setup
+   ```
 
-3. **Build the project (TypeScript → JavaScript):**
-
-  ```bash
-  npm run build
-  ```
+   This will install dependencies and make the `oya` command available globally.
 
 ## Environment Variables
 
@@ -98,20 +93,25 @@ PROPOSER_KEY=your_private_key
 
 ## Database Setup
 
-The database can be created and set up using the provided scripts:
+The database can be created and set up using the `oya` CLI or `bun` commands:
 
 ```bash
 # Create the oya_db database (if it doesn't exist)
-npm run db:create
+oya db:create
 
 # Set up database tables (safe to run multiple times)
-npm run db:setup
+oya db:setup
 
 # Drop and recreate all tables (WARNING: deletes all data!)
-npm run db:reset
+oya db:reset
+
+# Or use bun directly
+bun run db:create
+bun run db:setup
+bun run db:reset
 
 # Or run directly with custom DATABASE_URL
-DATABASE_URL=postgresql://user:pass@localhost:5432/oya_db node scripts/setup-db.js
+DATABASE_URL=postgresql://user:pass@localhost:5432/oya_db bun run scripts/setup-db.js
 ```
 
 The setup script creates the following tables:
@@ -132,68 +132,59 @@ Alternatively, execute the SQL commands manually in your PostgreSQL instance.
 
 ## Running the Application
 
-### Using Node Directly
+### Using Bun or Oya CLI
 
 After setting up your environment and database, you can start the server locally with:
 
 ```bash
-npm run start
+# Using the oya command
+oya start
+
+# Or with debug logging
+oya start:debug
+
+# Or using bun directly
+bun start
 ```
 
 The server listens on the port specified in your `.env` file (default is `3000`).
 
 ### Using Docker Locally
 
-A sample **multi-stage Dockerfile** is provided to build the application for production:
+The Dockerfile uses Bun for a streamlined, single-stage build:
 
-```
-# Stage 1: Build Stage
-FROM node:18-alpine AS builder
-
-WORKDIR /usr/src/app
-
-# Copy package files and install all dependencies (including devDependencies)
-COPY package*.json ./
-RUN apk add --no-cache python3 make g++ && ln -sf python3 /usr/bin/python
-RUN npm install   # Install both production and devDependencies
-
-# Copy source code and build the application
-COPY . .
-RUN npm run build
-
-# Stage 2: Production Stage
-FROM node:18-alpine
+```dockerfile
+FROM oven/bun:1-alpine
 
 WORKDIR /usr/src/app
 
-# Copy package files and install production dependencies only
-COPY package*.json ./
-RUN apk add --no-cache python3 make g++ && ln -sf python3 /usr/bin/python
-RUN npm install --production
+# Install dependencies
+COPY package.json bun.lockb* ./
+RUN bun install --production
 
-# Copy the compiled output from the builder stage
-COPY --from=builder /usr/src/app/dist ./dist
+# Copy source code (no build step needed - Bun runs TypeScript directly)
+COPY src ./src
 
-# Expose the port and set environment variable
+# Expose port and set environment
 EXPOSE 3000
 ENV NODE_ENV=production
 
-CMD [ "node", "dist/index.js" ]
+CMD ["bun", "run", "src/index.ts"]
 ```
 
 To build and run the container locally:
 
 1. **Build the image:**
 
-```
-docker buildx build --platform linux/amd64 --no-cache -t node .
-```
+   ```bash
+   docker build -t oya-node .
+   ```
 
 2. **Run the container:**
 
-```
-docker buildx build --platform linux/amd64 --no-cache -t node .
-```
+   ```bash
+   docker run -p 3000:3000 --env-file .env oya-node
+   ```
 
 Your application will now be accessible on `http://localhost:3000`.
 
@@ -256,10 +247,10 @@ Below is a summary of the main API endpoints:
 To run the test suite, use:
 
 ```bash
-npm run test
+bun test
 ```
 
-Tests are written using Mocha, Chai, and ts-mocha, and are located in the `test` directory.
+Tests are written using Bun's built-in test runner and are located in the `test` directory.
 
 ## Deployment
 
@@ -275,38 +266,38 @@ The application is fully containerized using Docker, which allows you to deploy 
 
 2. **Build and Push the Docker Image:**
 
-Use Docker Buildx to build your image for the `linux/amd64` architecture, disable provenance attestation to ensure a single‑architecture manifest, and push the image directly to Heroku's registry:
+   Build your Bun-based image for the `linux/amd64` architecture and push directly to Heroku's registry:
 
-```
-docker buildx build --platform linux/amd64 --provenance=false --push -t registry.heroku.com/your-heroku-app/web:latest .
-```
+   ```bash
+   docker buildx build --platform linux/amd64 --provenance=false --push -t registry.heroku.com/your-heroku-app/web:latest .
+   ```
 
-Alternatively, you can disable provenance by setting an environment variable before building:
+   Alternatively, you can disable provenance by setting an environment variable before building:
 
-```
-export BUILDX_NO_DEFAULT_ATTESTATIONS=1
-docker buildx build --platform linux/amd64 --push -t registry.heroku.com/your-heroku-app/web:latest .
-```
+   ```bash
+   export BUILDX_NO_DEFAULT_ATTESTATIONS=1
+   docker buildx build --platform linux/amd64 --push -t registry.heroku.com/your-heroku-app/web:latest .
+   ```
 
-3. **Release the Container on Heroku:***
+3. **Release the Container on Heroku:**
 
-```
-heroku container:release web --app your-heroku-app
-```
+   ```bash
+   heroku container:release web --app your-heroku-app
+   ```
 
 4. **Verify the Deployment:**
 
-* Check Running Dynos:
+   Check running dynos:
 
-```
-heroku ps --app your-heroku-app
-```
+   ```bash
+   heroku ps --app your-heroku-app
+   ```
 
-* View Logs:
+   View logs:
 
-```
-heroku logs --tail --app your-heroku-app
-```
+   ```bash
+   heroku logs --tail --app your-heroku-app
+   ```
 
 ### Other Deployment Options
 
