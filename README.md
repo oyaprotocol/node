@@ -1,6 +1,6 @@
 # Oya Node
 
-`node` is a Bun-based full node for the Oya natural language protocol. It allows nodes to both propose new bundles (containing signed, natural language intentions) and in the near future will be able to verify and dispute bundles from other proposers. In addition, the API exposes endpoints for querying the protocol's current state—including bundles, CIDs, balances, and vault nonces.
+`node` is a TypeScript/bun-based full node for the Oya natural language protocol. It allows nodes to both propose new bundles (containing signed, natural language intentions) and in the near future will be able to verify and dispute bundles from other proposers. In addition, the API exposes endpoints for querying the protocol's current state—including bundles, CIDs, balances, and vault nonces.
 
 **WARNING: This software is early-stage and experimental and under active development. It should not be used in production. The underlying Oya Protocol has not been deployed to mainnet, and is itself experimental. The current node implementation supports bundle proposals and processing for a single bundle proposer only. Functionality to view and verify bundles from other proposers is not yet implemented. Users and developers should expect many breaking changes as the codebase evolves. Contributions and feedback are very welcome!**
 
@@ -20,7 +20,7 @@
 - [Future Enhancements](#future-enhancements)
 - [Contributing](#contributing)
 - [License](#license)
-  
+
 ## Features
 
 - **Natural Language protocol Node:** Accepts signed intentions in natural language.
@@ -225,10 +225,10 @@ Below is a summary of the main API endpoints:
 
 ## Bundle Proposing Workflow
 
-1. **Receiving Intentions:**  
+1. **Receiving Intentions:**
    When a client posts to `/intention`, the application verifies the signature (using ethers’ `verifyMessage`) and caches the intention.
 
-2. **Creating a Bundle:**  
+2. **Creating a Bundle:**
    Every 10 seconds, the application checks if there are cached intentions. If so, it:
    - Retrieves the latest nonce from the database.
    - Bundles all cached intentions into a bundle.
@@ -239,7 +239,7 @@ Below is a summary of the main API endpoints:
    - Updates balances based on the transactions in the bundle.
    - Mints rewards to the relevant addresses.
 
-3. **Error Handling:**  
+3. **Error Handling:**
    The bundle proposer logic includes error handling for signature verification, IPFS uploads, protocol transactions, and database operations.
 
 ## Testing
@@ -311,19 +311,19 @@ Since the application is containerized, you can also deploy it to any hosting pr
 
 Planned improvements for future releases include (but are not limited to):
 
-- **Multi-Proposer Support:**  
+- **Multi-Proposer Support:**
   Extend the system to fetch, display, and verify bundles from multiple proposers by parsing onchain event logs. This will allow nodes to cross-check and validate proposals from different sources.
 
-- **Enhanced Bundle Verification:**  
+- **Enhanced Bundle Verification:**
   Develop robust mechanisms for verifying the correctness of bundles proposed by various nodes, improving overall network security and consensus.
 
-- **Expanded API Functionality:**  
+- **Expanded API Functionality:**
   Add new API endpoints to query detailed bundle and proposer information.
 
-- **Robust Error Handling and Logging:**  
+- **Robust Error Handling and Logging:**
   Improve error handling in the bundle proposer logic and enhance logging to facilitate debugging and monitoring.
 
-- **Performance Optimization:**  
+- **Performance Optimization:**
   Optimize the node for scalability and higher throughput as the network and transaction volumes grow.
 
 ## Contributing
