@@ -30,12 +30,16 @@ import {
 	getBalanceForAllTokens,
 	getVaultNonce,
 	setVaultNonce,
+	healthCheck,
+	getInfo,
 } from './controllers.js'
 
 const bundleRouter = Router()
 const cidRouter = Router()
 const balanceRouter = Router()
 const vaultNonceRouter = Router()
+const healthRouter = Router()
+const infoRouter = Router()
 
 // Bundle routes
 bundleRouter.post('/', saveBundle)
@@ -55,4 +59,15 @@ balanceRouter.get('/:vault', getBalanceForAllTokens)
 vaultNonceRouter.get('/:vault', getVaultNonce)
 vaultNonceRouter.post('/:vault', setVaultNonce)
 
-export { bundleRouter, cidRouter, balanceRouter, vaultNonceRouter }
+// Health and info routes
+healthRouter.get('/', healthCheck)
+infoRouter.get('/', getInfo)
+
+export {
+	bundleRouter,
+	cidRouter,
+	balanceRouter,
+	vaultNonceRouter,
+	healthRouter,
+	infoRouter,
+}
