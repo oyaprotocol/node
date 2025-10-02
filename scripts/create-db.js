@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * ╔═══════════════════════════════════════════════════════════════════════════╗
  * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
@@ -9,8 +9,8 @@
  * It connects to the 'postgres' default database to create oya_db.
  *
  * Usage:
- *   node scripts/create-db.js                    # Creates oya_db using connection from DATABASE_URL
- *   DATABASE_URL=postgres://... node scripts/create-db.js  # Override connection string
+ *   bun run scripts/create-db.js                    # Creates oya_db using connection from DATABASE_URL
+ *   DATABASE_URL=postgres://... bun run scripts/create-db.js  # Override connection string
  */
 
 import pg from 'pg'
@@ -36,18 +36,18 @@ if (showHelp) {
 ${chalk.cyan('Oya Node Database Creation Script')}
 
 ${chalk.yellow('Usage:')}
-  node scripts/create-db.js                    # Creates oya_db database
-  node scripts/create-db.js --help            # Show this help message
+  bun run db:create                           # Creates oya_db database
+  bun run scripts/create-db.js --help         # Show this help message
 
 ${chalk.yellow('Environment:')}
   DATABASE_URL - PostgreSQL connection string (for connection details)
 
 ${chalk.yellow('Examples:')}
   # Using .env file (with DATABASE_URL set)
-  node scripts/create-db.js
+  bun run db:create
 
   # Override connection
-  DATABASE_URL=postgresql://user:pass@localhost:5432/oya_db node scripts/create-db.js
+  DATABASE_URL=postgresql://user:pass@localhost:5432/oya_db bun run scripts/create-db.js
 
 ${chalk.yellow('Note:')} This script will always create a database named 'oya_db'.
 `)
@@ -116,7 +116,7 @@ async function createDatabase() {
 		if (checkResult.rows.length > 0) {
 			console.log(chalk.green(`✓ Database '${DB_NAME}' already exists`))
 			console.log(chalk.cyan('\nDatabase is ready! You can now run:'))
-			console.log(chalk.gray(`  npm run db:setup`))
+			console.log(chalk.gray(`  bun run db:setup`))
 			console.log(chalk.gray(`\nTo create/update tables\n`))
 			process.exit(0)
 		}
@@ -134,7 +134,7 @@ async function createDatabase() {
 		console.log(chalk.gray('1. Ensure your .env file has:'))
 		console.log(chalk.gray(`   DATABASE_URL=${suggestedUrl}`))
 		console.log(chalk.gray('\n2. Create the tables:'))
-		console.log(chalk.gray(`   npm run db:setup\n`))
+		console.log(chalk.gray(`   bun run db:setup\n`))
 
 	} catch (error) {
 		console.error(chalk.red('\n❌ Database creation failed:'))

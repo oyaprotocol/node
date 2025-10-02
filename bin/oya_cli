@@ -1,0 +1,129 @@
+#!/usr/bin/env bun
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
+ * ║                         Node Operation CLI                                ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Command-line interface for operating the Oya Protocol Node.
+ * For development commands (test, lint, format), use `bun` directly.
+ *
+ * Usage:
+ *   oya start              # Start the node
+ *   oya start:debug        # Start with debug logging enabled
+ *   oya db:create          # Create database
+ *   oya db:setup           # Set up database tables
+ *   oya db:reset           # Reset database (destructive)
+ *   oya --help             # Show this help
+ */
+
+import { spawnSync } from 'child_process'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(dirname(__filename)) // Project root (up from bin/)
+
+const args = process.argv.slice(2)
+const command = args[0]
+
+// Command definitions
+const commands = {
+	'start': {
+		description: 'Start the Oya node',
+		run: () => runBun(['run', 'src/index.ts']),
+	},
+	'start:debug': {
+		description: 'Start with debug logging enabled',
+		run: () => {
+			// Set diagnostic logger and verbose log level
+			const env = {
+				...process.env,
+				DIAGNOSTIC_LOGGER: 'true',
+				LOG_LEVEL: '2', // DEBUG level
+			}
+			return runBun(['run', 'src/index.ts'], env)
+		},
+	},
+	'db:create': {
+		description: 'Create the oya_db database',
+		run: () => runBun(['run', 'scripts/create-db.js']),
+	},
+	'db:setup': {
+		description: 'Set up database tables (idempotent)',
+		run: () => runBun(['run', 'scripts/setup-db.js']),
+	},
+	'db:reset': {
+		description: 'Drop and recreate all tables (DESTRUCTIVE)',
+		run: () => {
+			const env = { ...process.env, FORCE_DROP: 'true' }
+			return runBun(['run', 'scripts/setup-db.js', '--drop-existing'], env)
+		},
+	},
+}
+
+// Show help
+if (!command || command === '--help' || command === '-h' || command === 'help') {
+	showHelp()
+	process.exit(0)
+}
+
+// Execute command
+if (commands[command]) {
+	const exitCode = commands[command].run()
+	process.exit(exitCode ?? 0)
+} else {
+	console.error(`❌ Unknown command: ${command}`)
+	console.log(`Run 'oya --help' to see available commands.\n`)
+	process.exit(1)
+}
+
+/**
+ * Run a bun command with optional environment variables
+ */
+function runBun(args, env = process.env) {
+	const result = spawnSync('bun', args, {
+		stdio: 'inherit',
+		cwd: __dirname,
+		env,
+	})
+	return result.status
+}
+
+/**
+ * Display help text
+ */
+function showHelp() {
+	console.log(`
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
+║                         Node Operation CLI                                ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+Usage: oya <command>
+
+Commands:
+
+  Node Operations:
+    start              Start the Oya node
+    start:debug        Start with debug logging enabled
+
+  Database Management:
+    db:create          Create the oya_db database
+    db:setup           Set up database tables (safe to run multiple times)
+    db:reset           Drop and recreate all tables (⚠️  DESTRUCTIVE)
+
+  Help:
+    --help, -h, help   Show this help message
+
+Developer Commands:
+  For development tasks (testing, linting, formatting), use bun directly:
+    bun test           Run tests
+    bun run lint       Lint code
+    bun run format     Format code
+    bun run ci:local   Run full CI suite
+
+Environment Variables:
+  See .env.example for required configuration (DATABASE_URL, API keys, etc.)
+`)
+}

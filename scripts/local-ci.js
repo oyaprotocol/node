@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import { execSync } from 'child_process'
 import chalk from 'chalk'
@@ -114,7 +114,7 @@ async function main() {
 	const results = []
 
 	// Stage 1: Linting
-	results.push(runStage('lint', 'npm run lint', 'Running ESLint'))
+	results.push(runStage('lint', 'bun run lint', 'Running ESLint'))
 	if (!results[results.length - 1]) {
 		console.log(chalk.red(STAGE_SEPARATORS.failure))
 		console.log(chalk.red('❌ CI failed at linting stage'))
@@ -123,20 +123,20 @@ async function main() {
 
 	// Stage 2: Format checking
 	results.push(
-		runStage('format', 'npm run format.check', 'Checking Prettier formatting')
+		runStage('format', 'bun run format.check', 'Checking Prettier formatting')
 	)
 	if (!results[results.length - 1]) {
 		console.log(chalk.red(STAGE_SEPARATORS.failure))
 		console.log(chalk.red('❌ CI failed at formatting stage'))
 		console.log(
-			chalk.yellow('💡 Tip: Run "npm run format" to auto-fix formatting')
+			chalk.yellow('💡 Tip: Run "bun run format" to auto-fix formatting')
 		)
 		process.exit(1)
 	}
 
 	// Stage 3: Type checking
 	results.push(
-		runStage('types', 'npm run types.check', 'Checking TypeScript types')
+		runStage('types', 'bun run types.check', 'Checking TypeScript types')
 	)
 	if (!results[results.length - 1]) {
 		console.log(chalk.red(STAGE_SEPARATORS.failure))
@@ -145,7 +145,7 @@ async function main() {
 	}
 
 	// Stage 4: Testing
-	results.push(runStage('test', 'npm run test', 'Running test suite'))
+	results.push(runStage('test', 'bun test', 'Running test suite'))
 	if (!results[results.length - 1]) {
 		console.log(chalk.red(STAGE_SEPARATORS.failure))
 		console.log(chalk.red('❌ CI failed at testing stage'))
