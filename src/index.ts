@@ -26,6 +26,8 @@ import {
 	cidRouter,
 	balanceRouter,
 	vaultNonceRouter,
+	healthRouter,
+	infoRouter,
 } from './routes.js'
 import {
 	handleIntention,
@@ -154,6 +156,8 @@ try {
 
 // Mount route handlers
 logger.debug('Mounting route handlers')
+app.use('/health', healthRouter)
+app.use('/info', infoRouter)
 app.use('/bundle', bundleRouter)
 app.use('/cid', cidRouter)
 app.use('/balance', balanceRouter)
