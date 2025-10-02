@@ -21,6 +21,7 @@ import { pool } from './index.js'
 import { RequestBody } from './types/core.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { validateBundle, handleValidationError } from './utils/validator.js'
+import { getEnvConfig } from './utils/env.js'
 
 /** Logger instance for controllers module */
 const logger = createLogger('Controller')
@@ -305,16 +306,55 @@ export const setVaultNonce = async (req: Request, res: Response) => {
 
 	try {
 		const result = await pool.query(
-			`INSERT INTO nonces (vault, nonce) 
-       VALUES (LOWER($1), $2) 
-       ON CONFLICT (LOWER(vault)) 
-       DO UPDATE SET nonce = EXCLUDED.nonce 
+			`INSERT INTO nonces (vault, nonce)
+       VALUES (LOWER($1), $2)
+       ON CONFLICT (LOWER(vault))
+       DO UPDATE SET nonce = EXCLUDED.nonce
        RETURNING *`,
 			[vault, nonce]
 		)
 		res.status(201).json(result.rows[0])
 	} catch (err) {
 		logger.error(err)
+		res.status(500).json({ error: 'Internal Server Error' })
+	}
+}
+
+/**
+ * GET /health
+ * Health check endpoint for container orchestration and load balancers.
+ * Returns simple health status of the service.
+ */
+export const healthCheck = async (req: Request, res: Response) => {
+	try {
+		// Quick database connectivity check
+		await pool.query('SELECT 1')
+		res.status(200).json({ status: 'healthy' })
+	} catch (err) {
+		logger.error('Health check failed:', err)
+		res.status(503).json({ status: 'unhealthy' })
+	}
+}
+
+/**
+ * GET /info
+ * Returns service metadata including version, uptime, and configuration.
+ */
+export const getInfo = async (req: Request, res: Response) => {
+	const uptime = process.uptime()
+	const { PROPOSER_ADDRESS, BUNDLE_TRACKER_ADDRESS } = getEnvConfig()
+
+	try {
+		res.status(200).json({
+			version: '1.0.0',
+			uptime: Math.floor(uptime),
+			nodeStarted: new Date(Date.now() - uptime * 1000).toISOString(),
+			proposerAddress: PROPOSER_ADDRESS,
+			bundleTrackerAddress: BUNDLE_TRACKER_ADDRESS,
+			network: 'sepolia',
+		})
+	} catch (err) {
+		logger.error('Error getting info:', err)
 		res.status(500).json({ error: 'Internal Server Error' })
 	}
 }
