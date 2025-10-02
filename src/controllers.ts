@@ -22,6 +22,7 @@ import { RequestBody } from './types/core.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { validateBundle, handleValidationError } from './utils/validator.js'
 import { getEnvConfig } from './utils/env.js'
+import { handleIntention } from './proposer.js'
 
 /** Logger instance for controllers module */
 const logger = createLogger('Controller')
@@ -356,5 +357,53 @@ export const getInfo = async (req: Request, res: Response) => {
 	} catch (err) {
 		logger.error('Error getting info:', err)
 		res.status(500).json({ error: 'Internal Server Error' })
+	}
+}
+
+/**
+ * POST /intention
+ * Receives and processes signed intentions.
+ * Validates the intention, signature, and vault address before processing.
+ */
+export const submitIntention = async (req: Request, res: Response) => {
+	const startTime = Date.now()
+	try {
+		const { intention, signature, from } = req.body
+		if (!intention || !signature || !from) {
+			diagnostic.debug('Missing intention fields', {
+				hasIntention: !!intention,
+				hasSignature: !!signature,
+				hasFrom: !!from,
+			})
+			throw new Error('Missing required fields')
+		}
+
+		diagnostic.info('Intention endpoint called', {
+			from,
+			intentionType: intention.action_type || 'legacy',
+			signaturePreview: signature.slice(0, 10) + '...',
+		})
+
+		logger.info('Received signed intention', {
+			from,
+			signature: signature.slice(0, 10) + '...',
+		})
+		const response = await handleIntention(intention, signature, from)
+
+		diagnostic.info('Intention processed', {
+			from,
+			processingTime: Date.now() - startTime,
+			success: true,
+		})
+
+		res.status(200).json(response)
+	} catch (error) {
+		const errorResponse = handleValidationError(error)
+		diagnostic.error('Intention processing failed', {
+			error: errorResponse.error,
+			processingTime: Date.now() - startTime,
+		})
+		logger.error('Error handling intention', error)
+		res.status(errorResponse.status).json(errorResponse)
 	}
 }
