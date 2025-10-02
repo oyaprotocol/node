@@ -32,6 +32,7 @@ import {
 	setVaultNonce,
 	healthCheck,
 	getInfo,
+	submitIntention,
 } from './controllers.js'
 
 const bundleRouter = Router()
@@ -40,6 +41,7 @@ const balanceRouter = Router()
 const vaultNonceRouter = Router()
 const healthRouter = Router()
 const infoRouter = Router()
+const intentionRouter = Router()
 
 // Bundle routes
 bundleRouter.post('/', saveBundle)
@@ -63,6 +65,9 @@ vaultNonceRouter.post('/:vault', setVaultNonce)
 healthRouter.get('/', healthCheck)
 infoRouter.get('/', getInfo)
 
+// Intention routes
+intentionRouter.post('/', submitIntention)
+
 export {
 	bundleRouter,
 	cidRouter,
@@ -70,4 +75,5 @@ export {
 	vaultNonceRouter,
 	healthRouter,
 	infoRouter,
+	intentionRouter,
 }
