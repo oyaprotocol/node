@@ -26,14 +26,12 @@ import {
 	cidRouter,
 	balanceRouter,
 	vaultNonceRouter,
+	healthRouter,
+	infoRouter,
+	intentionRouter,
 } from './routes.js'
-import {
-	handleIntention,
-	createAndPublishBundle,
-	initializeProposer,
-} from './proposer.js'
+import { createAndPublishBundle, initializeProposer } from './proposer.js'
 import { bearerAuth } from './auth.js'
-import { handleValidationError } from './utils/validator.js'
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -154,62 +152,14 @@ try {
 
 // Mount route handlers
 logger.debug('Mounting route handlers')
+app.use('/health', healthRouter)
+app.use('/info', infoRouter)
+app.use('/intention', intentionRouter)
 app.use('/bundle', bundleRouter)
 app.use('/cid', cidRouter)
 app.use('/balance', balanceRouter)
 app.use('/nonce', vaultNonceRouter)
 logger.debug('All routes mounted successfully')
-
-/**
- * POST endpoint for receiving signed intentions.
- * Validates the intention, signature, and vault address before processing.
- *
- * @param req - Express request object with body containing intention, signature, and from
- * @param res - Express response object
- * @returns Response indicating success or failure
- */
-app.post('/intention', bearerAuth, async (req, res) => {
-	const startTime = Date.now()
-	try {
-		const { intention, signature, from } = req.body
-		if (!intention || !signature || !from) {
-			diagnostic.debug('Missing intention fields', {
-				hasIntention: !!intention,
-				hasSignature: !!signature,
-				hasFrom: !!from,
-			})
-			throw new Error('Missing required fields')
-		}
-
-		diagnostic.info('Intention endpoint called', {
-			from,
-			intentionType: intention.action_type || 'legacy',
-			signaturePreview: signature.slice(0, 10) + '...',
-		})
-
-		logger.info('Received signed intention', {
-			from,
-			signature: signature.slice(0, 10) + '...',
-		})
-		const response = await handleIntention(intention, signature, from)
-
-		diagnostic.info('Intention processed', {
-			from,
-			processingTime: Date.now() - startTime,
-			success: true,
-		})
-
-		res.status(200).json(response)
-	} catch (error) {
-		const errorResponse = handleValidationError(error)
-		diagnostic.error('Intention processing failed', {
-			error: errorResponse.error,
-			processingTime: Date.now() - startTime,
-		})
-		logger.error('Error handling intention', error)
-		res.status(errorResponse.status).json(errorResponse)
-	}
-})
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
