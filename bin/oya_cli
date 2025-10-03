@@ -45,6 +45,158 @@ const commands = {
 			return runBun(['run', 'src/index.ts'], env)
 		},
 	},
+	'health': {
+		description: 'Check node health status',
+		run: async () => {
+			const result = await fetchEndpoint('/health')
+			return result ? 0 : 1
+		},
+	},
+	'version': {
+		description: 'Show node version',
+		run: async () => {
+			const info = await fetchEndpoint('/info')
+			if (info?.version) {
+				console.log(`Oya Node v${info.version}`)
+				return 0
+			}
+			return 1
+		},
+	},
+	'uptime': {
+		description: 'Show node uptime',
+		run: async () => {
+			const info = await fetchEndpoint('/info')
+			if (info?.uptime !== undefined) {
+				const hours = Math.floor(info.uptime / 3600)
+				const minutes = Math.floor((info.uptime % 3600) / 60)
+				const seconds = info.uptime % 60
+				console.log(`Node uptime: ${hours}h ${minutes}m ${seconds}s`)
+				console.log(`Started: ${info.nodeStarted}`)
+				return 0
+			}
+			return 1
+		},
+	},
+	'info': {
+		description: 'Show node information',
+		run: async () => {
+			const info = await fetchEndpoint('/info')
+			if (info) {
+				console.log('\n🌪️  Oya Node Information')
+				console.log('━'.repeat(50))
+				console.log(`Version:         ${info.version}`)
+				console.log(`Network:         ${info.network}`)
+				console.log(`Uptime:          ${formatUptime(info.uptime)}`)
+				console.log(`Started:         ${info.nodeStarted}`)
+				console.log(`Proposer:        ${info.proposerAddress}`)
+				console.log(`Bundle Tracker:  ${info.bundleTrackerAddress}`)
+				console.log('━'.repeat(50) + '\n')
+				return 0
+			}
+			return 1
+		},
+	},
+	'metrics': {
+		description: 'Show node metrics and statistics',
+		run: async () => {
+			const metrics = await fetchEndpoint('/metrics')
+			if (metrics) {
+				console.log('\n🌪️  Node Metrics')
+				console.log('━'.repeat(50))
+				console.log('\nBundles:')
+				console.log(
+					`  Total:           ${metrics.bundles.total.toLocaleString()}`
+				)
+				console.log(`  Last 24h:        ${metrics.bundles.last_24h}`)
+				console.log(
+					`  Latest Nonce:    ${metrics.bundles.latest_nonce ?? 'N/A'}`
+				)
+				console.log('\nCIDs:')
+				console.log(`  Total:           ${metrics.cids.total.toLocaleString()}`)
+				if (metrics.cids.latest) {
+					console.log(`  Latest:          ${metrics.cids.latest}`)
+				}
+				console.log('\nVaults:')
+				console.log(`  Active Vaults:   ${metrics.vaults.total}`)
+				console.log('\nDatabase:')
+				console.log(`  Size:            ${metrics.database.size_mb} MB`)
+				console.log('\nMemory:')
+				console.log(`  Heap Used:       ${metrics.memory.heap_used_mb} MB`)
+				console.log(`  Heap Total:      ${metrics.memory.heap_total_mb} MB`)
+				console.log(`  RSS:             ${metrics.memory.rss_mb} MB`)
+				console.log('\nPerformance:')
+				console.log(`  Query Time:      ${metrics.performance.query_time_ms} ms`)
+				console.log(
+					`  Uptime:          ${formatUptime(metrics.performance.uptime_seconds)}`
+				)
+				console.log('━'.repeat(50) + '\n')
+				return 0
+			}
+			return 1
+		},
+	},
+	'health:detailed': {
+		description: 'Detailed health check (DB, IPFS, Ethereum)',
+		run: async () => {
+			const health = await fetchEndpoint('/health/detailed')
+			if (health) {
+				console.log('\n🌪️  Detailed Health Check')
+				console.log('━'.repeat(50))
+				console.log(`Overall Status:  ${health.status.toUpperCase()}`)
+				console.log(`Timestamp:       ${health.timestamp}`)
+				console.log(`Check Time:      ${health.total_check_time_ms} ms\n`)
+
+				console.log('Database:')
+				console.log(
+					`  Status:          ${health.checks.database.status === 'healthy' ? '✅ Healthy' : '❌ Unhealthy'}`
+				)
+				if (health.checks.database.response_time_ms !== undefined) {
+					console.log(
+						`  Response Time:   ${health.checks.database.response_time_ms} ms`
+					)
+				}
+				if (health.checks.database.error) {
+					console.log(`  Error:           ${health.checks.database.error}`)
+				}
+
+				console.log('\nIPFS:')
+				console.log(
+					`  Status:          ${health.checks.ipfs.status === 'healthy' ? '✅ Healthy' : '❌ Unhealthy'}`
+				)
+				if (health.checks.ipfs.response_time_ms !== undefined) {
+					console.log(
+						`  Response Time:   ${health.checks.ipfs.response_time_ms} ms`
+					)
+				}
+				if (health.checks.ipfs.error) {
+					console.log(`  Error:           ${health.checks.ipfs.error}`)
+				}
+
+				console.log('\nEthereum (Sepolia):')
+				console.log(
+					`  Status:          ${health.checks.ethereum.status === 'healthy' ? '✅ Healthy' : '❌ Unhealthy'}`
+				)
+				if (health.checks.ethereum.latest_block !== undefined) {
+					console.log(
+						`  Latest Block:    ${health.checks.ethereum.latest_block.toLocaleString()}`
+					)
+				}
+				if (health.checks.ethereum.response_time_ms !== undefined) {
+					console.log(
+						`  Response Time:   ${health.checks.ethereum.response_time_ms} ms`
+					)
+				}
+				if (health.checks.ethereum.error) {
+					console.log(`  Error:           ${health.checks.ethereum.error}`)
+				}
+
+				console.log('━'.repeat(50) + '\n')
+				return health.status === 'healthy' ? 0 : 1
+			}
+			return 1
+		},
+	},
 	'db:create': {
 		description: 'Create the oya_db database',
 		run: () => runBun(['run', 'scripts/create-db.js']),
@@ -70,8 +222,18 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
 // Execute command
 if (commands[command]) {
-	const exitCode = commands[command].run()
-	process.exit(exitCode ?? 0)
+	const result = commands[command].run()
+	// Handle async commands
+	if (result instanceof Promise) {
+		result
+			.then((exitCode) => process.exit(exitCode ?? 0))
+			.catch((err) => {
+				console.error('❌ Command failed:', err.message)
+				process.exit(1)
+			})
+	} else {
+		process.exit(result ?? 0)
+	}
 } else {
 	console.error(`❌ Unknown command: ${command}`)
 	console.log(`Run 'oya --help' to see available commands.\n`)
@@ -91,6 +253,59 @@ function runBun(args, env = process.env) {
 }
 
 /**
+ * Fetch data from a node endpoint
+ */
+async function fetchEndpoint(path) {
+	const port = process.env.PORT || 3000
+	const url = `http://localhost:${port}${path}`
+
+	try {
+		const response = await fetch(url)
+		if (!response.ok) {
+			if (response.status === 503) {
+				console.error('❌ Node is unhealthy')
+				return null
+			}
+			throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+		}
+		const data = await response.json()
+
+		// For health endpoint, show status
+		if (path === '/health') {
+			if (data.status === 'healthy') {
+				console.log('✅ Node is healthy')
+			} else {
+				console.log('❌ Node is unhealthy')
+			}
+		}
+
+		return data
+	} catch (error) {
+		if (
+			error.code === 'ECONNREFUSED' ||
+			error.message?.includes('connect') ||
+			error.message?.includes('ECONNREFUSED')
+		) {
+			console.error('❌ Cannot connect to node. Is it running?')
+			console.error(`   Try: oya start`)
+		} else {
+			console.error('❌ Error:', error.message)
+		}
+		return null
+	}
+}
+
+/**
+ * Format uptime in human-readable format
+ */
+function formatUptime(seconds) {
+	const hours = Math.floor(seconds / 3600)
+	const minutes = Math.floor((seconds % 3600) / 60)
+	const secs = seconds % 60
+	return `${hours}h ${minutes}m ${secs}s`
+}
+
+/**
  * Display help text
  */
 function showHelp() {
@@ -107,6 +322,12 @@ Commands:
   Node Operations:
     start              Start the Oya node
     start:debug        Start with debug logging enabled
+    health             Check node health status
+    health:detailed    Detailed health check (DB, IPFS, Ethereum)
+    version            Show node version
+    uptime             Show node uptime
+    info               Show detailed node information
+    metrics            Show node metrics and statistics
 
   Database Management:
     db:create          Create the oya_db database

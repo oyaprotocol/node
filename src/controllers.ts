@@ -361,6 +361,190 @@ export const getInfo = async (req: Request, res: Response) => {
 }
 
 /**
+ * GET /metrics
+ * Returns operational metrics including bundle count, database stats, and performance.
+ */
+export const getMetrics = async (req: Request, res: Response) => {
+	const startTime = Date.now()
+
+	try {
+		// Get bundle count
+		const bundleCountResult = await pool.query('SELECT COUNT(*) FROM bundles')
+		const totalBundles = parseInt(bundleCountResult.rows[0].count)
+
+		// Get CID count and latest CID
+		const cidCountResult = await pool.query('SELECT COUNT(*) FROM cids')
+		const totalCIDs = parseInt(cidCountResult.rows[0].count)
+
+		const latestCIDResult = await pool.query(
+			'SELECT cid, nonce FROM cids ORDER BY timestamp DESC LIMIT 1'
+		)
+		const latestCID =
+			latestCIDResult.rows.length > 0 ? latestCIDResult.rows[0].cid : null
+		const latestCIDNonce =
+			latestCIDResult.rows.length > 0 ? latestCIDResult.rows[0].nonce : null
+
+		// Get unique vault count
+		const vaultCountResult = await pool.query(
+			'SELECT COUNT(DISTINCT vault) FROM nonces'
+		)
+		const totalVaults = parseInt(vaultCountResult.rows[0].count)
+
+		// Get latest bundle nonce
+		const latestBundleResult = await pool.query(
+			'SELECT nonce FROM bundles ORDER BY nonce DESC LIMIT 1'
+		)
+		const latestBundleNonce =
+			latestBundleResult.rows.length > 0
+				? latestBundleResult.rows[0].nonce
+				: null
+
+		// Get bundle stats from last 24h
+		const recentBundlesResult = await pool.query(
+			`SELECT COUNT(*) FROM bundles
+       WHERE timestamp >= NOW() - INTERVAL '24 hours'`
+		)
+		const bundlesLast24h = parseInt(recentBundlesResult.rows[0].count)
+
+		// Get database size
+		const dbSizeResult = await pool.query(
+			`SELECT pg_database_size(current_database()) as size`
+		)
+		const dbSize = parseInt(dbSizeResult.rows[0].size)
+
+		// Calculate query time
+		const queryTime = Date.now() - startTime
+
+		res.status(200).json({
+			bundles: {
+				total: totalBundles,
+				latest_nonce: latestBundleNonce,
+				last_24h: bundlesLast24h,
+			},
+			cids: {
+				total: totalCIDs,
+				latest: latestCID,
+				latest_nonce: latestCIDNonce,
+			},
+			vaults: {
+				total: totalVaults,
+			},
+			database: {
+				size_bytes: dbSize,
+				size_mb: (dbSize / 1024 / 1024).toFixed(2),
+			},
+			performance: {
+				query_time_ms: queryTime,
+				uptime_seconds: Math.floor(process.uptime()),
+			},
+			memory: {
+				heap_used_mb: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2),
+				heap_total_mb: (process.memoryUsage().heapTotal / 1024 / 1024).toFixed(
+					2
+				),
+				rss_mb: (process.memoryUsage().rss / 1024 / 1024).toFixed(2),
+			},
+		})
+	} catch (err) {
+		logger.error('Error getting metrics:', err)
+		res.status(500).json({ error: 'Internal Server Error' })
+	}
+}
+
+/**
+ * GET /health/detailed
+ * Comprehensive health check including database, IPFS, and Ethereum connectivity.
+ */
+export const detailedHealthCheck = async (req: Request, res: Response) => {
+	const startTime = Date.now()
+	const checks: Record<
+		string,
+		{
+			status: string
+			response_time_ms?: number
+			error?: string
+			network?: string
+			latest_block?: number
+		}
+	> = {}
+
+	// Database check
+	try {
+		const dbStart = Date.now()
+		await pool.query('SELECT 1')
+		checks.database = {
+			status: 'healthy',
+			response_time_ms: Date.now() - dbStart,
+		}
+	} catch (err) {
+		checks.database = {
+			status: 'unhealthy',
+			error: err instanceof Error ? err.message : String(err),
+		}
+	}
+
+	// IPFS check (test if Helia is accessible)
+	try {
+		const ipfsStart = Date.now()
+		const { getIPFSNode } = await import('./proposer.js')
+		const ipfs = await getIPFSNode()
+		if (ipfs) {
+			checks.ipfs = {
+				status: 'healthy',
+				response_time_ms: Date.now() - ipfsStart,
+			}
+		} else {
+			checks.ipfs = {
+				status: 'unhealthy',
+				error: 'IPFS node not initialized',
+			}
+		}
+	} catch (err) {
+		checks.ipfs = {
+			status: 'unhealthy',
+			error: err instanceof Error ? err.message : String(err),
+		}
+	}
+
+	// Ethereum connectivity check
+	try {
+		const ethStart = Date.now()
+		const { getSepoliaAlchemy } = await import('./proposer.js')
+		const alchemy = getSepoliaAlchemy()
+		const provider = (await alchemy.config.getProvider()) as unknown as {
+			getBlockNumber: () => Promise<number>
+		}
+		const blockNumber = await provider.getBlockNumber()
+		checks.ethereum = {
+			status: 'healthy',
+			network: 'sepolia',
+			latest_block: blockNumber,
+			response_time_ms: Date.now() - ethStart,
+		}
+	} catch (err) {
+		checks.ethereum = {
+			status: 'unhealthy',
+			error: err instanceof Error ? err.message : String(err),
+		}
+	}
+
+	// Determine overall health
+	const allHealthy = Object.values(checks).every(
+		(check) => check.status === 'healthy'
+	)
+
+	const status = allHealthy ? 'healthy' : 'degraded'
+	const statusCode = allHealthy ? 200 : 503
+
+	res.status(statusCode).json({
+		status,
+		checks,
+		total_check_time_ms: Date.now() - startTime,
+		timestamp: new Date().toISOString(),
+	})
+}
+
+/**
  * POST /intention
  * Receives and processes signed intentions.
  * Validates the intention, signature, and vault address before processing.
