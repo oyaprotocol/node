@@ -28,6 +28,7 @@ import {
 	vaultNonceRouter,
 	healthRouter,
 	infoRouter,
+	metricsRouter,
 	intentionRouter,
 } from './routes.js'
 import { createAndPublishBundle, initializeProposer } from './proposer.js'
@@ -154,6 +155,7 @@ try {
 logger.debug('Mounting route handlers')
 app.use('/health', healthRouter)
 app.use('/info', infoRouter)
+app.use('/metrics', metricsRouter)
 app.use('/intention', intentionRouter)
 app.use('/bundle', bundleRouter)
 app.use('/cid', cidRouter)
