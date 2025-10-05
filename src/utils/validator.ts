@@ -63,19 +63,21 @@ export function validateAddress(address: string, fieldName: string): string {
 
 /**
  * Validates a signature format
+ * Ethereum signatures are 65 bytes: r (32) + s (32) + v (1) = 130 hex chars + 0x prefix
  */
 export function validateSignature(signature: string): string {
 	if (!signature) {
 		throw new ValidationError('Signature is required', 'signature', signature)
 	}
 
-	const signatureRegex = /^0x[a-fA-F0-9]+$/
+	// Standard Ethereum signature: 0x + 130 hex chars = 132 total
+	const signatureRegex = /^0x[a-fA-F0-9]{130}$/
 	if (!signatureRegex.test(signature)) {
 		throw new ValidationError(
-			'Invalid signature format',
+			'Invalid signature format or length',
 			'signature',
 			signature,
-			{ expectedFormat: '0x...' }
+			{ expectedFormat: '0x + 130 hex characters (65 bytes)' }
 		)
 	}
 
