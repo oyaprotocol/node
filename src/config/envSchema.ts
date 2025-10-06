@@ -45,6 +45,23 @@ export const envSchema: EnvVariable[] = [
 		},
 	},
 	{
+		name: 'TEST_DATABASE_URL',
+		required: false,
+		type: 'url',
+		description:
+			'Test database connection string (auto-derived from DATABASE_URL if not set)',
+		sensitive: true,
+		validator: (value) => {
+			if (
+				!value.startsWith('postgres://') &&
+				!value.startsWith('postgresql://')
+			) {
+				return 'Must be a valid PostgreSQL connection string'
+			}
+			return true
+		},
+	},
+	{
 		name: 'DATABASE_SSL',
 		required: false,
 		type: 'boolean',
