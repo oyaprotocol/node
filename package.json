@@ -18,6 +18,9 @@
 		"db:create": "bun run scripts/create-db.js",
 		"db:setup": "bun run scripts/setup-db.js",
 		"db:reset": "FORCE_DROP=true bun run scripts/setup-db.js --drop-existing",
+		"db:test:create": "bun run scripts/create-test-db.js",
+		"db:test:setup": "bun run scripts/setup-test-db.js",
+		"db:test:reset": "FORCE_DROP=true bun run scripts/setup-test-db.js --drop-existing",
 		"prepare": "command -v husky >/dev/null 2>&1 && husky || true"
 	},
 	"dependencies": {
