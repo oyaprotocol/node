@@ -44,6 +44,8 @@
 ## Prerequisites
 
 - **Bun:** Version 1.0 or later ([install from bun.sh](https://bun.sh))
+- **curl and tar:** Maybe required for downloading native modules
+- **npm (optional):** If available, provides faster native module downloads via prebuild-install
 - **PostgreSQL Database:** Either local or hosted (e.g., via Heroku)
 - **Alchemy API Key:** For interacting with Ethereum networks
 - **BundleTracker Contract:** A deployed BundleTracker contract (its address must be provided)
@@ -65,7 +67,10 @@
    bun setup
    ```
 
-   This will install dependencies and make the `oya` command available globally.
+   This will:
+   - Install all dependencies
+   - Download prebuilt native modules (uses npx if available, otherwise curl + tar)
+   - Link the `oya` command globally
 
 ## Environment Variables
 
@@ -151,19 +156,28 @@ The server listens on the port specified in your `.env` file (default is `3000`)
 
 ### Using Docker Locally
 
-The Dockerfile uses Bun for a streamlined, single-stage build:
+The Dockerfile uses Bun for a streamlined, single-stage build with optimized native module handling:
 
 ```dockerfile
 FROM oven/bun:1-alpine
 
 WORKDIR /usr/src/app
 
-# Install dependencies
+# Copy package files and install dependencies
 COPY package.json bun.lockb* ./
-RUN bun install --production
 
-# Copy source code (no build step needed - Bun runs TypeScript directly)
+# Download prebuilt native module for Alpine (avoids needing npm/build tools)
+RUN bun install --production && \
+    wget -q https://github.com/ipshipyard/js-node-datachannel/releases/download/v0.26.6/node-datachannel-v0.26.6-napi-v8-linuxmusl-x64.tar.gz && \
+    tar -xzf node-datachannel-v0.26.6-napi-v8-linuxmusl-x64.tar.gz -C node_modules/@ipshipyard/node-datachannel && \
+    rm node-datachannel-v0.26.6-napi-v8-linuxmusl-x64.tar.gz
+
+# Copy source code and CLI binary
 COPY src ./src
+COPY bin ./bin
+
+# Link CLI globally
+RUN bun link
 
 # Expose port and set environment
 EXPOSE 3000
