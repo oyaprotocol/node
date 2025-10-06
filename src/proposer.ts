@@ -855,6 +855,27 @@ export async function initializeProposer() {
 }
 
 /**
+ * Exports Sepolia Alchemy instance for health checks
+ */
+export function getSepoliaAlchemy() {
+	if (!isInitialized) {
+		throw new Error('Proposer not initialized')
+	}
+	return sepoliaAlchemy
+}
+
+/**
+ * Exports IPFS node for health checks
+ */
+export async function getIPFSNode() {
+	if (!s) {
+		const helia = await createHelia()
+		s = strings(helia)
+	}
+	return s
+}
+
+/**
  * Internal: Initializes Alchemy instances, wallet, and smart contract.
  * @internal
  */
