@@ -39,7 +39,7 @@ import type {
 	Intention,
 	BundleData,
 	IntentionOutput,
-	ExecutionWrapper,
+	ExecutionObject,
 } from './types/core.js'
 
 const gzip = promisify(zlib.gzip)
@@ -75,7 +75,7 @@ export interface BundleTrackerContract extends ethers.BaseContract {
 	): Promise<ethers.ContractTransaction>
 }
 
-let cachedIntentions: ExecutionWrapper[] = []
+let cachedIntentions: ExecutionObject[] = []
 
 let mainnetAlchemy: Alchemy
 let sepoliaAlchemy: Alchemy
@@ -547,7 +547,7 @@ async function handleIntention(
 	intention: Intention,
 	signature: string,
 	from: string
-): Promise<ExecutionWrapper> {
+): Promise<ExecutionObject> {
 	const startTime = Date.now()
 
 	// Validate inputs
@@ -715,7 +715,7 @@ async function handleIntention(
 	} else {
 		logger.error('Unexpected intention format:', validatedIntention)
 	}
-	const executionObject: ExecutionWrapper = {
+	const executionObject: ExecutionObject = {
 		execution: [
 			{
 				intention: validatedIntention,

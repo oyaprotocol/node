@@ -68,10 +68,10 @@ export interface Execution {
 }
 
 /**
- * Wrapper for execution objects that are cached before bundling.
+ * Execution object that wraps verified intentions before bundling.
  * Used internally by the proposer to accumulate intentions.
  */
-export interface ExecutionWrapper {
+export interface ExecutionObject {
 	execution: Array<{
 		intention: Intention
 		proof: unknown[]
