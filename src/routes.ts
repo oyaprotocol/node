@@ -19,6 +19,7 @@
  */
 
 import { Router } from 'express'
+import type { RouteMount } from './types/routes.js'
 import {
 	saveBundle,
 	getBundle,
@@ -37,51 +38,58 @@ import {
 	submitIntention,
 } from './controllers.js'
 
-const bundleRouter = Router()
-const cidRouter = Router()
-const balanceRouter = Router()
-const vaultNonceRouter = Router()
-const healthRouter = Router()
-const infoRouter = Router()
-const metricsRouter = Router()
-const intentionRouter = Router()
-
-// Bundle routes
-bundleRouter.post('/', saveBundle)
-bundleRouter.get('/:nonce', getBundle)
-bundleRouter.get('/', getAllBundles)
-
-// CID routes
-cidRouter.post('/', saveCID)
-cidRouter.get('/:nonce', getCIDsByNonce)
-
-// Balance routes
-balanceRouter.post('/', updateBalanceForOneToken)
-balanceRouter.get('/:vault/:token', getBalanceForOneToken)
-balanceRouter.get('/:vault', getBalanceForAllTokens)
-
-// Vault nonce routes
-vaultNonceRouter.get('/:vault', getVaultNonce)
-vaultNonceRouter.post('/:vault', setVaultNonce)
-
-// Health and info routes
-healthRouter.get('/detailed', detailedHealthCheck)
-healthRouter.get('/', healthCheck)
-infoRouter.get('/', getInfo)
-
-// Metrics routes
-metricsRouter.get('/', getMetrics)
-
-// Intention routes
-intentionRouter.post('/', submitIntention)
-
-export {
-	bundleRouter,
-	cidRouter,
-	balanceRouter,
-	vaultNonceRouter,
-	healthRouter,
-	infoRouter,
-	metricsRouter,
-	intentionRouter,
-}
+/**
+ * Route mount configuration
+ *
+ * Single source of truth for all route mounts. Used by:
+ * - index.ts to mount routes on the Express app
+ * - logger.ts to display available endpoints
+ *
+ * Each router is defined inline and configured with its routes.
+ *
+ * @public
+ */
+export const routeMounts: RouteMount[] = [
+	{
+		basePath: '/health',
+		router: Router()
+			.get('/', healthCheck)
+			.get('/detailed', detailedHealthCheck),
+	},
+	{
+		basePath: '/info',
+		router: Router().get('/', getInfo),
+	},
+	{
+		basePath: '/metrics',
+		router: Router().get('/', getMetrics),
+	},
+	{
+		basePath: '/intention',
+		router: Router().post('/', submitIntention),
+	},
+	{
+		basePath: '/bundle',
+		router: Router()
+			.post('/', saveBundle)
+			.get('/:nonce', getBundle)
+			.get('/', getAllBundles),
+	},
+	{
+		basePath: '/cid',
+		router: Router().post('/', saveCID).get('/:nonce', getCIDsByNonce),
+	},
+	{
+		basePath: '/balance',
+		router: Router()
+			.post('/', updateBalanceForOneToken)
+			.get('/:vault/:token', getBalanceForOneToken)
+			.get('/:vault', getBalanceForAllTokens),
+	},
+	{
+		basePath: '/nonce',
+		router: Router()
+			.get('/:vault', getVaultNonce)
+			.post('/:vault', setVaultNonce),
+	},
+]

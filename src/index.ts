@@ -16,21 +16,12 @@ import bppkg from 'body-parser'
 import pgpkg from 'pg'
 
 import { displayBanner } from './utils/banner.js'
-import { logger, diagnostic } from './utils/logger.js'
+import { logger, diagnostic, logAvailableEndpoints } from './utils/logger.js'
 import { setupEnvironment } from './utils/env.js'
 import { initializeDatabase } from './utils/database.js'
 import { registerShutdownHandlers } from './utils/gracefulShutdown.js'
 import type { DatabaseHealthMonitor } from './utils/database.js'
-import {
-	bundleRouter,
-	cidRouter,
-	balanceRouter,
-	vaultNonceRouter,
-	healthRouter,
-	infoRouter,
-	metricsRouter,
-	intentionRouter,
-} from './routes.js'
+import { routeMounts } from './routes.js'
 import { createAndPublishBundle, initializeProposer } from './proposer.js'
 import { bearerAuth } from './auth.js'
 
@@ -153,15 +144,13 @@ try {
 
 // Mount route handlers
 logger.debug('Mounting route handlers')
-app.use('/health', healthRouter)
-app.use('/info', infoRouter)
-app.use('/metrics', metricsRouter)
-app.use('/intention', intentionRouter)
-app.use('/bundle', bundleRouter)
-app.use('/cid', cidRouter)
-app.use('/balance', balanceRouter)
-app.use('/nonce', vaultNonceRouter)
+for (const { basePath, router } of routeMounts) {
+	app.use(basePath, router)
+}
 logger.debug('All routes mounted successfully')
+
+// Log available endpoints in debug mode
+logAvailableEndpoints(routeMounts)
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗

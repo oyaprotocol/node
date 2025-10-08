@@ -14,6 +14,7 @@
  */
 
 import { Logger, ILogObj } from 'tslog'
+import type { RouteMount, RouterLayer } from '../types/routes.js'
 
 /**
  * Base log template used by all loggers
@@ -152,4 +153,70 @@ export enum LogLevel {
 	WARN = 4,
 	ERROR = 5,
 	FATAL = 6,
+}
+
+/**
+ * Log all available API endpoints
+ *
+ * Extracts and displays all registered routes with their HTTP methods
+ * and protection status. Only runs when LOG_LEVEL is DEBUG (2) or lower.
+ *
+ * Note: Protection detection is currently hardcoded to assume all POST
+ * endpoints are protected by bearer auth (matching the global middleware
+ * in index.ts). If auth strategy changes, update the protection logic here.
+ *
+ * @param mounts - Array of route mount configurations
+ *
+ * @example
+ * ```typescript
+ * logAvailableEndpoints(routeMounts)
+ * ```
+ *
+ * @public
+ */
+export function logAvailableEndpoints(mounts: RouteMount[]): void {
+	const logLevel = parseInt(process.env.LOG_LEVEL || '3')
+
+	// Only log in debug mode (2) or lower
+	if (logLevel > 2) return
+
+	const endpoints: Array<{
+		method: string
+		path: string
+		protected: boolean
+	}> = []
+
+	// Extract all routes from mounted routers
+	for (const { basePath, router } of mounts) {
+		const stack = (router as { stack?: RouterLayer[] }).stack
+		stack?.forEach((layer) => {
+			if (layer.route) {
+				const route = layer.route
+				const methods = Object.keys(route.methods)
+				methods.forEach((method) => {
+					endpoints.push({
+						method: method.toUpperCase(),
+						path: basePath + route.path,
+						// HARDCODED: Assumes all POST endpoints are protected
+						// This matches the global middleware in index.ts that applies
+						// bearerAuth to all POST requests. Update if auth strategy changes.
+						protected: method.toUpperCase() === 'POST',
+					})
+				})
+			}
+		})
+	}
+
+	// Sort endpoints by path, then by method
+	endpoints.sort((a, b) => {
+		const pathCompare = a.path.localeCompare(b.path)
+		return pathCompare !== 0 ? pathCompare : a.method.localeCompare(b.method)
+	})
+
+	endpoints.forEach(({ method, path, protected: isProtected }) => {
+		const protection = isProtected ? ' 🔒 (protected)' : ''
+		logger.debug(
+			`☑️ Registered endpoint: ${method.padEnd(6)} ${path}${protection}`
+		)
+	})
 }
