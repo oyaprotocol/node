@@ -94,7 +94,7 @@ PROPOSER_ADDRESS=your_public_key
 PROPOSER_KEY=your_private_key
 ```
 
-(For testing purposes, you might also use a .env.test file.)
+See `.env.example` for a complete list of available configuration options including optional variables like `PORT`, `LOG_LEVEL`, `DATABASE_SSL`, and `DIAGNOSTIC_LOGGER`.
 
 ## Database Setup
 

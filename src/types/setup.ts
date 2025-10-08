@@ -62,6 +62,8 @@ export interface EnvironmentConfig {
 	API_BEARER_TOKEN: string
 	/** PostgreSQL connection string for the node's database */
 	DATABASE_URL: string
+	/** PostgreSQL connection string for test database (optional, auto-derived if not set) */
+	TEST_DATABASE_URL?: string
 	/** Enable SSL for database connections (default: true) */
 	DATABASE_SSL: boolean
 	/** Alchemy API key for blockchain RPC access */
