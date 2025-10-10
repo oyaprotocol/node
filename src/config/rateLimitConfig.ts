@@ -8,9 +8,9 @@
  * Configuration values are sourced from environment variables with sensible defaults.
  *
  * Tiers:
- * - READ: High-volume read operations (GET requests)
- * - WRITE: Moderate write operations (POST requests)
- * - CRITICAL: Low-volume critical operations (e.g., intention submission)
+ * - PERMISSIVE: Most lenient tier (300 req/min default)
+ * - STANDARD: Moderate tier (100 req/min default)
+ * - STRICT: Most restrictive tier (50 req/min default)
  *
  * @packageDocumentation
  */
@@ -36,42 +36,42 @@ export interface RateLimitTierConfig {
  *
  * @example
  * ```typescript
- * const readTier = rateLimitTiers.read
- * console.log(`Max: ${readTier.max}, Window: ${readTier.windowMs}ms`)
+ * const permissiveTier = rateLimitTiers.permissive
+ * console.log(`Max: ${permissiveTier.max}, Window: ${permissiveTier.windowMs}ms`)
  * ```
  *
  * @public
  */
 export const rateLimitTiers: Record<
-	'read' | 'write' | 'critical',
+	'permissive' | 'standard' | 'strict',
 	RateLimitTierConfig
 > = {
-	read: {
+	permissive: {
 		get max() {
-			return getEnvConfig().RATE_LIMIT_MAX_READ
+			return getEnvConfig().RATE_LIMIT_PERMISSIVE
 		},
 		get windowMs() {
 			return getEnvConfig().RATE_LIMIT_WINDOW_MS
 		},
-		description: 'High-volume read operations (GET requests)',
+		description: 'Most lenient tier (300 req/min default)',
 	},
-	write: {
+	standard: {
 		get max() {
-			return getEnvConfig().RATE_LIMIT_MAX_WRITE
+			return getEnvConfig().RATE_LIMIT_STANDARD
 		},
 		get windowMs() {
 			return getEnvConfig().RATE_LIMIT_WINDOW_MS
 		},
-		description: 'Moderate write operations (POST requests)',
+		description: 'Moderate tier (100 req/min default)',
 	},
-	critical: {
+	strict: {
 		get max() {
-			return getEnvConfig().RATE_LIMIT_MAX_CRITICAL
+			return getEnvConfig().RATE_LIMIT_STRICT
 		},
 		get windowMs() {
 			return getEnvConfig().RATE_LIMIT_WINDOW_MS
 		},
-		description: 'Low-volume critical operations (intention submission)',
+		description: 'Most restrictive tier (50 req/min default)',
 	},
 }
 
