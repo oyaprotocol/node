@@ -24,6 +24,7 @@ import type { DatabaseHealthMonitor } from './utils/database.js'
 import { routeMounts } from './routes.js'
 import { createAndPublishBundle, initializeProposer } from './proposer.js'
 import { bearerAuth } from './auth.js'
+import { createRateLimiter } from './middleware/rateLimit.js'
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -135,6 +136,14 @@ try {
 	logger.fatal('Failed to initialize database:', error)
 	process.exit(1)
 }
+
+/**
+ * Rate limiting middleware for all endpoints.
+ * Applies read-tier rate limiting (configurable via environment variables).
+ * Uses PostgreSQL storage for persistence across restarts.
+ * Rate limits by IP address for unauthenticated requests and by Bearer token for authenticated requests.
+ */
+app.use(createRateLimiter('read'))
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
