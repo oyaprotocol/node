@@ -162,4 +162,72 @@ export const envSchema: EnvVariable[] = [
 		defaultValue: false,
 		transformer: (value) => value === 'true',
 	},
+	{
+		name: 'RATE_LIMIT_ENABLED',
+		required: false,
+		type: 'boolean',
+		description: 'Enable rate limiting middleware',
+		defaultValue: true,
+		transformer: (value: string) => value.toLowerCase() !== 'false',
+	},
+	{
+		name: 'RATE_LIMIT_WINDOW_MS',
+		required: false,
+		type: 'number',
+		description: 'Rate limit window duration in milliseconds',
+		defaultValue: 60000,
+		validator: (value) => {
+			const ms = parseInt(value)
+			if (isNaN(ms) || ms < 1000) {
+				return 'Window must be at least 1000ms (1 second)'
+			}
+			return true
+		},
+		transformer: (value) => parseInt(value),
+	},
+	{
+		name: 'RATE_LIMIT_MAX_READ',
+		required: false,
+		type: 'number',
+		description: 'Max requests per window for read operations',
+		defaultValue: 300,
+		validator: (value) => {
+			const max = parseInt(value)
+			if (isNaN(max) || max < 1) {
+				return 'Max must be at least 1'
+			}
+			return true
+		},
+		transformer: (value) => parseInt(value),
+	},
+	{
+		name: 'RATE_LIMIT_MAX_WRITE',
+		required: false,
+		type: 'number',
+		description: 'Max requests per window for write operations',
+		defaultValue: 100,
+		validator: (value) => {
+			const max = parseInt(value)
+			if (isNaN(max) || max < 1) {
+				return 'Max must be at least 1'
+			}
+			return true
+		},
+		transformer: (value) => parseInt(value),
+	},
+	{
+		name: 'RATE_LIMIT_MAX_CRITICAL',
+		required: false,
+		type: 'number',
+		description: 'Max requests per window for critical operations',
+		defaultValue: 50,
+		validator: (value) => {
+			const max = parseInt(value)
+			if (isNaN(max) || max < 1) {
+				return 'Max must be at least 1'
+			}
+			return true
+		},
+		transformer: (value) => parseInt(value),
+	},
 ]
