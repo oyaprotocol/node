@@ -112,7 +112,7 @@ try {
 */
 
 // Apply rate limiting to all endpoints (requires database)
-app.use(createRateLimiter('read'))
+app.use(createRateLimiter('permissive'))
 
 // Mount route handlers
 logger.debug('Mounting route handlers')
