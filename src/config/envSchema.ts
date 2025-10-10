@@ -186,10 +186,10 @@ export const envSchema: EnvVariable[] = [
 		transformer: (value) => parseInt(value),
 	},
 	{
-		name: 'RATE_LIMIT_MAX_READ',
+		name: 'RATE_LIMIT_PERMISSIVE',
 		required: false,
 		type: 'number',
-		description: 'Max requests per window for read operations',
+		description: 'Max requests per window for permissive tier',
 		defaultValue: 300,
 		validator: (value) => {
 			const max = parseInt(value)
@@ -201,10 +201,10 @@ export const envSchema: EnvVariable[] = [
 		transformer: (value) => parseInt(value),
 	},
 	{
-		name: 'RATE_LIMIT_MAX_WRITE',
+		name: 'RATE_LIMIT_STANDARD',
 		required: false,
 		type: 'number',
-		description: 'Max requests per window for write operations',
+		description: 'Max requests per window for standard tier',
 		defaultValue: 100,
 		validator: (value) => {
 			const max = parseInt(value)
@@ -216,10 +216,10 @@ export const envSchema: EnvVariable[] = [
 		transformer: (value) => parseInt(value),
 	},
 	{
-		name: 'RATE_LIMIT_MAX_CRITICAL',
+		name: 'RATE_LIMIT_STRICT',
 		required: false,
 		type: 'number',
-		description: 'Max requests per window for critical operations',
+		description: 'Max requests per window for strict tier',
 		defaultValue: 50,
 		validator: (value) => {
 			const max = parseInt(value)

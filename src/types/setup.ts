@@ -84,12 +84,12 @@ export interface EnvironmentConfig {
 	RATE_LIMIT_ENABLED: boolean
 	/** Rate limit window duration in milliseconds (default: 60000) */
 	RATE_LIMIT_WINDOW_MS: number
-	/** Maximum requests per window for read operations (default: 300) */
-	RATE_LIMIT_MAX_READ: number
-	/** Maximum requests per window for write operations (default: 100) */
-	RATE_LIMIT_MAX_WRITE: number
-	/** Maximum requests per window for critical operations (default: 50) */
-	RATE_LIMIT_MAX_CRITICAL: number
+	/** Maximum requests per window for permissive tier (default: 300) */
+	RATE_LIMIT_PERMISSIVE: number
+	/** Maximum requests per window for standard tier (default: 100) */
+	RATE_LIMIT_STANDARD: number
+	/** Maximum requests per window for strict tier (default: 50) */
+	RATE_LIMIT_STRICT: number
 }
 
 /**
