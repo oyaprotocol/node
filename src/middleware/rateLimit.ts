@@ -5,13 +5,13 @@
  * ╚═══════════════════════════════════════════════════════════════════════════╝
  *
  * Express middleware for rate limiting API requests using PostgreSQL storage.
- * Provides tiered rate limiting (read/write/critical) with dual-key strategy
+ * Provides tiered rate limiting (permissive/standard/strict) with dual-key strategy
  * (IP address + Bearer token) for layered protection.
  *
  * Features:
  * - PostgreSQL-backed storage for persistence across restarts
  * - Dual-key rate limiting: IP-based AND token-based
- * - Configurable tiers: read, write, critical
+ * - Configurable tiers: permissive, standard, strict
  * - Standards-compliant headers (X-RateLimit-*)
  * - Global enable/disable via environment variable
  *
@@ -31,7 +31,7 @@ import { logger } from '../utils/logger.js'
  * Rate limit tier definitions
  * @public
  */
-export type RateLimitTier = 'read' | 'write' | 'critical'
+export type RateLimitTier = 'permissive' | 'standard' | 'strict'
 
 /**
  * Custom rate limit configuration
@@ -74,13 +74,13 @@ function generateRateLimitKey(req: Request): string {
 /**
  * Creates a rate limiter middleware with specified configuration.
  *
- * @param tierOrConfig - Rate limit tier ('read', 'write', 'critical') or custom config
+ * @param tierOrConfig - Rate limit tier ('permissive', 'standard', 'strict') or custom config
  * @returns Express rate limit middleware
  *
  * @example
  * ```typescript
  * // Use predefined tier
- * app.use(createRateLimiter('read'))
+ * app.use(createRateLimiter('permissive'))
  *
  * // Use custom config
  * app.use(createRateLimiter({ max: 50, windowMs: 30000 }))
@@ -104,20 +104,20 @@ export function createRateLimiter(
 	let windowMs: number
 
 	if (!tierOrConfig) {
-		// Default: use 'read' tier
-		max = config.RATE_LIMIT_MAX_READ
+		// Default: use 'permissive' tier
+		max = config.RATE_LIMIT_PERMISSIVE
 		windowMs = config.RATE_LIMIT_WINDOW_MS
 	} else if (typeof tierOrConfig === 'string') {
 		// Tier-based configuration
 		switch (tierOrConfig) {
-			case 'read':
-				max = config.RATE_LIMIT_MAX_READ
+			case 'permissive':
+				max = config.RATE_LIMIT_PERMISSIVE
 				break
-			case 'write':
-				max = config.RATE_LIMIT_MAX_WRITE
+			case 'standard':
+				max = config.RATE_LIMIT_STANDARD
 				break
-			case 'critical':
-				max = config.RATE_LIMIT_MAX_CRITICAL
+			case 'strict':
+				max = config.RATE_LIMIT_STRICT
 				break
 		}
 		windowMs = config.RATE_LIMIT_WINDOW_MS
