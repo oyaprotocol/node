@@ -19,6 +19,7 @@ RUN bun install --production && \
 # Copy source code and CLI binary (no build step needed - Bun runs TS directly)
 COPY src ./src
 COPY bin ./bin
+COPY scripts ./scripts
 
 # Link CLI globally
 RUN bun link
