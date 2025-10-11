@@ -80,6 +80,16 @@ export interface EnvironmentConfig {
 	LOG_LEVEL: number
 	/** Whether to enable detailed diagnostic logging (default: false) */
 	DIAGNOSTIC_LOGGER: boolean
+	/** Enable or disable rate limiting middleware (default: true) */
+	RATE_LIMIT_ENABLED: boolean
+	/** Rate limit window duration in milliseconds (default: 60000) */
+	RATE_LIMIT_WINDOW_MS: number
+	/** Maximum requests per window for permissive tier (default: 300) */
+	RATE_LIMIT_PERMISSIVE: number
+	/** Maximum requests per window for standard tier (default: 100) */
+	RATE_LIMIT_STANDARD: number
+	/** Maximum requests per window for strict tier (default: 50) */
+	RATE_LIMIT_STRICT: number
 }
 
 /**

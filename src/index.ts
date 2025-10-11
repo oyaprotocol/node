@@ -16,14 +16,16 @@ import bppkg from 'body-parser'
 import pgpkg from 'pg'
 
 import { displayBanner } from './utils/banner.js'
-import { logger, diagnostic, logAvailableEndpoints } from './utils/logger.js'
+import { logger, logAvailableEndpoints } from './utils/logger.js'
 import { setupEnvironment } from './utils/env.js'
 import { initializeDatabase } from './utils/database.js'
 import { registerShutdownHandlers } from './utils/gracefulShutdown.js'
 import type { DatabaseHealthMonitor } from './utils/database.js'
 import { routeMounts } from './routes.js'
 import { createAndPublishBundle, initializeProposer } from './proposer.js'
-import { bearerAuth } from './auth.js'
+import { diagnosticLogger } from './middleware/diagnostic.js'
+import { protectPostEndpoints } from './middleware/postAuth.js'
+import { createRateLimiter } from './middleware/rateLimit.js'
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -56,48 +58,15 @@ const { json } = bppkg
 
 /** Express application instance for the Oya node server */
 const app = express()
+
+// Parse JSON request bodies
 app.use(json())
 
-/**
- * Diagnostic logging middleware for all HTTP requests
- */
-app.use((req, res, next) => {
-	const startTime = Date.now()
-	const requestId = Math.random().toString(36).substring(7)
+// Diagnostic logging for all requests/responses
+app.use(diagnosticLogger)
 
-	diagnostic.trace('HTTP request received', {
-		requestId,
-		method: req.method,
-		path: req.path,
-		query: req.query,
-		headers: req.headers,
-		bodySize: req.body ? JSON.stringify(req.body).length : 0,
-	})
-
-	// Capture response on finish
-	res.on('finish', () => {
-		diagnostic.debug('HTTP response sent', {
-			requestId,
-			method: req.method,
-			path: req.path,
-			statusCode: res.statusCode,
-			responseTime: Date.now() - startTime,
-		})
-	})
-
-	next()
-})
-
-/**
- * Global middleware to protect all POST endpoints with Bearer token authorization.
- * Ensures that only authenticated requests can modify state.
- */
-app.use((req, res, next) => {
-	if (req.method === 'POST') {
-		return bearerAuth(req, res, next)
-	}
-	next()
-})
+// Protect all POST endpoints with Bearer token auth
+app.use(protectPostEndpoints)
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -141,6 +110,9 @@ try {
 ║                            ROUTE HANDLERS                                 ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 */
+
+// Apply rate limiting to all endpoints (requires database)
+app.use(createRateLimiter('permissive'))
 
 // Mount route handlers
 logger.debug('Mounting route handlers')
