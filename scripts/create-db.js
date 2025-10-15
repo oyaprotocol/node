@@ -50,10 +50,14 @@ ${chalk.yellow('Note:')} This script will always create a database named 'oya_db
 // Fixed database name for Oya
 const DB_NAME = 'oya_db'
 
+// Determine SSL setting (default to true for production databases)
+const DATABASE_SSL = process.env.DATABASE_SSL !== 'false'
+
 // Run creation
 createDatabase({
 	dbName: DB_NAME,
 	connectionString: process.env.DATABASE_URL,
+	ssl: DATABASE_SSL,
 	environment: 'production',
 	nextStepCommand: 'bun run db:setup'
 }).catch(error => {
