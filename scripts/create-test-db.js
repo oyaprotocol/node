@@ -84,10 +84,14 @@ function getTestDatabaseConfig() {
 // Get test database configuration
 const { connectionString, dbName } = getTestDatabaseConfig()
 
+// Determine SSL setting (default to false for test databases)
+const DATABASE_SSL = process.env.DATABASE_SSL === 'true'
+
 // Run creation
 createDatabase({
 	dbName,
 	connectionString,
+	ssl: DATABASE_SSL,
 	environment: 'test',
 	nextStepCommand: 'bun run db:test:setup'
 }).catch(error => {

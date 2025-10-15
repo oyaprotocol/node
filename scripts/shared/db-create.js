@@ -50,6 +50,7 @@ export function parseConnectionParams(connectionString) {
  * @param {object} options - Creation options
  * @param {string} options.dbName - Name of the database to create
  * @param {string} options.connectionString - PostgreSQL connection string (for extracting connection params)
+ * @param {boolean} options.ssl - Whether to use SSL for the connection (default: true)
  * @param {string} options.environment - Environment name (for display)
  * @param {string} options.nextStepCommand - Command to run after creation (e.g., 'bun run db:setup')
  */
@@ -57,6 +58,7 @@ export async function createDatabase(options) {
 	const {
 		dbName,
 		connectionString,
+		ssl = true,
 		environment = 'production',
 		nextStepCommand = 'bun run db:setup'
 	} = options
@@ -67,7 +69,8 @@ export async function createDatabase(options) {
 
 	console.log(chalk.gray(`Target database: ${dbName}`))
 	console.log(chalk.gray(`Server: ${host}:${port}`))
-	console.log(chalk.gray(`User: ${user}\n`))
+	console.log(chalk.gray(`User: ${user}`))
+	console.log(chalk.gray(`SSL: ${ssl ? 'enabled' : 'disabled'}\n`))
 
 	// Connect to the default 'postgres' database
 	const client = new Client({
@@ -76,6 +79,7 @@ export async function createDatabase(options) {
 		user,
 		password,
 		database: 'postgres', // Connect to default database to create the target database
+		ssl: ssl ? { rejectUnauthorized: false } : false,
 	})
 
 	try {
