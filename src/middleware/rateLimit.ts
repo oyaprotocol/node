@@ -139,7 +139,10 @@ export function createRateLimiter(
 		standardHeaders: true, // Return rate limit info in RateLimit-* headers
 		legacyHeaders: false, // Disable X-RateLimit-* headers (use standardHeaders instead)
 		store: new PostgresStore(
-			{ connectionString: config.DATABASE_URL },
+			{
+				connectionString: config.DATABASE_URL,
+				ssl: config.DATABASE_SSL ? { rejectUnauthorized: false } : false,
+			},
 			'oya-rate-limit' // session prefix
 		),
 		keyGenerator: generateRateLimitKey,
