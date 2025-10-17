@@ -30,6 +30,7 @@ import zlib from 'zlib'
 import { promisify } from 'util'
 import { getEnvConfig } from './utils/env.js'
 import { createLogger, diagnostic } from './utils/logger.js'
+import { resolveIntentionENS } from './utils/ensResolver.js'
 import {
 	validateIntention,
 	validateAddress,
@@ -550,28 +551,33 @@ async function handleIntention(
 ): Promise<ExecutionObject> {
 	const startTime = Date.now()
 
-	// Validate inputs
-	const validatedIntention = validateIntention(intention)
+	/**
+	 * STEP 1: Basic validation of signature format and from address
+	 * - Validates signature is properly formatted (0x + hex)
+	 * - Validates from is a valid Ethereum address
+	 * - Does NOT validate intention fields yet (may contain ENS names)
+	 */
 	const validatedSignature = validateSignature(signature)
 	const validatedFrom = validateAddress(from, 'from')
 
 	diagnostic.trace('Starting intention processing', {
 		from: validatedFrom,
 		intentionType:
-			'action_type' in validatedIntention
-				? validatedIntention.action_type
-				: 'legacy',
-		intentionNonce: validatedIntention.nonce,
+			'action_type' in intention ? intention.action_type : 'legacy',
+		intentionNonce: intention.nonce,
 		timestamp: startTime,
 	})
 
 	await initializeVault(validatedFrom)
-	logger.info(
-		'Handling intention. Raw intention:',
-		JSON.stringify(validatedIntention)
-	)
+	logger.info('Handling intention. Raw intention:', JSON.stringify(intention))
 	logger.info('Received signature:', validatedSignature)
 
+	/**
+	 * STEP 2: Verify signature against ORIGINAL intention
+	 * - Signature was created by user signing the original intention (with ENS names)
+	 * - Must verify BEFORE resolving ENS, otherwise signature won't match
+	 * - Recovers signer address and compares to 'from' parameter
+	 */
 	const verifyStartTime = Date.now()
 	const signerAddress = verifyMessage(
 		JSON.stringify(intention),
@@ -596,10 +602,35 @@ async function handleIntention(
 		diagnostic.error('Signature mismatch', {
 			expected: validatedFrom,
 			received: signerAddress,
-			intention: validatedIntention,
+			intention: intention,
 		})
 		throw new Error('Signature verification failed')
 	}
+
+	/**
+	 * STEP 3: Resolve ENS names to Ethereum addresses
+	 * - Mutates intention object in-place
+	 * - Resolves: intention.from, intention.to, outputs[].externalAddress
+	 * - Always resolves on Ethereum mainnet (canonical ENS registry)
+	 * - Results are cached for 1 hour to reduce network calls
+	 * - Must happen AFTER signature verification (step 2)
+	 */
+	await resolveIntentionENS(intention)
+	diagnostic.debug('Intention after ENS resolution:', JSON.stringify(intention))
+
+	/**
+	 * STEP 4: Validate the fully resolved intention
+	 * - All addresses are now hex format (ENS resolved)
+	 * - Validates all fields including token addresses, balances, nonces
+	 * - Returns a validated copy with normalized addresses (lowercase)
+	 * - Note: 'from' is validated again here (small redundancy for safety)
+	 */
+	const validatedIntention = validateIntention(intention)
+	diagnostic.debug(
+		'Intention after validation:',
+		JSON.stringify(validatedIntention)
+	)
+
 	const proof: unknown[] = []
 	if (
 		validatedIntention.action_type === 'transfer' ||
@@ -699,13 +730,22 @@ async function handleIntention(
 		// New-style intention: each positive output represents a transfer from the vault
 		const fromVault = intention.from
 		for (const out of intention.outputs as IntentionOutput[]) {
-			if (typeof out.amount !== 'number' || out.amount <= 0) continue
+			// Handle negative amounts (withdrawals from vault) and positive amounts (deposits/transfers)
+			const amount =
+				typeof out.amount === 'string' ? parseFloat(out.amount) : out.amount
+			if (typeof amount !== 'number') continue
+
+			// Skip negative amounts - they represent balance decreases in the vault
+			if (amount <= 0) continue
+
 			const toAddress = out.externalAddress ?? out.vault
-			if (!toAddress || !out.asset) continue
-			const digits = Number(out.digits || 0)
-			const amountUnits = parseUnits(out.amount.toString(), digits).toString()
+			const assetAddress = out.asset
+			if (!toAddress || !assetAddress) continue
+
+			const digits = Number(out.digits || 18)
+			const amountUnits = parseUnits(amount.toString(), digits).toString()
 			proof.push({
-				token: out.asset,
+				token: assetAddress,
 				from: fromVault,
 				to: toAddress,
 				amount: amountUnits,

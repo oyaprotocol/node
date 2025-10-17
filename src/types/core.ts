@@ -16,23 +16,30 @@
  */
 export interface Intention {
 	action_type?: string
+	action?: string
 	from_token_address?: string
 	amount_sent?: string
 	to_token_address?: string
 	amount_received?: string
 	from_token_chainid?: string
 	to_token_chainid?: string
+	chainID?: number
 	nonce?: number
 	to?: string
 	from?: string
 	signature?: string
-	inputs?: TokenAmount[]
+	assets?: IntentionAsset[]
+	inputs?: IntentionInput[]
 	outputs?: IntentionOutput[]
+	totalFee?: (number | string)[]
+	tip?: (number | string)[]
+	protocolFee?: (number | string)[]
 	[key: string]: unknown
 }
 
 /**
  * Represents a token amount with its contract address.
+ * @deprecated Use IntentionInput for new-style intentions
  */
 export interface TokenAmount {
 	token: string
@@ -40,14 +47,37 @@ export interface TokenAmount {
 }
 
 /**
+ * Represents an asset reference in an intention.
+ */
+export interface IntentionAsset {
+	asset: string
+	assetName: string
+}
+
+/**
+ * Represents an input specification for an intention.
+ */
+export interface IntentionInput {
+	vault: string
+	asset?: string
+	token?: string
+	assetName?: string
+	amount: number | string
+	digits?: number
+	chain?: string
+}
+
+/**
  * Defines output specifications for an intention.
  */
 export interface IntentionOutput {
-	asset?: string
-	amount?: number | string
 	vault?: string
+	asset?: string
+	assetName?: string
+	amount?: number | string
 	externalAddress?: string
 	digits?: number
+	chain?: string
 }
 
 /**
