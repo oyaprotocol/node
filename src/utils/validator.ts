@@ -297,7 +297,9 @@ function validateIntentionInputs(
 ): IntentionInput[] {
 	return inputs.map((input, index) => {
 		const validated: IntentionInput = {
-			vault: validateAddress(input.vault, `${fieldName}[${index}].vault`),
+			vault: input.vault
+				? validateAddress(input.vault, `${fieldName}[${index}].vault`)
+				: '',
 			amount:
 				typeof input.amount === 'string'
 					? validateBalance(input.amount, `${fieldName}[${index}].amount`)
