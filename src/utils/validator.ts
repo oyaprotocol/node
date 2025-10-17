@@ -18,7 +18,12 @@
 
 import { ethers } from 'ethers'
 import { createLogger, diagnostic } from './logger.js'
-import type { Intention, TokenAmount } from '../types/core.js'
+import type {
+	Intention,
+	TokenAmount,
+	IntentionInput,
+	IntentionAsset,
+} from '../types/core.js'
 
 /** Logger instance for validation module */
 const logger = createLogger('Validator')
@@ -190,9 +195,14 @@ export function validateIntention(intention: Intention): Intention {
 			validated.signature = validateSignature(intention.signature)
 		}
 
+		// Validate new format assets if present
+		if (intention.assets) {
+			validated.assets = validateAssets(intention.assets, 'intention.assets')
+		}
+
 		// Validate new format inputs/outputs if present
 		if (intention.inputs) {
-			validated.inputs = validateTokenAmounts(
+			validated.inputs = validateIntentionInputs(
 				intention.inputs,
 				'intention.inputs'
 			)
@@ -212,8 +222,26 @@ export function validateIntention(intention: Intention): Intention {
 						`intention.outputs[${index}].externalAddress`
 					)
 				}
+				if (output.asset) {
+					validatedOutput.asset = validateAddress(
+						output.asset,
+						`intention.outputs[${index}].asset`
+					)
+				}
 				return validatedOutput
 			})
+		}
+
+		// Validate chainID if present
+		if (intention.chainID !== undefined) {
+			if (typeof intention.chainID !== 'number') {
+				throw new ValidationError(
+					'chainID must be a number',
+					'intention.chainID',
+					intention.chainID
+				)
+			}
+			validated.chainID = intention.chainID
 		}
 
 		diagnostic.trace('Intention validation successful', {
@@ -235,8 +263,9 @@ export function validateIntention(intention: Intention): Intention {
 
 /**
  * Validates an array of token amounts
+ * @deprecated Use validateIntentionInputs instead
  */
-function validateTokenAmounts(
+export function validateTokenAmounts(
 	amounts: TokenAmount[],
 	fieldName: string
 ): TokenAmount[] {
@@ -244,6 +273,56 @@ function validateTokenAmounts(
 		token: validateAddress(amount.token, `${fieldName}[${index}].token`),
 		amount: validateBalance(amount.amount, `${fieldName}[${index}].amount`),
 	}))
+}
+
+/**
+ * Validates an array of intention assets
+ */
+function validateAssets(
+	assets: IntentionAsset[],
+	fieldName: string
+): IntentionAsset[] {
+	return assets.map((asset, index) => ({
+		asset: validateAddress(asset.asset, `${fieldName}[${index}].asset`),
+		assetName: asset.assetName,
+	}))
+}
+
+/**
+ * Validates an array of intention inputs
+ */
+function validateIntentionInputs(
+	inputs: IntentionInput[],
+	fieldName: string
+): IntentionInput[] {
+	return inputs.map((input, index) => {
+		const validated: IntentionInput = {
+			vault: validateAddress(input.vault, `${fieldName}[${index}].vault`),
+			amount:
+				typeof input.amount === 'string'
+					? validateBalance(input.amount, `${fieldName}[${index}].amount`)
+					: input.amount,
+			digits: input.digits,
+			chain: input.chain,
+			assetName: input.assetName,
+		}
+
+		// Handle both 'asset' and 'token' fields for backwards compatibility
+		if (input.asset) {
+			validated.asset = validateAddress(
+				input.asset,
+				`${fieldName}[${index}].asset`
+			)
+		}
+		if (input.token) {
+			validated.token = validateAddress(
+				input.token,
+				`${fieldName}[${index}].token`
+			)
+		}
+
+		return validated
+	})
 }
 
 /**
