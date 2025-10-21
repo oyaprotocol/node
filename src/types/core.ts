@@ -24,7 +24,7 @@ export interface Intention {
 }
 
 /**
- * Represents the inputs of a user's intention. 
+ * Represents the inputs of a user's intention.
  */
 export interface IntentionInput {
 	asset: string

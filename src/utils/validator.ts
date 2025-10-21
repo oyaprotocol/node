@@ -20,9 +20,10 @@ import { ethers } from 'ethers'
 import { createLogger, diagnostic } from './logger.js'
 import type {
 	Intention,
-	TokenAmount,
 	IntentionInput,
-	IntentionAsset,
+	IntentionOutput,
+	FeeAmount,
+	TotalFeeAmount,
 } from '../types/core.js'
 
 /** Logger instance for validation module */
@@ -144,148 +145,67 @@ export function validateNonce(
 }
 
 /**
+ * Validates a numeric ID (e.g., chain_id, vault_id)
+ */
+function validateId(id: unknown, fieldName: string): number {
+	if (typeof id !== 'number') {
+		throw new ValidationError('ID must be a number', fieldName, id, {
+			receivedType: typeof id,
+		})
+	}
+
+	if (!Number.isInteger(id)) {
+		throw new ValidationError('ID must be an integer', fieldName, id)
+	}
+
+	if (id < 0) {
+		throw new ValidationError('ID must not be negative', fieldName, id)
+	}
+
+	return id
+}
+
+/**
  * Validates an intention object
  */
 export function validateIntention(intention: Intention): Intention {
 	const startTime = Date.now()
-	const validated: Intention = { ...intention }
 
-	try {
-		// Validate addresses if present
-		if (intention.from) {
-			validated.from = validateAddress(intention.from, 'intention.from')
-		}
-		if (intention.to) {
-			validated.to = validateAddress(intention.to, 'intention.to')
-		}
-		if (intention.from_token_address) {
-			validated.from_token_address = validateAddress(
-				intention.from_token_address,
-				'intention.from_token_address'
-			)
-		}
-		if (intention.to_token_address) {
-			validated.to_token_address = validateAddress(
-				intention.to_token_address,
-				'intention.to_token_address'
-			)
-		}
-
-		// Validate amounts if present
-		if (intention.amount_sent) {
-			validated.amount_sent = validateBalance(
-				intention.amount_sent,
-				'intention.amount_sent'
-			)
-		}
-		if (intention.amount_received) {
-			validated.amount_received = validateBalance(
-				intention.amount_received,
-				'intention.amount_received'
-			)
-		}
-
-		// Validate nonce if present
-		if (intention.nonce !== undefined) {
-			validated.nonce = validateNonce(intention.nonce, 'intention.nonce')
-		}
-
-		// Validate signature if present
-		if (intention.signature) {
-			validated.signature = validateSignature(intention.signature)
-		}
-
-		// Validate new format assets if present
-		if (intention.assets) {
-			validated.assets = validateAssets(intention.assets, 'intention.assets')
-		}
-
-		// Validate new format inputs/outputs if present
-		if (intention.inputs) {
-			validated.inputs = validateIntentionInputs(
-				intention.inputs,
-				'intention.inputs'
-			)
-		}
-		if (intention.outputs) {
-			validated.outputs = intention.outputs.map((output, index) => {
-				const validatedOutput = { ...output }
-				if (output.vault) {
-					validatedOutput.vault = validateAddress(
-						output.vault,
-						`intention.outputs[${index}].vault`
-					)
-				}
-				if (output.externalAddress) {
-					validatedOutput.externalAddress = validateAddress(
-						output.externalAddress,
-						`intention.outputs[${index}].externalAddress`
-					)
-				}
-				if (output.asset) {
-					validatedOutput.asset = validateAddress(
-						output.asset,
-						`intention.outputs[${index}].asset`
-					)
-				}
-				return validatedOutput
-			})
-		}
-
-		// Validate chainID if present
-		if (intention.chainID !== undefined) {
-			if (typeof intention.chainID !== 'number') {
-				throw new ValidationError(
-					'chainID must be a number',
-					'intention.chainID',
-					intention.chainID
-				)
-			}
-			validated.chainID = intention.chainID
-		}
-
-		diagnostic.trace('Intention validation successful', {
-			validationTime: Date.now() - startTime,
-			hasInputs: !!intention.inputs,
-			hasOutputs: !!intention.outputs,
-			isLegacyFormat: !intention.inputs && !intention.outputs,
-		})
-
-		return validated
-	} catch (error) {
-		diagnostic.debug('Intention validation failed', {
-			validationTime: Date.now() - startTime,
-			error: error instanceof Error ? error.message : String(error),
-		})
-		throw error
+	if (typeof intention.action !== 'string' || intention.action === '') {
+		throw new ValidationError(
+			'Action is required and must be a non-empty string',
+			'intention.action',
+			intention.action
+		)
 	}
-}
 
-/**
- * Validates an array of token amounts
- * @deprecated Use validateIntentionInputs instead
- */
-export function validateTokenAmounts(
-	amounts: TokenAmount[],
-	fieldName: string
-): TokenAmount[] {
-	return amounts.map((amount, index) => ({
-		token: validateAddress(amount.token, `${fieldName}[${index}].token`),
-		amount: validateBalance(amount.amount, `${fieldName}[${index}].amount`),
-	}))
-}
+	const validated: Intention = {
+		action: intention.action,
+		nonce: validateNonce(intention.nonce, 'intention.nonce'),
+		inputs: validateIntentionInputs(intention.inputs, 'intention.inputs'),
+		outputs: validateIntentionOutputs(
+			intention.outputs,
+			'intention.outputs'
+		),
+		totalFee: validateTotalFeeAmounts(
+			intention.totalFee,
+			'intention.totalFee'
+		),
+		tip: validateFeeAmounts(intention.tip, 'intention.tip'),
+		protocolFee: validateFeeAmounts(
+			intention.protocolFee,
+			'intention.protocolFee'
+		),
+	}
 
-/**
- * Validates an array of intention assets
- */
-function validateAssets(
-	assets: IntentionAsset[],
-	fieldName: string
-): IntentionAsset[] {
-	return assets.map((asset, index) => ({
-		asset: validateAddress(asset.asset, `${fieldName}[${index}].asset`),
-		assetName: asset.assetName,
-	}))
+	diagnostic.trace('Intention validation successful', {
+		validationTime: Date.now() - startTime,
+		hasInputs: !!intention.inputs,
+		hasOutputs: !!intention.outputs,
+		isLegacyFormat: !intention.inputs && !intention.outputs,
+	})
+
+	return validated
 }
 
 /**
@@ -295,35 +215,145 @@ function validateIntentionInputs(
 	inputs: IntentionInput[],
 	fieldName: string
 ): IntentionInput[] {
+	if (!Array.isArray(inputs) || inputs.length === 0) {
+		throw new ValidationError(
+			'Inputs must be a non-empty array',
+			fieldName,
+			inputs
+		)
+	}
 	return inputs.map((input, index) => {
+		const fieldPath = `${fieldName}[${index}]`
 		const validated: IntentionInput = {
-			vault: input.vault
-				? validateAddress(input.vault, `${fieldName}[${index}].vault`)
-				: '',
-			amount:
-				typeof input.amount === 'string'
-					? validateBalance(input.amount, `${fieldName}[${index}].amount`)
-					: input.amount,
-			digits: input.digits,
-			chain: input.chain,
-			assetName: input.assetName,
+			asset: validateAddress(input.asset, `${fieldPath}.asset`),
+			amount: validateBalance(input.amount, `${fieldPath}.amount`),
+			chain_id: validateId(input.chain_id, `${fieldPath}.chain_id`),
 		}
 
-		// Handle both 'asset' and 'token' fields for backwards compatibility
-		if (input.asset) {
-			validated.asset = validateAddress(
-				input.asset,
-				`${fieldName}[${index}].asset`
-			)
+		if (input.from !== undefined) {
+			validated.from = validateId(input.from, `${fieldPath}.from`)
 		}
-		if (input.token) {
-			validated.token = validateAddress(
-				input.token,
-				`${fieldName}[${index}].token`
-			)
+
+		if (input.data !== undefined) {
+			validated.data = input.data
 		}
 
 		return validated
+	})
+}
+
+/**
+ * Validates an array of intention outputs
+ */
+function validateIntentionOutputs(
+	outputs: IntentionOutput[],
+	fieldName: string
+): IntentionOutput[] {
+	if (!Array.isArray(outputs) || outputs.length === 0) {
+		throw new ValidationError(
+			'Outputs must be a non-empty array',
+			fieldName,
+			outputs
+		)
+	}
+	return outputs.map((output, index) => {
+		const fieldPath = `${fieldName}[${index}]`
+		const validated: IntentionOutput = {
+			asset: validateAddress(output.asset, `${fieldPath}.asset`),
+			amount: validateBalance(output.amount, `${fieldPath}.amount`),
+			chain_id: validateId(output.chain_id, `${fieldPath}.chain_id`),
+		}
+
+		const hasTo = output.to !== undefined
+		const hasToExternal =
+			output.to_external !== undefined && output.to_external !== ''
+
+		if (hasTo && hasToExternal) {
+			throw new ValidationError(
+				'Fields "to" and "to_external" are mutually exclusive',
+				fieldPath,
+				output
+			)
+		}
+
+		if (!hasTo && !hasToExternal) {
+			throw new ValidationError(
+				'Either "to" or "to_external" must be provided',
+				fieldPath,
+				output
+			)
+		}
+
+		if (hasTo) {
+			validated.to = validateId(output.to, `${fieldPath}.to`)
+		}
+
+		if (hasToExternal) {
+			validated.to_external = validateAddress(
+				output.to_external as string,
+				`${fieldPath}.to_external`
+			)
+		}
+
+		if (output.data !== undefined) {
+			validated.data = output.data
+		}
+
+		return validated
+	})
+}
+
+/**
+ * Validates an array of fee amounts
+ */
+function validateFeeAmounts(
+	fees: FeeAmount[],
+	fieldName: string
+): FeeAmount[] {
+	if (!Array.isArray(fees)) {
+		throw new ValidationError(
+			`${fieldName} must be an array`,
+			fieldName,
+			fees
+		)
+	}
+	return fees.map((fee, index) => ({
+		asset: validateAddress(fee.asset, `${fieldName}[${index}].asset`),
+		amount: validateBalance(fee.amount, `${fieldName}[${index}].amount`),
+		to: validateId(fee.to, `${fieldName}[${index}].to`),
+		chain_id: validateId(fee.chain_id, `${fieldName}[${index}].chain_id`),
+	}))
+}
+
+/**
+ * Validates an array of total fee amounts
+ */
+function validateTotalFeeAmounts(
+	fees: TotalFeeAmount[],
+	fieldName: string
+): TotalFeeAmount[] {
+	if (!Array.isArray(fees)) {
+		throw new ValidationError(
+			`${fieldName} must be an array`,
+			fieldName,
+			fees
+		)
+	}
+	return fees.map((fee, index) => {
+		if (
+			!Array.isArray(fee.asset) ||
+			fee.asset.some(a => typeof a !== 'string')
+		) {
+			throw new ValidationError(
+				`Asset must be an array of strings`,
+				`${fieldName}[${index}].asset`,
+				fee.asset
+			)
+		}
+		return {
+			asset: fee.asset,
+			amount: validateBalance(fee.amount, `${fieldName}[${index}].amount`),
+		}
 	})
 }
 
