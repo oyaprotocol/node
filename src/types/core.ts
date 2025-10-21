@@ -88,6 +88,7 @@ export interface Execution {
 export interface ExecutionObject {
 	execution: Array<{
 		intention: Intention
+		from: string
 		proof: unknown[]
 	}>
 }
