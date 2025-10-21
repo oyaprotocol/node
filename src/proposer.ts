@@ -35,6 +35,10 @@ import {
 	validateAddress,
 	validateSignature,
 } from './utils/validator.js'
+import {
+	pinBundleToFilecoin,
+	initializeFilecoinPin,
+} from './utils/filecoinPin.js'
 import type {
 	Intention,
 	BundleData,
@@ -454,6 +458,12 @@ async function publishBundle(data: string, signature: string, from: string) {
 		logger.error('Failed to save bundle/CID data:', error)
 		throw new Error('Database operation failed')
 	}
+
+	// Pin to Filecoin asynchronously (non-blocking)
+	const nonce = bundleData.nonce
+	pinBundleToFilecoin(cidToString, compressedData, nonce).catch((err) => {
+		logger.warn('Filecoin pinning failed (bundle still valid):', err.message)
+	})
 	try {
 		for (const execution of bundleData.bundle) {
 			if (!Array.isArray(execution.proof)) {
@@ -849,6 +859,17 @@ export async function initializeProposer() {
 
 	// Initialize wallet and contract
 	await initializeWalletAndContract()
+
+	// Initialize Filecoin Pin (if enabled)
+	try {
+		await initializeFilecoinPin()
+	} catch (error) {
+		logger.warn(
+			'Filecoin Pin initialization failed (continuing without it):',
+			error
+		)
+	}
+
 	isInitialized = true
 
 	logger.info('Proposer module initialized successfully')
