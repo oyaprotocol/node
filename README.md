@@ -11,6 +11,7 @@
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Environment Variables](#environment-variables)
+- [Testnet Contracts](#testnet-contracts)
 - [Database Setup](#database-setup)
 - [Running the Application](#running-the-application)
 - [API Endpoints](#api-endpoints)
@@ -95,6 +96,13 @@ PROPOSER_KEY=your_private_key
 ```
 
 See `.env.example` for a complete list of available configuration options including optional variables like `PORT`, `LOG_LEVEL`, `DATABASE_SSL`, and `DIAGNOSTIC_LOGGER`.
+
+## Testnet Contracts
+Instances of the BundleTracker and VaultTracker contracts are deployed on Sepolia Testnet at the following addresses: 
+
+- BundleTracker: [0x4b05e1269b74d031B80E8c6973cA076b681914E7](https://sepolia.etherscan.io/address/0x4b05e1269b74d031B80E8c6973cA076b681914E7#code)
+- VaultTracker: [0x6f2B59f69296c9F045C699472174D878BB4B8aB8](https://sepolia.etherscan.io/address/0x6f2B59f69296c9F045C699472174D878BB4B8aB8#code)
+
 
 ## Database Setup
 
