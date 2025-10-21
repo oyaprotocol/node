@@ -36,11 +36,7 @@ import {
 	validateAddress,
 	validateSignature,
 } from './utils/validator.js'
-import type {
-	Intention,
-	BundleData,
-	ExecutionObject,
-} from './types/core.js'
+import type { Intention, BundleData, ExecutionObject } from './types/core.js'
 
 const gzip = promisify(zlib.gzip)
 
