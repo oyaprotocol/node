@@ -183,14 +183,8 @@ export function validateIntention(intention: Intention): Intention {
 		action: intention.action,
 		nonce: validateNonce(intention.nonce, 'intention.nonce'),
 		inputs: validateIntentionInputs(intention.inputs, 'intention.inputs'),
-		outputs: validateIntentionOutputs(
-			intention.outputs,
-			'intention.outputs'
-		),
-		totalFee: validateTotalFeeAmounts(
-			intention.totalFee,
-			'intention.totalFee'
-		),
+		outputs: validateIntentionOutputs(intention.outputs, 'intention.outputs'),
+		totalFee: validateTotalFeeAmounts(intention.totalFee, 'intention.totalFee'),
 		tip: validateFeeAmounts(intention.tip, 'intention.tip'),
 		protocolFee: validateFeeAmounts(
 			intention.protocolFee,
@@ -306,16 +300,9 @@ function validateIntentionOutputs(
 /**
  * Validates an array of fee amounts
  */
-function validateFeeAmounts(
-	fees: FeeAmount[],
-	fieldName: string
-): FeeAmount[] {
+function validateFeeAmounts(fees: FeeAmount[], fieldName: string): FeeAmount[] {
 	if (!Array.isArray(fees)) {
-		throw new ValidationError(
-			`${fieldName} must be an array`,
-			fieldName,
-			fees
-		)
+		throw new ValidationError(`${fieldName} must be an array`, fieldName, fees)
 	}
 	return fees.map((fee, index) => ({
 		asset: validateAddress(fee.asset, `${fieldName}[${index}].asset`),
@@ -333,16 +320,12 @@ function validateTotalFeeAmounts(
 	fieldName: string
 ): TotalFeeAmount[] {
 	if (!Array.isArray(fees)) {
-		throw new ValidationError(
-			`${fieldName} must be an array`,
-			fieldName,
-			fees
-		)
+		throw new ValidationError(`${fieldName} must be an array`, fieldName, fees)
 	}
 	return fees.map((fee, index) => {
 		if (
 			!Array.isArray(fee.asset) ||
-			fee.asset.some(a => typeof a !== 'string')
+			fee.asset.some((a) => typeof a !== 'string')
 		) {
 			throw new ValidationError(
 				`Asset must be an array of strings`,
