@@ -19,7 +19,7 @@ export interface Intention {
 	inputs: IntentionInput[]
 	outputs: IntentionOutput[]
 	totalFee: TotalFeeAmount[]
-	tip: FeeAmount[]
+	proposerTip: FeeAmount[]
 	protocolFee: FeeAmount[]
 }
 

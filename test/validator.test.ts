@@ -47,7 +47,7 @@ const mockValidIntention: Intention = {
 			amount: '0.011',
 		},
 	],
-	tip: [
+	proposerTip: [
 		{
 			asset: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
 			amount: '0.01',
@@ -376,9 +376,9 @@ describe('validateIntention', () => {
 		expect(() => validateIntention(invalidIntention)).toThrow(ValidationError)
 	})
 
-	test('should throw for negative chain_id in a tip', () => {
+	test('should throw for negative chain_id in a proposerTip', () => {
 		const invalidIntention = JSON.parse(JSON.stringify(mockValidIntention))
-		invalidIntention.tip[0].chain_id = -1
+		invalidIntention.proposerTip[0].chain_id = -1
 		expect(() => validateIntention(invalidIntention)).toThrow(ValidationError)
 	})
 

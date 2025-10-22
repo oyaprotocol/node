@@ -185,7 +185,10 @@ export function validateIntention(intention: Intention): Intention {
 		inputs: validateIntentionInputs(intention.inputs, 'intention.inputs'),
 		outputs: validateIntentionOutputs(intention.outputs, 'intention.outputs'),
 		totalFee: validateTotalFeeAmounts(intention.totalFee, 'intention.totalFee'),
-		tip: validateFeeAmounts(intention.tip, 'intention.tip'),
+		proposerTip: validateFeeAmounts(
+			intention.proposerTip,
+			'intention.proposerTip'
+		),
 		protocolFee: validateFeeAmounts(
 			intention.protocolFee,
 			'intention.protocolFee'
