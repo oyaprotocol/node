@@ -181,11 +181,19 @@ function validateTimestamp(timestamp: unknown, fieldName: string): number {
 	}
 
 	if (!Number.isInteger(timestamp)) {
-		throw new ValidationError('Timestamp must be an integer', fieldName, timestamp)
+		throw new ValidationError(
+			'Timestamp must be an integer',
+			fieldName,
+			timestamp
+		)
 	}
 
 	if (timestamp < 0) {
-		throw new ValidationError('Timestamp cannot be negative', fieldName, timestamp)
+		throw new ValidationError(
+			'Timestamp cannot be negative',
+			fieldName,
+			timestamp
+		)
 	}
 
 	return timestamp
