@@ -77,6 +77,7 @@ export interface BundleTrackerContract extends ethers.BaseContract {
 
 let cachedIntentions: ExecutionObject[] = []
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let mainnetAlchemy: Alchemy
 let sepoliaAlchemy: Alchemy
 let wallet: Wallet
@@ -142,34 +143,6 @@ async function getLatestNonce(): Promise<number> {
 	)
 	if (result.rows.length === 0) return 0
 	return result.rows[0].nonce + 1
-}
-
-/**
- * Fetches token decimals from mainnet for proper amount calculations.
- * Returns 18 for ETH (zero address).
- */
-async function getTokenDecimals(tokenAddress: string): Promise<bigint> {
-	try {
-		if (tokenAddress === '0x0000000000000000000000000000000000000000') {
-			return 18n
-		}
-		const tokenMetadata =
-			await mainnetAlchemy.core.getTokenMetadata(tokenAddress)
-		if (
-			tokenMetadata.decimals === null ||
-			tokenMetadata.decimals === undefined
-		) {
-			logger.error(
-				'Token metadata decimals is missing for token:',
-				tokenAddress
-			)
-			throw new Error('Token decimals missing')
-		}
-		return BigInt(tokenMetadata.decimals)
-	} catch (error) {
-		logger.error(`Failed to get token metadata for ${tokenAddress}:`, error)
-		throw new Error('Failed to retrieve token decimals')
-	}
 }
 
 /**
@@ -651,8 +624,7 @@ async function handleIntention(
 	 */
 	for (const input of validatedIntention.inputs) {
 		const tokenAddress = input.asset
-		const tokenDecimals = await getTokenDecimals(tokenAddress)
-		const requiredAmount = parseUnits(input.amount, Number(tokenDecimals))
+		const requiredAmount = safeBigInt(input.amount)
 
 		// For now, all inputs are debited from the user's main vault,
 		// which is identified by their validated 'from' address.
@@ -685,8 +657,7 @@ async function handleIntention(
 
 	for (const output of validatedIntention.outputs) {
 		const tokenAddress = output.asset
-		const tokenDecimals = await getTokenDecimals(tokenAddress)
-		const amountInWei = parseUnits(output.amount, Number(tokenDecimals))
+		const amountInWei = safeBigInt(output.amount)
 		let toIdentifier: string | number
 
 		if (output.to_external) {

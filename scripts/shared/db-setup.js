@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS bundles (
   proposer TEXT NOT NULL,
   signature TEXT NOT NULL,
   ipfs_cid TEXT,
+  filecoin_status TEXT DEFAULT 'pending',
+  filecoin_tx_hash TEXT,
+  filecoin_piece_cid TEXT,
+  filecoin_confirmed_at TIMESTAMPTZ,
+  filecoin_error TEXT,
   timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -70,6 +75,10 @@ export const createIndexesSql = `
 -- Create case-insensitive unique indexes for vault/token lookups
 CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_vault_nonces ON nonces (LOWER(vault));
 CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_vault_token_balances ON balances (LOWER(vault), LOWER(token));
+
+-- Create indexes for Filecoin tracking
+CREATE INDEX IF NOT EXISTS idx_bundles_filecoin_status ON bundles(filecoin_status);
+CREATE INDEX IF NOT EXISTS idx_bundles_ipfs_cid ON bundles(ipfs_cid);
 `
 
 /**
