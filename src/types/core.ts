@@ -20,6 +20,7 @@ export interface Intention {
 	outputs: IntentionOutput[]
 	totalFee: TotalFeeAmount[]
 	proposerTip: FeeAmount[]
+	agentTip?: FeeAmount[]
 	protocolFee: FeeAmount[]
 }
 

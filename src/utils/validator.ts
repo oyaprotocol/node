@@ -195,6 +195,13 @@ export function validateIntention(intention: Intention): Intention {
 		),
 	}
 
+	if (intention.agentTip) {
+		validated.agentTip = validateFeeAmounts(
+			intention.agentTip,
+			'intention.agentTip'
+		)
+	}
+
 	diagnostic.trace('Intention validation successful', {
 		validationTime: Date.now() - startTime,
 		hasInputs: !!intention.inputs,
