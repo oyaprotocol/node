@@ -166,6 +166,40 @@ function validateId(id: unknown, fieldName: string): number {
 }
 
 /**
+ * Validates a Unix timestamp
+ */
+function validateTimestamp(timestamp: unknown, fieldName: string): number {
+	if (typeof timestamp !== 'number') {
+		throw new ValidationError(
+			'Timestamp must be a number',
+			fieldName,
+			timestamp,
+			{
+				receivedType: typeof timestamp,
+			}
+		)
+	}
+
+	if (!Number.isInteger(timestamp)) {
+		throw new ValidationError(
+			'Timestamp must be an integer',
+			fieldName,
+			timestamp
+		)
+	}
+
+	if (timestamp < 0) {
+		throw new ValidationError(
+			'Timestamp cannot be negative',
+			fieldName,
+			timestamp
+		)
+	}
+
+	return timestamp
+}
+
+/**
  * Validates an intention object
  */
 export function validateIntention(intention: Intention): Intention {
@@ -182,6 +216,7 @@ export function validateIntention(intention: Intention): Intention {
 	const validated: Intention = {
 		action: intention.action,
 		nonce: validateNonce(intention.nonce, 'intention.nonce'),
+		expiry: validateTimestamp(intention.expiry, 'intention.expiry'),
 		inputs: validateIntentionInputs(intention.inputs, 'intention.inputs'),
 		outputs: validateIntentionOutputs(intention.outputs, 'intention.outputs'),
 		totalFee: validateTotalFeeAmounts(intention.totalFee, 'intention.totalFee'),
@@ -193,6 +228,13 @@ export function validateIntention(intention: Intention): Intention {
 			intention.protocolFee,
 			'intention.protocolFee'
 		),
+	}
+
+	if (intention.agentTip) {
+		validated.agentTip = validateFeeAmounts(
+			intention.agentTip,
+			'intention.agentTip'
+		)
 	}
 
 	diagnostic.trace('Intention validation successful', {
