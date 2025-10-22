@@ -155,6 +155,21 @@ async function verifyUploadReadiness(dataSize: number): Promise<void> {
 		autoConfigureAllowances: true,
 	})
 
+	// Log cost estimates if available
+	if (readinessCheck.status === 'ready' && 'estimatedCost' in readinessCheck) {
+		const cost = readinessCheck.estimatedCost as {
+			perEpoch?: bigint
+			perDay?: bigint
+			perMonth?: bigint
+		}
+		logger.info('Filecoin storage cost estimate:', {
+			perEpoch: cost.perEpoch?.toString(),
+			perDay: cost.perDay?.toString(),
+			perMonth: cost.perMonth?.toString(),
+			fileSize: dataSize,
+		})
+	}
+
 	if (readinessCheck.status === 'blocked') {
 		const errorMsg =
 			'message' in readinessCheck ? readinessCheck.message : 'Unknown reason'
@@ -229,14 +244,14 @@ export async function pinBundleToFilecoin(
 		// Update status to 'uploading'
 		await updateBundleStatus(cid, 'uploading')
 
+		// Verify we have sufficient balance/allowances FIRST (before creating storage context)
+		await verifyUploadReadiness(bundleData.length)
+
 		// Create storage context for this upload
 		const { storage, providerInfo } = await createUploadContext()
 		logger.debug(
 			`Using provider: ${providerInfo.name} (ID: ${providerInfo.id})`
 		)
-
-		// Verify we have sufficient balance/allowances
-		await verifyUploadReadiness(bundleData.length)
 
 		// Build the synapse service object
 		const synapseService: SynapseService = {
