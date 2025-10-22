@@ -21,6 +21,7 @@
 		"db:test:create": "bun run scripts/create-test-db.js",
 		"db:test:setup": "bun run scripts/setup-test-db.js",
 		"db:test:reset": "FORCE_DROP=true bun run scripts/setup-test-db.js --drop-existing",
+		"filecoin:setup": "bun run scripts/setup-filecoin.js",
 		"prepare": "command -v husky >/dev/null 2>&1 && husky || true"
 	},
 	"dependencies": {
