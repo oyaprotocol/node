@@ -40,12 +40,7 @@ import {
 	pinBundleToFilecoin,
 	initializeFilecoinPin,
 } from './utils/filecoinPin.js'
-import type {
-	Intention,
-	BundleData,
-	IntentionOutput,
-	ExecutionObject,
-} from './types/core.js'
+import type { Intention, BundleData, ExecutionObject } from './types/core.js'
 
 const gzip = promisify(zlib.gzip)
 
@@ -181,10 +176,13 @@ async function getTokenDecimals(tokenAddress: string): Promise<bigint> {
  * Gets the current balance for a vault/token pair from the database.
  * Returns 0n if no balance exists.
  */
-async function getBalance(vault: string, token: string): Promise<bigint> {
+async function getBalance(
+	vault: string | number,
+	token: string
+): Promise<bigint> {
 	const result = await pool.query(
 		'SELECT balance FROM balances WHERE LOWER(vault) = LOWER($1) AND LOWER(token) = LOWER($2) ORDER BY timestamp DESC LIMIT 1',
-		[vault, token]
+		[vault.toString(), token]
 	)
 	if (result.rows.length === 0) return 0n
 	return safeBigInt(result.rows[0].balance.toString())
@@ -195,30 +193,29 @@ async function getBalance(vault: string, token: string): Promise<bigint> {
  * Handles case-insensitive vault and token addresses.
  */
 async function updateBalance(
-	vault: string,
+	vault: string | number,
 	token: string,
 	newBalance: bigint
 ): Promise<void> {
-	// Validate and normalize addresses
-	const validatedVault = validateAddress(vault, 'vault')
 	const validatedToken = validateAddress(token, 'token')
+	const vaultIdentifier = vault.toString()
 
 	if (newBalance < 0n) {
 		throw new Error('Balance cannot be negative')
 	}
 	const result = await pool.query(
 		'SELECT * FROM balances WHERE vault = $1 AND token = $2',
-		[validatedVault, validatedToken]
+		[vaultIdentifier, validatedToken]
 	)
 	if (result.rows.length === 0) {
 		await pool.query(
 			'INSERT INTO balances (vault, token, balance) VALUES ($1, $2, $3)',
-			[validatedVault, validatedToken, newBalance.toString()]
+			[vaultIdentifier, validatedToken, newBalance.toString()]
 		)
 	} else {
 		await pool.query(
 			'UPDATE balances SET balance = $1, timestamp = CURRENT_TIMESTAMP WHERE vault = $2 AND token = $3',
-			[newBalance.toString(), validatedVault, validatedToken]
+			[newBalance.toString(), vaultIdentifier, validatedToken]
 		)
 	}
 }
@@ -226,10 +223,10 @@ async function updateBalance(
 /**
  * Checks if a vault has any balance records in the database.
  */
-async function vaultExists(vault: string): Promise<boolean> {
+async function vaultExists(vault: string | number): Promise<boolean> {
 	const result = await pool.query(
 		'SELECT 1 FROM balances WHERE LOWER(vault)=LOWER($1) LIMIT 1',
-		[vault]
+		[vault.toString()]
 	)
 	return result.rows.length > 0
 }
@@ -237,9 +234,12 @@ async function vaultExists(vault: string): Promise<boolean> {
 /**
  * Initializes a new vault with default token balances if it doesn't exist.
  */
-async function initializeVault(vault: string) {
+async function initializeVault(vault: string | number) {
 	if (!(await vaultExists(vault))) {
-		await initializeBalancesForVault(vault)
+		// We can only initialize balances for vaults that are ETH addresses
+		if (typeof vault === 'string' && ethers.isAddress(vault)) {
+			await initializeBalancesForVault(vault)
+		}
 	}
 }
 
@@ -337,7 +337,7 @@ async function saveBundleData(
 	if (Array.isArray(bundleData.bundle)) {
 		for (const execution of bundleData.bundle) {
 			const vaultNonce = execution.intention.nonce
-			const vault = execution.intention.from
+			const vault = execution.from
 			await pool.query(
 				`INSERT INTO nonces (vault, nonce)
        VALUES (LOWER($1), $2)
@@ -506,17 +506,17 @@ async function setupHelia() {
  */
 async function updateBalances(
 	from: string,
-	to: string,
+	to: string | number,
 	token: string,
 	amount: string
 ) {
-	// Validate and normalize all inputs
+	// from is always an address, to can be an address or a vault ID
 	const validatedFrom = validateAddress(from, 'from')
-	const validatedTo = validateAddress(to, 'to')
 	const validatedToken = validateAddress(token, 'token')
 
 	await initializeVault(validatedFrom)
-	await initializeVault(validatedTo)
+	await initializeVault(to)
+
 	const amountBigInt = safeBigInt(amount)
 	const { PROPOSER_ADDRESS } = getEnvConfig()
 	if (validatedFrom === PROPOSER_ADDRESS.toLowerCase()) {
@@ -531,7 +531,7 @@ async function updateBalances(
 		)
 	}
 	const fromBalance = await getBalance(validatedFrom, validatedToken)
-	const toBalance = await getBalance(validatedTo, validatedToken)
+	const toBalance = await getBalance(to, validatedToken)
 	const newFromBalance = fromBalance - amountBigInt
 	const newToBalance = toBalance + amountBigInt
 	if (newFromBalance < 0n) {
@@ -540,13 +540,11 @@ async function updateBalances(
 	logger.info(
 		`New balance for from vault (${validatedFrom}): ${newFromBalance.toString()}`
 	)
-	logger.info(
-		`New balance for to vault (${validatedTo}): ${newToBalance.toString()}`
-	)
+	logger.info(`New balance for to vault (${to}): ${newToBalance.toString()}`)
 	await updateBalance(validatedFrom, validatedToken, newFromBalance)
-	await updateBalance(validatedTo, validatedToken, newToBalance)
+	await updateBalance(to, validatedToken, newToBalance)
 	logger.info(
-		`Balances updated: from ${validatedFrom} to ${validatedTo} for token ${validatedToken} amount ${amount}`
+		`Balances updated: from ${validatedFrom} to ${to} for token ${validatedToken} amount ${amount}`
 	)
 }
 
@@ -572,8 +570,7 @@ async function handleIntention(
 
 	diagnostic.trace('Starting intention processing', {
 		from: validatedFrom,
-		intentionType:
-			'action_type' in intention ? intention.action_type : 'legacy',
+		action: intention.action,
 		intentionNonce: intention.nonce,
 		timestamp: startTime,
 	})
@@ -620,7 +617,7 @@ async function handleIntention(
 	/**
 	 * STEP 3: Resolve ENS names to Ethereum addresses
 	 * - Mutates intention object in-place
-	 * - Resolves: intention.from, intention.to, outputs[].externalAddress
+	 * - Resolves: outputs[].to_external
 	 * - Always resolves on Ethereum mainnet (canonical ENS registry)
 	 * - Results are cached for 1 hour to reduce network calls
 	 * - Must happen AFTER signature verification (step 2)
@@ -633,7 +630,6 @@ async function handleIntention(
 	 * - All addresses are now hex format (ENS resolved)
 	 * - Validates all fields including token addresses, balances, nonces
 	 * - Returns a validated copy with normalized addresses (lowercase)
-	 * - Note: 'from' is validated again here (small redundancy for safety)
 	 */
 	const validatedIntention = validateIntention(intention)
 	diagnostic.debug(
@@ -641,134 +637,82 @@ async function handleIntention(
 		JSON.stringify(validatedIntention)
 	)
 
-	const proof: unknown[] = []
-	if (
-		validatedIntention.action_type === 'transfer' ||
-		validatedIntention.action_type === 'swap'
-	) {
-		if (
-			!validatedIntention.from_token_address ||
-			!validatedIntention.amount_sent
-		) {
-			throw new Error('Missing required fields for transfer/swap')
-		}
-		const tokenAddress = validatedIntention.from_token_address
-		const sentTokenDecimals = await getTokenDecimals(tokenAddress)
-		const amountSent = parseUnits(
-			validatedIntention.amount_sent,
-			Number(sentTokenDecimals)
-		)
-		let amountReceived
-		if (
-			validatedIntention.amount_received &&
-			validatedIntention.to_token_address
-		) {
-			const receivedTokenDecimals = await getTokenDecimals(
-				validatedIntention.to_token_address
-			)
-			amountReceived = parseUnits(
-				validatedIntention.amount_received,
-				Number(receivedTokenDecimals)
-			)
-		}
-		const amountSentBigInt = safeBigInt(amountSent.toString())
-		const currentBalance = await getBalance(validatedFrom, tokenAddress)
+	// Check for expiry
+	if (validatedIntention.expiry < Date.now() / 1000) {
+		diagnostic.error('Intention has expired', {
+			expiry: validatedIntention.expiry,
+			currentTime: Math.floor(Date.now() / 1000),
+		})
+		throw new Error('Intention has expired')
+	}
+
+	/**
+	 * STEP 5: Verify vault balances based on intention inputs
+	 */
+	for (const input of validatedIntention.inputs) {
+		const tokenAddress = input.asset
+		const tokenDecimals = await getTokenDecimals(tokenAddress)
+		const requiredAmount = parseUnits(input.amount, Number(tokenDecimals))
+
+		// For now, all inputs are debited from the user's main vault,
+		// which is identified by their validated 'from' address.
+		const balanceOwner = validatedFrom
+		const currentBalance = await getBalance(balanceOwner, tokenAddress)
 
 		diagnostic.trace('Balance check', {
-			vault: from,
+			vault: balanceOwner,
 			token: tokenAddress,
 			currentBalance: currentBalance.toString(),
-			requiredAmount: amountSentBigInt.toString(),
-			remainingBalance: (currentBalance - amountSentBigInt).toString(),
-			sufficient: currentBalance >= amountSentBigInt,
+			requiredAmount: requiredAmount.toString(),
+			sufficient: currentBalance >= requiredAmount,
 		})
 
-		logger.info(
-			`Current balance for ${from} and token ${tokenAddress}: ${currentBalance.toString()}`
-		)
-		if (currentBalance < amountSentBigInt) {
+		if (currentBalance < requiredAmount) {
 			diagnostic.error('Insufficient balance', {
-				vault: from,
+				vault: balanceOwner,
 				token: tokenAddress,
 				currentBalance: currentBalance.toString(),
-				requiredAmount: amountSent.toString(),
-				deficit: (amountSentBigInt - currentBalance).toString(),
+				requiredAmount: requiredAmount.toString(),
 			})
-			logger.error(
-				`Insufficient balance. Current: ${currentBalance.toString()}, Required: ${amountSent.toString()}`
-			)
 			throw new Error('Insufficient balance')
 		}
-		if (intention.action_type === 'swap') {
-			if (amountReceived === undefined || !intention.to_token_address) {
-				throw new Error('Missing amountReceived or to_token_address for swap')
-			}
-			const { PROPOSER_ADDRESS } = getEnvConfig()
-			const swapInput = {
-				token: tokenAddress,
-				chainId: validatedIntention.from_token_chainid,
-				from: validatedIntention.from,
-				to: PROPOSER_ADDRESS,
-				amount: amountSent.toString(),
-				tokenId: 0,
-			}
-			proof.push(swapInput)
-			const swapOutput = {
-				token: validatedIntention.to_token_address,
-				chainId: validatedIntention.to_token_chainid,
-				from: PROPOSER_ADDRESS,
-				to: validatedIntention.from,
-				amount: amountReceived.toString(),
-				tokenId: 0,
-			}
-			proof.push(swapOutput)
-		} else {
-			const transfer = {
-				token: tokenAddress,
-				chainId: validatedIntention.from_token_chainid,
-				from: validatedIntention.from,
-				to: validatedIntention.to,
-				amount: amountSent.toString(),
-				tokenId: 0,
-			}
-			proof.push(transfer)
-		}
-	} else if (
-		Array.isArray(intention.inputs) &&
-		Array.isArray(intention.outputs)
-	) {
-		// New-style intention: each positive output represents a transfer from the vault
-		const fromVault = intention.from
-		for (const out of intention.outputs as IntentionOutput[]) {
-			// Handle negative amounts (withdrawals from vault) and positive amounts (deposits/transfers)
-			const amount =
-				typeof out.amount === 'string' ? parseFloat(out.amount) : out.amount
-			if (typeof amount !== 'number') continue
-
-			// Skip negative amounts - they represent balance decreases in the vault
-			if (amount <= 0) continue
-
-			const toAddress = out.externalAddress ?? out.vault
-			const assetAddress = out.asset
-			if (!toAddress || !assetAddress) continue
-
-			const digits = Number(out.digits || 18)
-			const amountUnits = parseUnits(amount.toString(), digits).toString()
-			proof.push({
-				token: assetAddress,
-				from: fromVault,
-				to: toAddress,
-				amount: amountUnits,
-				tokenId: 0,
-			})
-		}
-	} else {
-		logger.error('Unexpected intention format:', validatedIntention)
 	}
+
+	/**
+	 * STEP 6: Generate proof based on intention outputs
+	 */
+	const proof: unknown[] = []
+
+	for (const output of validatedIntention.outputs) {
+		const tokenAddress = output.asset
+		const tokenDecimals = await getTokenDecimals(tokenAddress)
+		const amountInWei = parseUnits(output.amount, Number(tokenDecimals))
+		let toIdentifier: string | number
+
+		if (output.to_external) {
+			toIdentifier = output.to_external
+		} else if (output.to !== undefined) {
+			toIdentifier = output.to // Pass the vault ID directly
+		} else {
+			// This case should be prevented by the validator, but we handle it defensively
+			throw new Error(
+				'Intention output must have a destination (`to` or `to_external`)'
+			)
+		}
+
+		proof.push({
+			token: tokenAddress,
+			from: validatedFrom, // All transfers originate from the user's vault
+			to: toIdentifier,
+			amount: amountInWei.toString(),
+		})
+	}
+
 	const executionObject: ExecutionObject = {
 		execution: [
 			{
 				intention: validatedIntention,
+				from: validatedFrom,
 				proof: proof,
 			},
 		],
@@ -777,10 +721,7 @@ async function handleIntention(
 
 	diagnostic.info('Intention processed successfully', {
 		from: validatedFrom,
-		intentionType:
-			'action_type' in validatedIntention
-				? validatedIntention.action_type
-				: 'legacy',
+		action: validatedIntention.action,
 		processingTime: Date.now() - startTime,
 		totalCachedIntentions: cachedIntentions.length,
 		proofCount: proof.length,
