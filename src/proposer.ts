@@ -627,6 +627,15 @@ async function handleIntention(
 		JSON.stringify(validatedIntention)
 	)
 
+	// Check for expiry
+	if (validatedIntention.expiry < Date.now() / 1000) {
+		diagnostic.error('Intention has expired', {
+			expiry: validatedIntention.expiry,
+			currentTime: Math.floor(Date.now() / 1000),
+		})
+		throw new Error('Intention has expired')
+	}
+
 	/**
 	 * STEP 5: Verify vault balances based on intention inputs
 	 */

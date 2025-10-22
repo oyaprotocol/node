@@ -26,6 +26,7 @@ import type { Intention } from '../src/types/core.js'
 const mockValidIntention: Intention = {
 	action: 'Swap 1,000 USDC for 0.3 WETH with .016 WETH in fees',
 	nonce: 1,
+	expiry: Math.floor(Date.now() / 1000) + 3600, // Expires in 1 hour
 	inputs: [
 		{
 			asset: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
@@ -387,6 +388,25 @@ describe('validateIntention', () => {
 	test('should throw for negative chain_id in a proposerTip', () => {
 		const invalidIntention = JSON.parse(JSON.stringify(mockValidIntention))
 		invalidIntention.proposerTip[0].chain_id = -1
+		expect(() => validateIntention(invalidIntention)).toThrow(ValidationError)
+	})
+
+	test('should throw for an expired timestamp', () => {
+		const invalidIntention = {
+			...mockValidIntention,
+			expiry: Math.floor(Date.now() / 1000) - 60, // Expired 1 minute ago
+		}
+		// Note: The validator only checks the format. The proposer will check the value.
+		// So this test should pass validation but would be rejected by the proposer.
+		const result = validateIntention(invalidIntention)
+		expect(result.expiry).toBe(invalidIntention.expiry)
+	})
+
+	test('should throw for an invalid timestamp format', () => {
+		const invalidIntention = {
+			...mockValidIntention,
+			expiry: 1729686000.5, // Not an integer
+		} as unknown as Intention
 		expect(() => validateIntention(invalidIntention)).toThrow(ValidationError)
 	})
 

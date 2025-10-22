@@ -16,6 +16,7 @@
 export interface Intention {
 	action: string
 	nonce: number
+	expiry: number
 	inputs: IntentionInput[]
 	outputs: IntentionOutput[]
 	totalFee: TotalFeeAmount[]
