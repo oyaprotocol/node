@@ -24,7 +24,7 @@ import type { Intention } from '../src/types/core.js'
 // --- MOCK DATA FOR TESTS ---
 
 const mockValidIntention: Intention = {
-	action: 'buy 1000 USDC of WETH',
+	action: 'Swap 1,000 USDC for 0.3 WETH with .011 WETH in fees',
 	nonce: 1,
 	inputs: [
 		{
@@ -43,14 +43,14 @@ const mockValidIntention: Intention = {
 	],
 	totalFee: [
 		{
-			asset: ['ETH'],
-			amount: '0.01',
+			asset: ['WETH'],
+			amount: '0.011',
 		},
 	],
 	tip: [
 		{
 			asset: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
-			amount: '0.001',
+			amount: '0.01',
 			to: 123, // Some vault ID
 			chain_id: 1,
 		},
@@ -58,7 +58,7 @@ const mockValidIntention: Intention = {
 	protocolFee: [
 		{
 			asset: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
-			amount: '0.0001',
+			amount: '0.001',
 			to: 0, // Oya vault ID
 			chain_id: 1,
 		},
@@ -312,7 +312,9 @@ describe('validateIntention', () => {
 	test('should pass a valid intention object', () => {
 		const result = validateIntention(mockValidIntention)
 		expect(result).toBeDefined()
-		expect(result.action).toBe('buy 1000 USDC of WETH')
+		expect(result.action).toBe(
+			'Swap 1,000 USDC for 0.3 WETH with .011 WETH in fees'
+		)
 		expect(result.outputs[0].to_external).toBe(
 			'0xdb473d9716ac61dc4d4aea6e4d691239db84c77d'
 		)
