@@ -62,7 +62,7 @@ export interface TotalFeeAmount {
 export interface FeeAmount {
 	asset: string // asset contract address, or zero address for base asset, like ETH on Ethereum
 	amount: string
-	to: number
+	to?: number
 	chain_id: number
 }
 
