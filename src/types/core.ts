@@ -12,72 +12,56 @@
 
 /**
  * Represents a user's intention in the Oya Protocol.
- * Supports both legacy format and new inputs/outputs format.
  */
 export interface Intention {
-	action_type?: string
-	action?: string
-	from_token_address?: string
-	amount_sent?: string
-	to_token_address?: string
-	amount_received?: string
-	from_token_chainid?: string
-	to_token_chainid?: string
-	chainID?: number
-	nonce?: number
-	to?: string
-	from?: string
-	signature?: string
-	assets?: IntentionAsset[]
-	inputs?: IntentionInput[]
-	outputs?: IntentionOutput[]
-	totalFee?: (number | string)[]
-	tip?: (number | string)[]
-	protocolFee?: (number | string)[]
-	[key: string]: unknown
+	action: string
+	nonce: number
+	inputs: IntentionInput[]
+	outputs: IntentionOutput[]
+	totalFee: TotalFeeAmount[]
+	proposerTip: FeeAmount[]
+	protocolFee: FeeAmount[]
 }
 
 /**
- * Represents a token amount with its contract address.
- * @deprecated Use IntentionInput for new-style intentions
+ * Represents the inputs of a user's intention.
  */
-export interface TokenAmount {
-	token: string
+export interface IntentionInput {
+	asset: string
+	amount: string
+	from?: number // vault ID
+	data?: string // optional metadata
+	chain_id: number
+}
+
+/**
+ * Represents the outputs of a user's intention.
+ */
+export interface IntentionOutput {
+	asset: string
+	amount: string
+	to?: number // vault ID - mutually exclusive with to_external
+	to_external?: string // external address - mutually exclusive with to
+	data?: string // may be hex-encoded bytes for external calldata, or string for in-protocol data
+	chain_id: number
+}
+
+/**
+ * Represents the total fees for a user's intention, the sum of the tip and protocol fee.
+ */
+export interface TotalFeeAmount {
+	asset: string[] // human readable identifier, like WETH or AAVE, since underlying assets may have different addresses on different chains
 	amount: string
 }
 
 /**
- * Represents an asset reference in an intention.
+ * Represents the fees for a user's intention.
  */
-export interface IntentionAsset {
-	asset: string
-	assetName: string
-}
-
-/**
- * Represents an input specification for an intention.
- */
-export interface IntentionInput {
-	vault: string
-	asset?: string
-	token?: string
-	assetName?: string
-	amount: number | string
-	digits?: number
-	chain?: string
-}
-
-/**
- * Defines output specifications for an intention.
- */
-export interface IntentionOutput {
-	vault?: string
-	asset?: string
-	assetName?: string
-	amount?: number | string
-	externalAddress?: string
-	digits?: number
-	chain?: string
+export interface FeeAmount {
+	asset: string // asset contract address, or zero address for base asset, like ETH on Ethereum
+	amount: string
+	to: number
+	chain_id: number
 }
 
 /**
@@ -104,6 +88,7 @@ export interface Execution {
 export interface ExecutionObject {
 	execution: Array<{
 		intention: Intention
+		from: string
 		proof: unknown[]
 	}>
 }

@@ -121,41 +121,21 @@ export function getENSCacheStats() {
  * @throws Error if any ENS name fails to resolve
  */
 export async function resolveIntentionENS(intention: Intention): Promise<void> {
-	// Resolve from field
-	if (intention.from && isENSName(intention.from)) {
-		const resolved = await resolveENS(intention.from)
-		if (!resolved) {
-			throw new Error(`ENS name could not be resolved: ${intention.from}`)
-		}
-		logger.debug(`Resolved intention.from: ${intention.from} -> ${resolved}`)
-		intention.from = resolved
-	}
-
-	// Resolve to field
-	if (intention.to && isENSName(intention.to)) {
-		const resolved = await resolveENS(intention.to)
-		if (!resolved) {
-			throw new Error(`ENS name could not be resolved: ${intention.to}`)
-		}
-		logger.debug(`Resolved intention.to: ${intention.to} -> ${resolved}`)
-		intention.to = resolved
-	}
-
-	// Resolve outputs[].externalAddress
+	// Resolve outputs[].to_external
 	if (intention.outputs && Array.isArray(intention.outputs)) {
 		for (let i = 0; i < intention.outputs.length; i++) {
 			const output = intention.outputs[i]
-			if (output.externalAddress && isENSName(output.externalAddress)) {
-				const resolved = await resolveENS(output.externalAddress)
+			if (output.to_external && isENSName(output.to_external)) {
+				const resolved = await resolveENS(output.to_external)
 				if (!resolved) {
 					throw new Error(
-						`ENS name could not be resolved: ${output.externalAddress}`
+						`ENS name could not be resolved: ${output.to_external}`
 					)
 				}
 				logger.debug(
-					`Resolved outputs[${i}].externalAddress: ${output.externalAddress} -> ${resolved}`
+					`Resolved outputs[${i}].to_external: ${output.to_external} -> ${resolved}`
 				)
-				intention.outputs[i].externalAddress = resolved
+				intention.outputs[i].to_external = resolved
 			}
 		}
 	}

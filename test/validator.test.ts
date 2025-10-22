@@ -21,6 +21,52 @@ import {
 } from '../src/utils/validator.js'
 import type { Intention } from '../src/types/core.js'
 
+// --- MOCK DATA FOR TESTS ---
+
+const mockValidIntention: Intention = {
+	action: 'Swap 1,000 USDC for 0.3 WETH with .011 WETH in fees',
+	nonce: 1,
+	inputs: [
+		{
+			asset: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+			amount: '1000.0',
+			chain_id: 1,
+		},
+	],
+	outputs: [
+		{
+			asset: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
+			amount: '0.3',
+			to_external: '0xDB473D9716ac61dc4D4aeA6e4d691239DB84C77D',
+			chain_id: 1,
+		},
+	],
+	totalFee: [
+		{
+			asset: ['WETH'],
+			amount: '0.011',
+		},
+	],
+	proposerTip: [
+		{
+			asset: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
+			amount: '0.01',
+			to: 123, // Some vault ID
+			chain_id: 1,
+		},
+	],
+	protocolFee: [
+		{
+			asset: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
+			amount: '0.001',
+			to: 0, // Oya vault ID
+			chain_id: 1,
+		},
+	],
+}
+
+// --- TEST SUITES ---
+
 describe('validateAddress', () => {
 	test('accepts valid ethereum address', () => {
 		const result = validateAddress(
@@ -263,143 +309,82 @@ describe('validateNonce', () => {
 })
 
 describe('validateIntention', () => {
-	test('validates legacy format intention with all fields', () => {
-		const intention: Intention = {
-			text: 'send 100 USDC to bob',
-			from: '0xDB473D9716ac61dc4D4aeA6e4d691239DB84C77D',
-			to: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
-			from_token_address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-			to_token_address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-			amount_sent: '100.000000',
-			amount_received: '100.000000',
-			nonce: 1,
-		}
-
-		const result = validateIntention(intention)
-		expect(result.from).toBe('0xdb473d9716ac61dc4d4aea6e4d691239db84c77d')
-		expect(result.to).toBe('0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed')
-		expect(result.nonce).toBe(1)
-	})
-
-	test('validates new format intention with inputs/outputs', () => {
-		const intention: Intention = {
-			text: 'swap 100 USDC for ETH',
-			inputs: [
-				{
-					token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-					amount: '100.000000',
-				},
-			],
-			outputs: [
-				{
-					vault: '0xDB473D9716ac61dc4D4aeA6e4d691239DB84C77D',
-					tokens: [
-						{
-							token: '0x0000000000000000000000000000000000000000',
-							amount: '0.05',
-						},
-					],
-				},
-			],
-		}
-
-		const result = validateIntention(intention)
-		expect(result.inputs).toBeDefined()
-		expect(result.outputs).toBeDefined()
-		expect(result.inputs![0].token).toBe(
-			'0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
+	test('should pass a valid intention object', () => {
+		const result = validateIntention(mockValidIntention)
+		expect(result).toBeDefined()
+		expect(result.action).toBe(
+			'Swap 1,000 USDC for 0.3 WETH with .011 WETH in fees'
 		)
-	})
-
-	test('validates minimal intention with only text', () => {
-		const intention: Intention = {
-			text: 'send tokens',
-		}
-
-		const result = validateIntention(intention)
-		expect(result.text).toBe('send tokens')
-	})
-
-	test('normalizes all addresses to lowercase', () => {
-		const intention: Intention = {
-			text: 'test',
-			from: '0xDB473D9716ac61dc4D4aeA6e4d691239DB84C77D',
-			inputs: [
-				{
-					token: '0xA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48',
-					amount: '100',
-				},
-			],
-		}
-
-		const result = validateIntention(intention)
-		expect(result.from).toBe('0xdb473d9716ac61dc4d4aea6e4d691239db84c77d')
-		expect(result.inputs![0].token).toBe(
-			'0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
-		)
-	})
-
-	test('throws ValidationError for invalid from address', () => {
-		const intention: Intention = {
-			text: 'test',
-			from: 'invalid',
-		}
-
-		expect(() => validateIntention(intention)).toThrow(ValidationError)
-	})
-
-	test('throws ValidationError for invalid balance in amount_sent', () => {
-		const intention: Intention = {
-			text: 'test',
-			amount_sent: 'abc',
-		}
-
-		expect(() => validateIntention(intention)).toThrow(ValidationError)
-	})
-
-	test('throws ValidationError for invalid nonce', () => {
-		const intention: Intention = {
-			text: 'test',
-			nonce: -1,
-		}
-
-		expect(() => validateIntention(intention)).toThrow(ValidationError)
-	})
-
-	test('validates and normalizes externalAddress in outputs', () => {
-		const intention: Intention = {
-			text: 'withdraw to external address',
-			outputs: [
-				{
-					externalAddress: '0xDB473D9716ac61dc4D4aeA6e4d691239DB84C77D',
-					tokens: [
-						{
-							token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-							amount: '100',
-						},
-					],
-				},
-			],
-		}
-
-		const result = validateIntention(intention)
-		expect(result.outputs![0].externalAddress).toBe(
+		expect(result.outputs[0].to_external).toBe(
 			'0xdb473d9716ac61dc4d4aea6e4d691239db84c77d'
 		)
 	})
 
-	test('throws ValidationError for invalid externalAddress in outputs', () => {
-		const intention: Intention = {
-			text: 'test',
-			outputs: [
-				{
-					externalAddress: 'invalid',
-					tokens: [],
-				},
-			],
-		}
+	test('should throw if action is missing', () => {
+		const invalidIntention = {
+			...mockValidIntention,
+			action: '',
+		} as unknown as Intention
+		expect(() => validateIntention(invalidIntention)).toThrow(ValidationError)
+	})
 
-		expect(() => validateIntention(intention)).toThrow(ValidationError)
+	test('should throw if inputs array is missing or empty', () => {
+		const noInputs = {
+			...mockValidIntention,
+			inputs: [],
+		} as unknown as Intention
+		const missingInputs = { ...mockValidIntention, inputs: undefined }
+		expect(() => validateIntention(noInputs)).toThrow(ValidationError)
+		expect(() => validateIntention(missingInputs as Intention)).toThrow(
+			ValidationError
+		)
+	})
+
+	test('should throw if outputs array is missing or empty', () => {
+		const noOutputs = {
+			...mockValidIntention,
+			outputs: [],
+		} as unknown as Intention
+		const missingOutputs = { ...mockValidIntention, outputs: undefined }
+		expect(() => validateIntention(noOutputs)).toThrow(ValidationError)
+		expect(() => validateIntention(missingOutputs as Intention)).toThrow(
+			ValidationError
+		)
+	})
+
+	test('should throw if an output has both "to" and "to_external"', () => {
+		const invalidIntention = JSON.parse(JSON.stringify(mockValidIntention))
+		invalidIntention.outputs[0].to = 123 // Add 'to' to an output that has 'to_external'
+		expect(() => validateIntention(invalidIntention)).toThrow(ValidationError)
+	})
+
+	test('should throw if an output has neither "to" nor "to_external"', () => {
+		const invalidIntention = JSON.parse(JSON.stringify(mockValidIntention))
+		delete invalidIntention.outputs[0].to_external
+		expect(() => validateIntention(invalidIntention)).toThrow(ValidationError)
+	})
+
+	test('should throw for invalid address in an input asset', () => {
+		const invalidIntention = JSON.parse(JSON.stringify(mockValidIntention))
+		invalidIntention.inputs[0].asset = 'invalid-address'
+		expect(() => validateIntention(invalidIntention)).toThrow(ValidationError)
+	})
+
+	test('should throw for invalid balance in an output amount', () => {
+		const invalidIntention = JSON.parse(JSON.stringify(mockValidIntention))
+		invalidIntention.outputs[0].amount = '-100'
+		expect(() => validateIntention(invalidIntention)).toThrow(ValidationError)
+	})
+
+	test('should throw for negative chain_id in a proposerTip', () => {
+		const invalidIntention = JSON.parse(JSON.stringify(mockValidIntention))
+		invalidIntention.proposerTip[0].chain_id = -1
+		expect(() => validateIntention(invalidIntention)).toThrow(ValidationError)
+	})
+
+	test('should allow vault ID 0 in protocolFee', () => {
+		const result = validateIntention(mockValidIntention)
+		expect(result.protocolFee[0].to).toBe(0)
 	})
 })
 
