@@ -1,8 +1,6 @@
 // utils/webhook.ts
 import { getEnvConfig } from '../utils/env.js'
 import { diagnostic, createLogger } from '../utils/logger.js'
-import fetch from 'node-fetch'
-import { AbortController } from 'abort-controller'
 import { setTimeout as delay } from 'timers/promises'
 
 const log = createLogger('Webhook')
@@ -91,11 +89,11 @@ export async function sendWebhook(
 				log.info(`Webhook delivered in ${took}ms (attempt ${attempt})`)
 				return
 			}
-		} catch (err) {
+		} catch (err: unknown) {
 			clearTimeout(timeout)
 			lastError = err
 
-			if (err?.name === 'AbortError') {
+			if (err instanceof Error && err.name === 'AbortError') {
 				log.warn(
 					`Webhook attempt ${attempt} aborted after ${timeoutMs}ms — will retry`
 				)
@@ -129,16 +127,28 @@ function redactSecret(secret: string | undefined) {
 	return `${secret.slice(0, 2)}***${secret.slice(-4)}`
 }
 
-function stringifyErr(err: unknown) {
-	if (!err) return 'unknown error'
-	if (typeof err === 'string') return err
-	if (err instanceof Error) {
-		const code = err.code ? ` code=${err.code}` : ''
-		return `${err.name}: ${err.message}${code}`
-	}
-	try {
-		return JSON.stringify(err)
-	} catch {
-		return String(err)
-	}
+function hasCode(e: unknown): e is { code: string | number } {
+  return (
+    typeof e === 'object' &&
+    e !== null &&
+    'code' in e &&
+    (typeof (e as Record<string, unknown>).code === 'string' ||
+      typeof (e as Record<string, unknown>).code === 'number')
+  )
+}
+
+function stringifyErr(err: unknown): string {
+  if (!err) return 'unknown error'
+  if (typeof err === 'string') return err
+
+  if (err instanceof Error) {
+    const code = hasCode(err) ? ` code=${String((err as { code: string | number }).code)}` : ''
+    return `${err.name}: ${err.message}${code}`
+  }
+
+  try {
+    return JSON.stringify(err)
+  } catch {
+    return String(err)
+  }
 }
