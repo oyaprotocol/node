@@ -41,7 +41,7 @@ export async function resolveENS(name: string): Promise<string | null> {
 
 	// Check cache first
 	const cached = ensCache.get(nameLower)
-	if (cached) {
+	if (cached !== undefined) {
 		diagnostic.debug('ENS cache hit', {
 			name: nameLower,
 			address: cached,
