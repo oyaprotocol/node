@@ -269,15 +269,15 @@ describe('Cache Utility', () => {
 			expect(cache.has('nonexistent')).toBe(false)
 		})
 
-		test('should handle undefined values correctly', () => {
+		test('should reject undefined values with clear error', () => {
 			const cache = new Cache<string | undefined>(1000)
 
-			// Undefined is a valid cacheable value
-			cache.set('undefined', undefined)
-			expect(cache.get('undefined')).toBeUndefined()
-			// Note: has() can't distinguish cached undefined from not found
-			// This is a known limitation - use null instead if you need this distinction
-			expect(cache.has('undefined')).toBe(false)
+			// Attempting to cache undefined should throw
+			expect(() => {
+				cache.set('undefined', undefined)
+			}).toThrow(
+				'Cannot cache undefined values. Use null to represent missing data.'
+			)
 		})
 
 		test('should handle empty strings as keys', () => {

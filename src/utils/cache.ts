@@ -55,9 +55,16 @@ export class Cache<T> {
 	/**
 	 * Store a value in the cache.
 	 * @param key - Cache key
-	 * @param value - Value to cache
+	 * @param value - Value to cache (cannot be undefined; use null instead)
+	 * @throws Error if attempting to cache undefined
 	 */
 	set(key: string, value: T): void {
+		if (value === undefined) {
+			throw new Error(
+				'Cannot cache undefined values. Use null to represent missing data.'
+			)
+		}
+
 		this.cache.set(key, {
 			value,
 			timestamp: Date.now(),
