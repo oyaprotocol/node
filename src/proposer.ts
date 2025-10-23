@@ -36,6 +36,7 @@ import {
 	validateAddress,
 	validateSignature,
 } from './utils/validator.js'
+import { sendWebhook } from './utils/webhook.js'
 import type { Intention, BundleData, ExecutionObject } from './types/core.js'
 
 const gzip = promisify(zlib.gzip)
@@ -469,6 +470,28 @@ async function publishBundle(data: string, signature: string, from: string) {
 	} catch (error) {
 		logger.error('Failed to update balances:', error)
 		throw new Error('Balance update failed')
+	}
+	try {
+		const { WEBHOOK_URL, WEBHOOK_SECRET } = getEnvConfig()
+
+		if (WEBHOOK_URL && WEBHOOK_SECRET) {
+			const payload = {
+				type: 'BUNDLE_PROPOSED',
+				executions: cachedIntentions,
+				cid: cidToString,
+				nonce: bundleData.nonce,
+				createdAt: Date.now(),
+			}
+			await sendWebhook(payload)
+			logger.info('BUNDLE_PROPOSED webhook sent successfully')
+		} else {
+			logger.warn(
+				'Webhook URL or secret not configured, skipping webhook delivery'
+			)
+		}
+	} catch (error) {
+		logger.error('Failed to send webhook:', error)
+		throw new Error('Webhook delivery failed')
 	}
 	return cid
 }
