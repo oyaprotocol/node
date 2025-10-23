@@ -128,27 +128,29 @@ function redactSecret(secret: string | undefined) {
 }
 
 function hasCode(e: unknown): e is { code: string | number } {
-  return (
-    typeof e === 'object' &&
-    e !== null &&
-    'code' in e &&
-    (typeof (e as Record<string, unknown>).code === 'string' ||
-      typeof (e as Record<string, unknown>).code === 'number')
-  )
+	return (
+		typeof e === 'object' &&
+		e !== null &&
+		'code' in e &&
+		(typeof (e as Record<string, unknown>).code === 'string' ||
+			typeof (e as Record<string, unknown>).code === 'number')
+	)
 }
 
 function stringifyErr(err: unknown): string {
-  if (!err) return 'unknown error'
-  if (typeof err === 'string') return err
+	if (!err) return 'unknown error'
+	if (typeof err === 'string') return err
 
-  if (err instanceof Error) {
-    const code = hasCode(err) ? ` code=${String((err as { code: string | number }).code)}` : ''
-    return `${err.name}: ${err.message}${code}`
-  }
+	if (err instanceof Error) {
+		const code = hasCode(err)
+			? ` code=${String((err as { code: string | number }).code)}`
+			: ''
+		return `${err.name}: ${err.message}${code}`
+	}
 
-  try {
-    return JSON.stringify(err)
-  } catch {
-    return String(err)
-  }
+	try {
+		return JSON.stringify(err)
+	} catch {
+		return String(err)
+	}
 }
