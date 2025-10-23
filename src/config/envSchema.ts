@@ -94,6 +94,21 @@ export const envSchema: EnvVariable[] = [
 		transformer: (value) => ethers.getAddress(value),
 	},
 	{
+		name: 'VAULT_TRACKER_ADDRESS',
+		required: true,
+		type: 'address',
+		description: 'VaultTracker contract address on Sepolia',
+		validator: (value) => {
+			try {
+				ethers.getAddress(value)
+				return true
+			} catch {
+				return 'Must be a valid Ethereum address'
+			}
+		},
+		transformer: (value) => ethers.getAddress(value),
+	},
+	{
 		name: 'PROPOSER_ADDRESS',
 		required: true,
 		type: 'address',
