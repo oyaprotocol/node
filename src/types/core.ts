@@ -79,8 +79,9 @@ export interface BundleData {
  */
 export interface Execution {
 	intention: Intention
+	from: string
+	proof: unknown[]
 	signature?: string
-	proof?: unknown[]
 }
 
 /**
@@ -88,11 +89,7 @@ export interface Execution {
  * Used internally by the proposer to accumulate intentions.
  */
 export interface ExecutionObject {
-	execution: Array<{
-		intention: Intention
-		from: string
-		proof: unknown[]
-	}>
+	execution: Array<Execution>
 }
 
 /**
