@@ -54,6 +54,15 @@ dotenv.config()
 /** Logger instance for proposer module */
 const logger = createLogger('Proposer')
 
+/** Cached environment variables for frequently used values */
+const {
+	PROPOSER_ADDRESS,
+	BUNDLE_TRACKER_ADDRESS,
+	VAULT_TRACKER_ADDRESS,
+	ALCHEMY_API_KEY,
+	PROPOSER_KEY,
+} = getEnvConfig()
+
 /** Bundle cycle counter for diagnostics */
 let bundleCycleCount = 0
 let lastSuccessfulBundleTime = 0
@@ -105,7 +114,6 @@ let isInitialized = false
  * Connects the wallet for transaction signing.
  */
 async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
-	const { BUNDLE_TRACKER_ADDRESS } = getEnvConfig()
 	const abiPath = path.join(__dirname, 'abi', 'BundleTracker.json')
 	const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'))
 	const provider =
@@ -125,7 +133,6 @@ async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
  * Connects the wallet for transaction signing.
  */
 async function buildVaultTrackerContract(): Promise<VaultTrackerContract> {
-	const { VAULT_TRACKER_ADDRESS } = getEnvConfig()
 	const abiPath = path.join(__dirname, '..', 'dist', 'abi', 'VaultTracker.json')
 	const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'))
 	const provider =
@@ -145,7 +152,6 @@ async function buildVaultTrackerContract(): Promise<VaultTrackerContract> {
  * Initializes wallet with private key for blockchain transactions.
  */
 async function buildAlchemyInstances() {
-	const { ALCHEMY_API_KEY, PROPOSER_KEY } = getEnvConfig()
 	const mainnet = new Alchemy({
 		apiKey: ALCHEMY_API_KEY,
 		network: Network.ETH_MAINNET,
@@ -363,7 +369,6 @@ async function saveBundleData(
 	cidToString: string,
 	proposerSignature: string
 ) {
-	const { PROPOSER_ADDRESS } = getEnvConfig()
 	// Convert the bundle (JSON) to a Buffer for the BYTEA column
 	const bundleBuffer = Buffer.from(JSON.stringify(bundleData.bundle), 'utf8')
 	await pool.query(
@@ -425,7 +430,6 @@ async function publishBundle(data: string, signature: string, from: string) {
 		timestamp: startTime,
 	})
 
-	const { PROPOSER_ADDRESS } = getEnvConfig()
 	if (validatedFrom !== PROPOSER_ADDRESS.toLowerCase()) {
 		throw new Error('Unauthorized: Only the proposer can publish new bundles.')
 	}
@@ -486,7 +490,6 @@ async function publishBundle(data: string, signature: string, from: string) {
 		)
 		logger.info('Blockchain transaction successful')
 		// Save proposer data after successful blockchain transaction.
-		const { PROPOSER_ADDRESS } = getEnvConfig()
 		await saveProposerData(PROPOSER_ADDRESS)
 	} catch (error) {
 		logger.error('Failed to propose bundle:', error)
@@ -589,7 +592,6 @@ async function updateBalances(
 	const validatedToken = validateAddress(token, 'token')
 
 	const amountBigInt = safeBigInt(amount)
-	const { PROPOSER_ADDRESS } = getEnvConfig()
 	if (validatedFrom === PROPOSER_ADDRESS.toLowerCase()) {
 		const largeBalance = parseUnits('1000000000000', 18)
 		await updateBalance(
@@ -908,7 +910,6 @@ async function createAndPublishBundle() {
 	)
 	logger.info('Generated bundle proposer signature:', proposerSignature)
 	try {
-		const { PROPOSER_ADDRESS } = getEnvConfig()
 		await publishBundle(
 			JSON.stringify(bundleObject),
 			proposerSignature,
