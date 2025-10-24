@@ -37,6 +37,11 @@ import {
 	validateAddress,
 	validateSignature,
 } from './utils/validator.js'
+import {
+	pinBundleToFilecoin,
+	initializeFilecoinPin,
+} from './utils/filecoinPin.js'
+import { sendWebhook } from './utils/webhook.js'
 import type { Intention, BundleData, ExecutionObject } from './types/core.js'
 
 const gzip = promisify(zlib.gzip)
@@ -84,6 +89,7 @@ export interface VaultTrackerContract extends ethers.BaseContract {
 
 let cachedIntentions: ExecutionObject[] = []
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let mainnetAlchemy: Alchemy
 let sepoliaAlchemy: Alchemy
 let wallet: Wallet
@@ -505,6 +511,12 @@ async function publishBundle(data: string, signature: string, from: string) {
 		logger.error('Failed to save bundle/CID data:', error)
 		throw new Error('Database operation failed')
 	}
+
+	// Pin to Filecoin asynchronously (non-blocking)
+	const nonce = bundleData.nonce
+	pinBundleToFilecoin(cidToString, compressedData, nonce).catch((err) => {
+		logger.warn('Filecoin pinning failed (bundle still valid):', err.message)
+	})
 	try {
 		for (const execution of bundleData.bundle) {
 			if (!Array.isArray(execution.proof)) {
@@ -519,6 +531,28 @@ async function publishBundle(data: string, signature: string, from: string) {
 	} catch (error) {
 		logger.error('Failed to update balances:', error)
 		throw new Error('Balance update failed')
+	}
+	try {
+		const { WEBHOOK_URL, WEBHOOK_SECRET } = getEnvConfig()
+
+		if (WEBHOOK_URL && WEBHOOK_SECRET) {
+			const payload = {
+				type: 'BUNDLE_PROPOSED',
+				executions: cachedIntentions,
+				cid: cidToString,
+				nonce: bundleData.nonce,
+				createdAt: Date.now(),
+			}
+			await sendWebhook(payload)
+			logger.info('BUNDLE_PROPOSED webhook sent successfully')
+		} else {
+			logger.warn(
+				'Webhook URL or secret not configured, skipping webhook delivery'
+			)
+		}
+	} catch (error) {
+		logger.error('Failed to send webhook:', error)
+		throw new Error('Webhook delivery failed')
 	}
 	return cid
 }
@@ -734,8 +768,7 @@ async function handleIntention(
 	 */
 	for (const input of validatedIntention.inputs) {
 		const tokenAddress = input.asset
-		const tokenDecimals = await getTokenDecimals(tokenAddress)
-		const requiredAmount = parseUnits(input.amount, Number(tokenDecimals))
+		const requiredAmount = safeBigInt(input.amount)
 
 		// For now, all inputs are debited from the user's main vault,
 		// which is identified by their validated 'from' address.
@@ -768,8 +801,7 @@ async function handleIntention(
 
 	for (const output of validatedIntention.outputs) {
 		const tokenAddress = output.asset
-		const tokenDecimals = await getTokenDecimals(tokenAddress)
-		const amountInWei = parseUnits(output.amount, Number(tokenDecimals))
+		const amountInWei = safeBigInt(output.amount)
 		let toIdentifier: string | number
 
 		if (output.to_external) {
@@ -923,6 +955,17 @@ export async function initializeProposer() {
 
 	// Initialize wallet and contract
 	await initializeWalletAndContract()
+
+	// Initialize Filecoin Pin (if enabled)
+	try {
+		await initializeFilecoinPin()
+	} catch (error) {
+		logger.warn(
+			'Filecoin Pin initialization failed (continuing without it):',
+			error
+		)
+	}
+
 	isInitialized = true
 
 	logger.info('Proposer module initialized successfully')

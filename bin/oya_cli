@@ -212,6 +212,10 @@ const commands = {
 			return runBun(['run', 'scripts/setup-db.js', '--drop-existing'], env)
 		},
 	},
+	'filecoin:setup': {
+		description: 'Configure Filecoin pinning integration',
+		run: () => runBun(['run', 'scripts/setup-filecoin.js']),
+	},
 }
 
 // Show help
@@ -333,6 +337,9 @@ Commands:
     db:create          Create the oya_db database
     db:setup           Set up database tables (safe to run multiple times)
     db:reset           Drop and recreate all tables (⚠️  DESTRUCTIVE)
+
+  Filecoin Integration:
+    filecoin:setup     Configure Filecoin pinning (checks balances, approvals)
 
   Help:
     --help, -h, help   Show this help message

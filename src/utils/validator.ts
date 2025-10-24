@@ -349,12 +349,19 @@ function validateFeeAmounts(fees: FeeAmount[], fieldName: string): FeeAmount[] {
 	if (!Array.isArray(fees)) {
 		throw new ValidationError(`${fieldName} must be an array`, fieldName, fees)
 	}
-	return fees.map((fee, index) => ({
-		asset: validateAddress(fee.asset, `${fieldName}[${index}].asset`),
-		amount: validateBalance(fee.amount, `${fieldName}[${index}].amount`),
-		to: validateId(fee.to, `${fieldName}[${index}].to`),
-		chain_id: validateId(fee.chain_id, `${fieldName}[${index}].chain_id`),
-	}))
+	return fees.map((fee, index) => {
+		const validatedFee: FeeAmount = {
+			asset: validateAddress(fee.asset, `${fieldName}[${index}].asset`),
+			amount: validateBalance(fee.amount, `${fieldName}[${index}].amount`),
+			chain_id: validateId(fee.chain_id, `${fieldName}[${index}].chain_id`),
+		}
+
+		if (fee.to !== undefined) {
+			validatedFee.to = validateId(fee.to, `${fieldName}[${index}].to`)
+		}
+
+		return validatedFee
+	})
 }
 
 /**

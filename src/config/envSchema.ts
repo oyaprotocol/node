@@ -260,4 +260,64 @@ export const envSchema: EnvVariable[] = [
 		},
 		transformer: (value) => parseInt(value),
 	},
+	{
+		name: 'FILECOIN_PIN_ENABLED',
+		required: false,
+		type: 'boolean',
+		description:
+			'Enable Filecoin pinning for bundles (requires Calibration testnet wallet)',
+		defaultValue: false,
+		transformer: (value) => value === 'true',
+	},
+	{
+		name: 'FILECOIN_PIN_PRIVATE_KEY',
+		required: false,
+		type: 'privateKey',
+		description:
+			'Filecoin wallet private key for Calibration testnet (required if FILECOIN_PIN_ENABLED=true)',
+		sensitive: true,
+		validator: (value) => {
+			try {
+				new ethers.Wallet(value)
+				return true
+			} catch {
+				return 'Must be a valid Ethereum private key'
+			}
+		},
+	},
+	{
+		name: 'FILECOIN_PIN_RPC_URL',
+		required: false,
+		type: 'url',
+		description: 'Filecoin Calibration testnet RPC endpoint',
+		defaultValue: 'https://api.calibration.node.glif.io/rpc/v1',
+	},
+	{
+		name: 'WEBHOOK_URL',
+		required: false,
+		type: 'url',
+		description: 'Webhook URL for sending notifications',
+		sensitive: true,
+		validator: (value) => {
+			try {
+				new URL(value)
+				return true
+			} catch {
+				return 'Must be a valid URL'
+			}
+		},
+	},
+	{
+		name: 'WEBHOOK_SECRET',
+		required: false,
+		type: 'string',
+		description: 'Webhook secret for authentication',
+		sensitive: true,
+		validator: (value) => {
+			if (typeof value !== 'string' || value.trim() === '') {
+				return 'Must be a non-empty string'
+			}
+			return true
+		},
+	},
 ]

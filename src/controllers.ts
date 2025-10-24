@@ -591,3 +591,41 @@ export const submitIntention = async (req: Request, res: Response) => {
 		res.status(errorResponse.status).json(errorResponse)
 	}
 }
+
+/**
+ * GET /filecoin/status/:cid
+ * Retrieves Filecoin pinning status for a bundle by its IPFS CID.
+ * Returns detailed status including transaction hash, piece CID, and confirmation time.
+ */
+export const getFilecoinStatus = async (req: Request, res: Response) => {
+	const { cid } = req.params
+
+	try {
+		const result = await pool.query(
+			`SELECT ipfs_cid, filecoin_status, filecoin_tx_hash,
+              filecoin_piece_cid, filecoin_confirmed_at, filecoin_error
+       FROM bundles WHERE ipfs_cid = $1`,
+			[cid]
+		)
+
+		if (result.rows.length === 0) {
+			return res.status(404).json({ error: 'Bundle not found' })
+		}
+
+		const bundle = result.rows[0]
+
+		res.status(200).json({
+			cid: bundle.ipfs_cid,
+			filecoin: {
+				status: bundle.filecoin_status,
+				transactionHash: bundle.filecoin_tx_hash,
+				pieceCid: bundle.filecoin_piece_cid,
+				confirmedAt: bundle.filecoin_confirmed_at,
+				error: bundle.filecoin_error,
+			},
+		})
+	} catch (err) {
+		logger.error('Error fetching Filecoin status:', err)
+		res.status(500).json({ error: 'Internal Server Error' })
+	}
+}

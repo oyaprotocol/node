@@ -94,6 +94,20 @@ export interface EnvironmentConfig {
 	RATE_LIMIT_STANDARD: number
 	/** Maximum requests per window for strict tier (default: 50) */
 	RATE_LIMIT_STRICT: number
+	/** Webhook URL for sending notifications (optional) */
+	WEBHOOK_URL?: string
+	/** Secret token for authenticating webhook requests (optional) */
+	WEBHOOK_SECRET?: string
+	/** Webhook request timeout in milliseconds (default: 6000) */
+	WEBHOOK_TIMEOUT_MS: number
+	/** Maximum number of webhook retry attempts (default: 6) */
+	WEBHOOK_MAX_RETRIES: number
+	/** Enable Filecoin pinning for bundles (default: false) */
+	FILECOIN_PIN_ENABLED: boolean
+	/** Filecoin wallet private key for Calibration testnet */
+	FILECOIN_PIN_PRIVATE_KEY?: string
+	/** Filecoin Calibration testnet RPC endpoint */
+	FILECOIN_PIN_RPC_URL: string
 }
 
 /**
