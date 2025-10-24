@@ -27,8 +27,12 @@ import type { EnvValidationResult, EnvironmentConfig } from '../types/setup.js'
  * @param value - The sensitive value to obfuscate
  * @param isSensitive - Whether the value is marked as sensitive
  * @returns The obfuscated or original value based on log level
+ * @public
  */
-function obfuscateSensitiveValue(value: string, isSensitive: boolean): string {
+export function obfuscateSensitiveValue(
+	value: string,
+	isSensitive: boolean
+): string {
 	if (!isSensitive) {
 		return value
 	}
