@@ -13,6 +13,7 @@
 - [Environment Variables](#environment-variables)
 - [Testnet Contracts](#testnet-contracts)
 - [Database Setup](#database-setup)
+- [Filecoin Pin Setup (Optional)](#filecoin-pin-setup-optional)
 - [Running the Application](#running-the-application)
 - [API Endpoints](#api-endpoints)
 - [Bundle Proposing Workflow](#bundle-proposing-workflow)
@@ -93,6 +94,11 @@ BUNDLE_TRACKER_ADDRESS=your_bundle_tracker_contract_address
 # Public/Private key used by the bundle proposer for signing bundles (ensure this is kept secure)
 PROPOSER_ADDRESS=your_public_key
 PROPOSER_KEY=your_private_key
+
+# Optional: Filecoin Pin integration (for archival storage on Filecoin)
+FILECOIN_PIN_ENABLED=false  # Set to true to enable Filecoin pinning
+FILECOIN_PIN_PRIVATE_KEY=your_filecoin_private_key
+FILECOIN_PIN_RPC_URL=https://api.calibration.node.glif.io/rpc/v1  # Calibration testnet
 ```
 
 See `.env.example` for a complete list of available configuration options including optional variables like `PORT`, `LOG_LEVEL`, `DATABASE_SSL`, and `DIAGNOSTIC_LOGGER`.
@@ -142,6 +148,118 @@ chmod +x migrations/1_createTable.sh
 ```
 
 Alternatively, execute the SQL commands manually in your PostgreSQL instance.
+
+## Filecoin Pin Setup (Optional)
+
+The Oya node supports optional archival storage on Filecoin using the [filecoin-pin SDK](https://github.com/filecoin-shipyard/filecoin-pin). When enabled, bundle data is automatically uploaded to both IPFS and Filecoin for redundancy and long-term permanence.
+
+### Prerequisites
+
+Before enabling Filecoin pinning, you need:
+
+1. **Testnet FIL**: For paying transaction gas fees on Filecoin Calibration testnet
+   - Get testnet FIL from: https://faucet.calibration.fildev.network/
+
+2. **USDFC Tokens**: Test USDFC tokens for paying Filecoin storage costs
+   - Get testnet USDFC from: https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc
+   - Or trade tFIL for USDFC at: https://app.usdfc.net/#/
+
+3. **Wallet Setup**: A dedicated Filecoin wallet with a private key
+   - Add `FILECOIN_PIN_PRIVATE_KEY` to your `.env` file
+   - Add `FILECOIN_PIN_RPC_URL=https://api.calibration.node.glif.io/rpc/v1` for Calibration testnet
+
+### Automated Setup
+
+The easiest way to configure Filecoin pinning is using the automated setup script:
+
+```bash
+# Ensure FILECOIN_PIN_PRIVATE_KEY and FILECOIN_PIN_RPC_URL are set in .env
+oya filecoin:setup
+
+# Or use bun directly
+bun run filecoin:setup
+```
+
+This script will:
+- Check your FIL balance (needed for gas)
+- Check your USDFC balance (needed for storage payments)
+- Approve the WARM_STORAGE contract to spend USDFC
+- Approve the PAYMENTS contract to spend USDFC
+- Deposit 1 USDFC into the Filecoin Pay system
+- Display estimated storage allowance
+
+### Manual Setup
+
+If you prefer manual setup, you can use the filecoin-pin CLI directly:
+
+```bash
+npx filecoin-pin payments setup --auto \
+  --private-key "YOUR_PRIVATE_KEY" \
+  --rpc-url "https://api.calibration.node.glif.io/rpc/v1"
+```
+
+This command will:
+1. Configure all necessary token approvals for both WARM_STORAGE and PAYMENTS contracts
+2. Deposit 1 USDFC into the Filecoin Pay system for storage payments
+3. Display your storage allowance (approximately 558.5 GiB for 1 month with 1 USDFC)
+
+For more control over the deposit amount:
+
+```bash
+# Deposit a specific amount (e.g., 10 USDFC)
+npx filecoin-pin payments deposit \
+  --amount 10 \
+  --private-key "YOUR_PRIVATE_KEY" \
+  --rpc-url "https://api.calibration.node.glif.io/rpc/v1"
+```
+
+### Enabling Filecoin Pinning
+
+Once setup is complete, enable Filecoin pinning in your `.env`:
+
+```ini
+FILECOIN_PIN_ENABLED=true
+```
+
+Restart the node, and bundle uploads will automatically be pinned to both IPFS and Filecoin.
+
+### Troubleshooting
+
+**"insufficient funds to cover lockup" error:**
+- This means you need to run the payments setup command above
+- Ensure you have both FIL (for gas) and USDFC (for storage) in your wallet
+- The payments setup configures TWO contract approvals (WARM_STORAGE and PAYMENTS)
+
+**Check your setup:**
+
+```bash
+# Check balances and approvals
+node approve-filecoin.js
+
+# Check current Filecoin Pay deposit
+npx filecoin-pin payments balance \
+  --private-key "YOUR_PRIVATE_KEY" \
+  --rpc-url "https://api.calibration.node.glif.io/rpc/v1"
+```
+
+### Monitoring Filecoin Uploads
+
+When Filecoin pinning is enabled, you'll see logs like:
+
+```
+[FilecoinPin] Starting Filecoin pin for bundle nonce X, CID: bafkrei...
+[FilecoinPin] Created new data set { dataSetId: 743 }
+[FilecoinPin] Upload complete for bafkrei... Piece CID: bafkzcibd...
+[FilecoinPin] Transaction submitted: 0x2cd49a...
+[FilecoinPin] Filecoin storage confirmed for bafkrei...
+```
+
+You can also query bundle status via the API:
+
+```bash
+GET /bundle/:nonce
+# Returns bundle with filecoin_status, filecoin_piece_cid, filecoin_tx_hash
+```
 
 ## Running the Application
 

@@ -36,6 +36,7 @@ import {
 	getInfo,
 	getMetrics,
 	submitIntention,
+	getFilecoinStatus,
 } from './controllers.js'
 
 /**
@@ -91,5 +92,9 @@ export const routeMounts: RouteMount[] = [
 		router: Router()
 			.get('/:vault', getVaultNonce)
 			.post('/:vault', setVaultNonce),
+	},
+	{
+		basePath: '/filecoin',
+		router: Router().get('/status/:cid', getFilecoinStatus),
 	},
 ]
