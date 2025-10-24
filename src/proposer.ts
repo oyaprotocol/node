@@ -565,7 +565,7 @@ async function publishBundle(data: string, signature: string, from: string) {
 		if (WEBHOOK_URL && WEBHOOK_SECRET) {
 			const payload = {
 				type: 'BUNDLE_PROPOSED',
-				executions: cachedIntentions,
+				bundle: bundleData.bundle,
 				cid: cidToString,
 				nonce: bundleData.nonce,
 				createdAt: Date.now(),
@@ -966,6 +966,7 @@ async function handleIntention(
 				intention: validatedIntention,
 				from: finalSourceVaultId,
 				proof: proof,
+				signature: validatedSignature,
 			},
 		],
 	}
