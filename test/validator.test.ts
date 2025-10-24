@@ -416,6 +416,15 @@ describe('validateIntention', () => {
 		expect(() => validateIntention(invalidIntention)).toThrow(ValidationError)
 	})
 
+	test('should allow a fee amount without a "to" field', () => {
+		const intentionWithOptionalTo = JSON.parse(
+			JSON.stringify(mockValidIntention)
+		)
+		delete intentionWithOptionalTo.proposerTip[0].to
+		const result = validateIntention(intentionWithOptionalTo)
+		expect(result.proposerTip[0].to).toBeUndefined()
+	})
+
 	test('should allow vault ID 0 in protocolFee', () => {
 		const result = validateIntention(mockValidIntention)
 		expect(result.protocolFee[0].to).toBe(0)
