@@ -89,7 +89,6 @@ export interface VaultTrackerContract extends ethers.BaseContract {
 
 let cachedIntentions: ExecutionObject[] = []
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let mainnetAlchemy: Alchemy
 let sepoliaAlchemy: Alchemy
 let wallet: Wallet
@@ -182,6 +181,7 @@ async function getLatestNonce(): Promise<number> {
  * Fetches token decimals from mainnet for proper amount calculations.
  * Returns 18 for ETH (zero address).
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function getTokenDecimals(tokenAddress: string): Promise<bigint> {
 	try {
 		if (tokenAddress === '0x0000000000000000000000000000000000000000') {
