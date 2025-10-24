@@ -98,6 +98,12 @@ export interface EnvironmentConfig {
 	WEBHOOK_TIMEOUT_MS: number
 	/** Maximum number of webhook retry attempts (default: 6) */
 	WEBHOOK_MAX_RETRIES: number
+	/** Enable Filecoin pinning for bundles (default: false) */
+	FILECOIN_PIN_ENABLED: boolean
+	/** Filecoin wallet private key for Calibration testnet */
+	FILECOIN_PIN_PRIVATE_KEY?: string
+	/** Filecoin Calibration testnet RPC endpoint */
+	FILECOIN_PIN_RPC_URL: string
 }
 
 /**
