@@ -30,6 +30,7 @@ heroku pg:psql --app "$APP_NAME" DATABASE_URL <<EOF
 CREATE TABLE IF NOT EXISTS vaults (
   vault TEXT PRIMARY KEY,
   controllers TEXT[] NOT NULL,
+  rules TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
