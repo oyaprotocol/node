@@ -31,21 +31,22 @@ export class Cache<T> {
 
 	/**
 	 * Get a value from the cache.
-	 * Returns null if not found or expired.
+	 * Returns undefined if not found or expired.
+	 * This allows null to be a valid cached value.
 	 * @param key - Cache key
-	 * @returns Cached value or null
+	 * @returns Cached value or undefined if not found/expired
 	 */
-	get(key: string): T | null {
+	get(key: string): T | undefined {
 		const entry = this.cache.get(key)
 
 		if (!entry) {
-			return null
+			return undefined
 		}
 
 		// Check if expired
 		if (Date.now() - entry.timestamp > this.ttl) {
 			this.cache.delete(key)
-			return null
+			return undefined
 		}
 
 		return entry.value
@@ -54,9 +55,16 @@ export class Cache<T> {
 	/**
 	 * Store a value in the cache.
 	 * @param key - Cache key
-	 * @param value - Value to cache
+	 * @param value - Value to cache (cannot be undefined; use null instead)
+	 * @throws Error if attempting to cache undefined
 	 */
 	set(key: string, value: T): void {
+		if (value === undefined) {
+			throw new Error(
+				'Cannot cache undefined values. Use null to represent missing data.'
+			)
+		}
+
 		this.cache.set(key, {
 			value,
 			timestamp: Date.now(),
@@ -69,7 +77,7 @@ export class Cache<T> {
 	 * @returns True if key exists and is valid
 	 */
 	has(key: string): boolean {
-		return this.get(key) !== null
+		return this.get(key) !== undefined
 	}
 
 	/**
