@@ -80,8 +80,8 @@ export interface BundleData {
 export interface Execution {
 	intention: Intention
 	from: number // This is the vault ID
+	proof: unknown[]
 	signature?: string
-	proof?: unknown[]
 }
 
 /**
