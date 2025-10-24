@@ -48,7 +48,13 @@ import {
 	initializeFilecoinPin,
 } from './utils/filecoinPin.js'
 import { sendWebhook } from './utils/webhook.js'
-import type { Intention, BundleData, ExecutionObject } from './types/core.js'
+import type {
+	Intention,
+	BundleData,
+	ExecutionObject,
+	IntentionInput,
+	IntentionOutput,
+} from './types/core.js'
 
 const gzip = promisify(zlib.gzip)
 
@@ -190,6 +196,21 @@ async function getLatestNonce(): Promise<number> {
 }
 
 /**
+ * Retrieves the latest nonce for a specific vault from the database.
+ * Returns 0 if no nonce is found for the vault.
+ */
+async function getVaultNonce(vaultId: number | string): Promise<number> {
+	const result = await pool.query(
+		'SELECT nonce FROM nonces WHERE vault = $1',
+		[String(vaultId)]
+	)
+	if (result.rows.length === 0) {
+		return 0
+	}
+	return result.rows[0].nonce
+}
+
+/**
  * Fetches token decimals from mainnet for proper amount calculations.
  * Returns 18 for ETH (zero address).
  */
@@ -300,10 +321,12 @@ async function updateBalance(
 /**
  * Seeds a new vault with initial token balances by transferring them from the
  * proposer's vault.
+ * This is now a fallback/manual method. The primary path is via createAndSubmitSeedingIntention.
  */
+/*
 async function initializeBalancesForVault(newVaultId: number): Promise<void> {
 	logger.info(
-		`Seeding new vault (ID: ${newVaultId}) from proposer vault (ID: ${PROPOSER_VAULT_ID.value})...`
+		`Directly seeding new vault (ID: ${newVaultId}) from proposer vault (ID: ${PROPOSER_VAULT_ID.value})...`
 	)
 
 	for (const token of SEED_CONFIG) {
@@ -323,18 +346,13 @@ async function initializeBalancesForVault(newVaultId: number): Promise<void> {
 				continue
 			}
 
-			// Decrement proposer's balance
-			const newProposerBalance = proposerBalance - seedAmount
-			await updateBalance(
+			// Use the single, updated function for the transfer
+			await updateBalances(
 				PROPOSER_VAULT_ID.value,
+				newVaultId,
 				token.address,
-				newProposerBalance
+				seedAmount.toString()
 			)
-
-			// Increment new vault's balance (starts at 0)
-			const newUserBalance = await getBalance(newVaultId, token.address)
-			const newSeededBalance = newUserBalance + seedAmount
-			await updateBalance(newVaultId, token.address, newSeededBalance)
 
 			logger.info(
 				`- Successfully seeded vault ${newVaultId} with ${token.amount} of token ${token.address}`
@@ -347,6 +365,7 @@ async function initializeBalancesForVault(newVaultId: number): Promise<void> {
 		}
 	}
 }
+*/
 
 /**
  * Records proposer activity in the database.
@@ -403,10 +422,10 @@ async function saveBundleData(
 			const vault = execution.from
 			await pool.query(
 				`INSERT INTO nonces (vault, nonce)
-       VALUES (LOWER($1), $2)
+       VALUES ($1, $2)
        ON CONFLICT (vault)
        DO UPDATE SET nonce = EXCLUDED.nonce`,
-				[vault, vaultNonce]
+				[String(vault), vaultNonce]
 			)
 		}
 	}
@@ -616,6 +635,75 @@ async function updateBalances(
 }
 
 /**
+ * Creates and submits a signed intention to seed a new vault with initial tokens.
+ * This creates an auditable record of the seeding transaction.
+ */
+async function createAndSubmitSeedingIntention(newVaultId: number): Promise<void> {
+	logger.info(`Creating seeding intention for new vault ${newVaultId}...`)
+
+	const inputs: IntentionInput[] = []
+	const outputs: IntentionOutput[] = []
+	const tokenSummary = SEED_CONFIG.map(
+		(token) => `${token.amount} ${token.symbol}`
+	).join(', ')
+	const action = `Transfer ${tokenSummary} to vault #${newVaultId}`
+
+	for (const token of SEED_CONFIG) {
+		const tokenDecimals = await getSepoliaTokenDecimals(token.address)
+		const seedAmount = parseUnits(token.amount, Number(tokenDecimals))
+
+		inputs.push({
+			asset: token.address,
+			amount: seedAmount.toString(),
+			from: PROPOSER_VAULT_ID.value,
+			chain_id: 11155111, // Sepolia
+		})
+
+		outputs.push({
+			asset: token.address,
+			amount: seedAmount.toString(),
+			to: newVaultId,
+			chain_id: 11155111, // Sepolia
+		})
+	}
+
+	const currentNonce = await getVaultNonce(PROPOSER_VAULT_ID.value)
+	const nextNonce = currentNonce + 1
+	const feeAmountInWei = parseUnits('0.0001', 18).toString()
+
+	const intention: Intention = {
+		action: action,
+		nonce: nextNonce,
+		expiry: Math.floor(Date.now() / 1000) + 300, // 5 minute expiry
+		inputs,
+		outputs,
+		totalFee: [
+			{
+				asset: ['ETH'],
+				amount: '0.0001',
+			},
+		],
+		proposerTip: [], // 0 tip for internal seeding
+		protocolFee: [
+			{
+				asset: '0x0000000000000000000000000000000000000000', // ETH
+				amount: feeAmountInWei,
+				chain_id: 11155111, // Sepolia
+			},
+		],
+	}
+
+	// Proposer signs the intention with its wallet
+	const signature = await wallet.signMessage(JSON.stringify(intention))
+
+	// Submit the intention to be processed and bundled
+	// The controller is the proposer's own address
+	await handleIntention(intention, signature, PROPOSER_ADDRESS)
+
+	logger.info(`Successfully submitted seeding intention for vault ${newVaultId}.`)
+}
+
+/**
  * Verifies and processes an incoming intention.
  * Validates signature, checks balances, and caches for bundling.
  */
@@ -746,8 +834,8 @@ async function handleIntention(
 			await upsertVaultControllers(newVaultId, [validatedController])
 
 			// 4. After the vault is created and its controller is mapped,
-			// seed it with initial balances in the database.
-			await initializeBalancesForVault(newVaultId)
+			// submit an intention to seed it with initial balances.
+			await createAndSubmitSeedingIntention(newVaultId)
 		} catch (error) {
 			logger.error('Failed to process CreateVault intention:', error)
 			// Re-throw or handle the error as appropriate for your application
