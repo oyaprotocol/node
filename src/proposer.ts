@@ -200,10 +200,9 @@ async function getLatestNonce(): Promise<number> {
  * Returns 0 if no nonce is found for the vault.
  */
 async function getVaultNonce(vaultId: number | string): Promise<number> {
-	const result = await pool.query(
-		'SELECT nonce FROM nonces WHERE vault = $1',
-		[String(vaultId)]
-	)
+	const result = await pool.query('SELECT nonce FROM nonces WHERE vault = $1', [
+		String(vaultId),
+	])
 	if (result.rows.length === 0) {
 		return 0
 	}
@@ -638,7 +637,9 @@ async function updateBalances(
  * Creates and submits a signed intention to seed a new vault with initial tokens.
  * This creates an auditable record of the seeding transaction.
  */
-async function createAndSubmitSeedingIntention(newVaultId: number): Promise<void> {
+async function createAndSubmitSeedingIntention(
+	newVaultId: number
+): Promise<void> {
 	logger.info(`Creating seeding intention for new vault ${newVaultId}...`)
 
 	const inputs: IntentionInput[] = []
@@ -700,7 +701,9 @@ async function createAndSubmitSeedingIntention(newVaultId: number): Promise<void
 	// The controller is the proposer's own address
 	await handleIntention(intention, signature, PROPOSER_ADDRESS)
 
-	logger.info(`Successfully submitted seeding intention for vault ${newVaultId}.`)
+	logger.info(
+		`Successfully submitted seeding intention for vault ${newVaultId}.`
+	)
 }
 
 /**
@@ -913,36 +916,25 @@ async function handleIntention(
 	 * STEP 6: Generate proof based on intention outputs
 	 */
 	const proof: unknown[] = []
-	const fromVaultIds = new Set(
-		validatedIntention.inputs
-			.map((i) => i.from)
-			.filter((id) => id !== undefined)
-	)
-	if (fromVaultIds.size > 1) {
-		// For now, we only support a single source vault per intention for simplicity in proof generation.
-		// This can be expanded later if multi-source intentions are needed.
+
+	// By this point, STEP 5 has guaranteed that every input has a `from` vault ID.
+	// We create a set to find the unique source vault(s).
+	const sourceVaultIds = new Set(validatedIntention.inputs.map((i) => i.from))
+
+	if (sourceVaultIds.size > 1) {
+		// For now, we only support a single source vault per intention.
 		throw new Error(
 			'Intentions with inputs from multiple source vaults are not yet supported.'
 		)
 	}
-	const sourceVaultId = validatedIntention.inputs[0].from
 
-	if (sourceVaultId === undefined) {
-		// This should ideally be resolved by the logic in step 5, but as a safeguard:
-		const vaults = await getVaultsForController(validatedController)
-		if (vaults.length !== 1) {
-			throw new Error(
-				'Could not determine a unique source vault for the proof. Please specify a `from` vault in all inputs.'
-			)
-		}
-		validatedIntention.inputs.forEach((input) => {
-			input.from = parseInt(vaults[0])
-		})
+	if (sourceVaultIds.size === 0 && validatedIntention.inputs.length > 0) {
+		// This should be an impossible state if the intention has inputs.
+		throw new Error('Could not determine source vault for proof generation.')
 	}
 
-	const finalSourceVaultId =
-		sourceVaultId ??
-		parseInt((await getVaultsForController(validatedController))[0])
+	// Get the single, definitive source vault ID from the set.
+	const finalSourceVaultId = sourceVaultIds.values().next().value as number
 
 	for (const output of validatedIntention.outputs) {
 		const tokenAddress = output.asset
