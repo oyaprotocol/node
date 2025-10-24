@@ -31,7 +31,11 @@ import { promisify } from 'util'
 import { getEnvConfig } from './utils/env.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { resolveIntentionENS } from './utils/ensResolver.js'
-import { upsertVaultControllers } from './utils/vaults.js'
+import {
+	getControllersForVault,
+	getVaultsForController,
+	upsertVaultControllers,
+} from './utils/vaults.js'
 import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
 import {
 	validateIntention,
@@ -629,21 +633,21 @@ async function updateBalances(
 async function handleIntention(
 	intention: Intention,
 	signature: string,
-	from: string
+	controller: string
 ): Promise<ExecutionObject> {
 	const startTime = Date.now()
 
 	/**
-	 * STEP 1: Basic validation of signature format and from address
+	 * STEP 1: Basic validation of signature format and controller address
 	 * - Validates signature is properly formatted (0x + hex)
-	 * - Validates from is a valid Ethereum address
+	 * - Validates controller is a valid Ethereum address
 	 * - Does NOT validate intention fields yet (may contain ENS names)
 	 */
 	const validatedSignature = validateSignature(signature)
-	const validatedFrom = validateAddress(from, 'from')
+	const validatedController = validateAddress(controller, 'controller')
 
 	diagnostic.trace('Starting intention processing', {
-		from: validatedFrom,
+		controller: validatedController,
 		action: intention.action,
 		intentionNonce: intention.nonce,
 		timestamp: startTime,
@@ -656,7 +660,7 @@ async function handleIntention(
 	 * STEP 2: Verify signature against ORIGINAL intention
 	 * - Signature was created by user signing the original intention (with ENS names)
 	 * - Must verify BEFORE resolving ENS, otherwise signature won't match
-	 * - Recovers signer address and compares to 'from' parameter
+	 * - Recovers signer address and compares to 'controller' parameter
 	 */
 	const verifyStartTime = Date.now()
 	const signerAddress = verifyMessage(
@@ -666,21 +670,21 @@ async function handleIntention(
 
 	diagnostic.debug('Signature verification completed', {
 		recoveredAddress: signerAddress,
-		expectedAddress: validatedFrom,
+		expectedAddress: validatedController,
 		verificationTime: Date.now() - verifyStartTime,
-		signatureValid: signerAddress.toLowerCase() === validatedFrom,
+		signatureValid: signerAddress.toLowerCase() === validatedController,
 	})
 
 	logger.info('Recovered signer address from intention:', signerAddress)
-	if (signerAddress.toLowerCase() !== validatedFrom) {
+	if (signerAddress.toLowerCase() !== validatedController) {
 		logger.info(
 			'Signature verification failed. Expected:',
-			validatedFrom,
+			validatedController,
 			'Got:',
 			signerAddress
 		)
 		diagnostic.error('Signature mismatch', {
-			expected: validatedFrom,
+			expected: validatedController,
 			received: signerAddress,
 			intention: intention,
 		})
@@ -717,8 +721,8 @@ async function handleIntention(
 			logger.info('Processing CreateVault intention...')
 
 			// 1. Call the on-chain contract to create the vault.
-			// The `validatedFrom` address becomes the controller of the new vault.
-			const tx = await vaultTrackerContract.createVault(validatedFrom)
+			// The `validatedController` address becomes the controller of the new vault.
+			const tx = await vaultTrackerContract.createVault(validatedController)
 			const receipt = await tx.wait() // Wait for the transaction to be mined
 
 			if (!receipt) {
@@ -749,8 +753,8 @@ async function handleIntention(
 			logger.info(`On-chain vault created with ID: ${newVaultId}`)
 
 			// 3. Persist the new vault-to-controller mapping to the database.
-			// VaultTracker is the canonical source of truth for vault ownership.
-			await upsertVaultControllers(newVaultId, [validatedFrom])
+			// This is the canonical source of truth for vault ownership.
+			await upsertVaultControllers(newVaultId, [validatedController])
 
 			// 4. After the vault is created and its controller is mapped,
 			// seed it with initial balances in the database.
@@ -772,19 +776,45 @@ async function handleIntention(
 	}
 
 	/**
-	 * STEP 5: Verify vault balances based on intention inputs
+	 * STEP 5: Verify vault balances based on intention inputs.
+	 * This now involves resolving the fromVaultId and checking controller authorization.
 	 */
 	for (const input of validatedIntention.inputs) {
 		const tokenAddress = input.asset
 		const requiredAmount = safeBigInt(input.amount)
 
-		// For now, all inputs are debited from the user's main vault,
-		// which is identified by their validated 'from' address.
-		const balanceOwner = validatedFrom
-		const currentBalance = await getBalance(balanceOwner, tokenAddress)
+		// Determine the source vault for this input
+		let fromVaultId: number
+		if (input.from !== undefined) {
+			fromVaultId = input.from
+		} else {
+			// If 'from' is not in the input, resolve it via the controller
+			const vaults = await getVaultsForController(validatedController)
+			if (vaults.length === 0) {
+				throw new Error(
+					`Controller ${validatedController} has no associated vaults.`
+				)
+			}
+			if (vaults.length > 1) {
+				throw new Error(
+					`Controller has multiple vaults, but no specific 'from' vault was provided in intention input.`
+				)
+			}
+			fromVaultId = parseInt(vaults[0])
+		}
+
+		// Security Check: Verify the signer is a controller of the source vault
+		const authorizedControllers = await getControllersForVault(fromVaultId)
+		if (!authorizedControllers.includes(validatedController)) {
+			throw new Error(
+				`Controller ${validatedController} is not authorized for vault ${fromVaultId}.`
+			)
+		}
+
+		const currentBalance = await getBalance(fromVaultId, tokenAddress)
 
 		diagnostic.trace('Balance check', {
-			vault: balanceOwner,
+			vault: fromVaultId,
 			token: tokenAddress,
 			currentBalance: currentBalance.toString(),
 			requiredAmount: requiredAmount.toString(),
@@ -793,7 +823,7 @@ async function handleIntention(
 
 		if (currentBalance < requiredAmount) {
 			diagnostic.error('Insufficient balance', {
-				vault: balanceOwner,
+				vault: fromVaultId,
 				token: tokenAddress,
 				currentBalance: currentBalance.toString(),
 				requiredAmount: requiredAmount.toString(),
@@ -806,6 +836,33 @@ async function handleIntention(
 	 * STEP 6: Generate proof based on intention outputs
 	 */
 	const proof: unknown[] = []
+	const fromVaultIds = new Set(
+		validatedIntention.inputs.map((i) => i.from).filter((id) => id !== undefined)
+	)
+	if (fromVaultIds.size > 1) {
+		// For now, we only support a single source vault per intention for simplicity in proof generation.
+		// This can be expanded later if multi-source intentions are needed.
+		throw new Error(
+			'Intentions with inputs from multiple source vaults are not yet supported.'
+		)
+	}
+	const sourceVaultId = validatedIntention.inputs[0].from
+
+	if (sourceVaultId === undefined) {
+		// This should ideally be resolved by the logic in step 5, but as a safeguard:
+		const vaults = await getVaultsForController(validatedController)
+		if (vaults.length !== 1) {
+			throw new Error(
+				'Could not determine a unique source vault for the proof. Please specify a `from` vault in all inputs.'
+			)
+		}
+		validatedIntention.inputs.forEach((input) => {
+			input.from = parseInt(vaults[0])
+		})
+	}
+
+	const finalSourceVaultId =
+		sourceVaultId ?? parseInt((await getVaultsForController(validatedController))[0])
 
 	for (const output of validatedIntention.outputs) {
 		const tokenAddress = output.asset
@@ -825,7 +882,7 @@ async function handleIntention(
 
 		proof.push({
 			token: tokenAddress,
-			from: validatedFrom, // All transfers originate from the user's vault
+			from: finalSourceVaultId, // All transfers originate from the resolved vault
 			to: toIdentifier,
 			amount: amountInWei.toString(),
 		})
@@ -835,7 +892,7 @@ async function handleIntention(
 		execution: [
 			{
 				intention: validatedIntention,
-				from: validatedFrom,
+				from: finalSourceVaultId,
 				proof: proof,
 			},
 		],
@@ -843,7 +900,7 @@ async function handleIntention(
 	cachedIntentions.push(executionObject)
 
 	diagnostic.info('Intention processed successfully', {
-		from: validatedFrom,
+		controller: validatedController,
 		action: validatedIntention.action,
 		processingTime: Date.now() - startTime,
 		totalCachedIntentions: cachedIntentions.length,

@@ -90,7 +90,7 @@ export interface Execution {
 export interface ExecutionObject {
 	execution: Array<{
 		intention: Intention
-		from: string
+		from: number // This is the vault ID
 		proof: unknown[]
 	}>
 }
