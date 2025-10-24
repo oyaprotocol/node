@@ -748,7 +748,12 @@ async function handleIntention(
 
 			logger.info(`On-chain vault created with ID: ${newVaultId}`)
 
-			// 3. After the vault is created on-chain, seed it in the database.
+			// 3. Persist the new vault-to-controller mapping to the database.
+			// VaultTracker is the canonical source of truth for vault ownership.
+			await upsertVaultControllers(newVaultId, [validatedFrom])
+
+			// 4. After the vault is created and its controller is mapped,
+			// seed it with initial balances in the database.
 			await initializeBalancesForVault(newVaultId)
 		} catch (error) {
 			logger.error('Failed to process CreateVault intention:', error)

@@ -84,10 +84,7 @@ export async function getVaultsForController(
 		)
 		return result.rows.map((row) => row.vault)
 	} catch (error) {
-		logger.error(
-			`Failed to get vaults for controller ${controller}:`,
-			error
-		)
+		logger.error(`Failed to get vaults for controller ${controller}:`, error)
 		throw new Error('Database operation failed while fetching vaults')
 	}
 }
