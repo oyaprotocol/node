@@ -31,6 +31,7 @@ import { promisify } from 'util'
 import { getEnvConfig } from './utils/env.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { resolveIntentionENS } from './utils/ensResolver.js'
+import { upsertVaultControllers } from './utils/vaults.js'
 import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
 import {
 	validateIntention,
@@ -954,6 +955,9 @@ export async function initializeProposer() {
 
 	logger.info('Initializing proposer module...')
 
+	// Seed the proposer's own vault-to-controller mapping
+	await seedProposerVaultMapping()
+
 	// Initialize wallet and contract
 	await initializeWalletAndContract()
 
@@ -980,6 +984,24 @@ export function getSepoliaAlchemy() {
 		throw new Error('Proposer not initialized')
 	}
 	return sepoliaAlchemy
+}
+
+/**
+ * Ensures the proposer's vault-to-controller mapping is seeded in the database.
+ * This is crucial for allowing the proposer to sign and submit seeding intentions.
+ */
+async function seedProposerVaultMapping() {
+	try {
+		await upsertVaultControllers(PROPOSER_VAULT_ID.value, [PROPOSER_ADDRESS])
+		logger.info(
+			`Proposer vault mapping seeded: Vault ${PROPOSER_VAULT_ID.value} -> Controller ${PROPOSER_ADDRESS}`
+		)
+	} catch (error) {
+		logger.error('Failed to seed proposer vault mapping:', error)
+		// We throw here because if the proposer can't control its own vault,
+		// it won't be able to perform critical functions like seeding new vaults.
+		throw new Error('Could not seed proposer vault mapping')
+	}
 }
 
 /**
