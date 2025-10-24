@@ -32,21 +32,26 @@ export const SEED_CONFIG = [
 	{
 		address: '0xe0Ab3BaC84Af1f63719fE4B2e96d16505EC68842', // OTWETH
 		amount: '1.0',
+		symbol: 'OTWETH',
 	},
 	{
 		address: '0x69dB14C05d012ff97a0F41e37E327970dea4F5eA', // OTUSDC
 		amount: '1000.0',
+		symbol: 'OTUSDC',
 	},
 	{
 		address: '0x897292EaEc4Ef49948a36727a02FA0388E46C692', // OTUSDT
 		amount: '1000.0',
+		symbol: 'OTUSDT',
 	},
 	{
 		address: '0xaCe171bf775107B491D9F4d4Daa808Be6515B2d0', // OTOYA
 		amount: '5000.0',
+		symbol: 'OTOYA',
 	},
 	{
 		address: '0xF55c9c1060E0B00b6Feca4CF7fF7aC89b7DBdE07', // OTBTC
 		amount: '1.0',
+		symbol: 'OTBTC',
 	},
 ]
