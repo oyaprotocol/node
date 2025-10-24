@@ -31,6 +31,7 @@ import { promisify } from 'util'
 import { getEnvConfig } from './utils/env.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { resolveIntentionENS } from './utils/ensResolver.js'
+import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
 import {
 	validateIntention,
 	validateAddress,
@@ -53,6 +54,15 @@ dotenv.config()
 /** Logger instance for proposer module */
 const logger = createLogger('Proposer')
 
+/** Cached environment variables for frequently used values */
+const {
+	PROPOSER_ADDRESS,
+	BUNDLE_TRACKER_ADDRESS,
+	VAULT_TRACKER_ADDRESS,
+	ALCHEMY_API_KEY,
+	PROPOSER_KEY,
+} = getEnvConfig()
+
 /** Bundle cycle counter for diagnostics */
 let bundleCycleCount = 0
 let lastSuccessfulBundleTime = 0
@@ -73,16 +83,26 @@ export interface BundleTrackerContract extends ethers.BaseContract {
 	proposeBundle(
 		_bundleData: string,
 		overrides?: ethers.Overrides
-	): Promise<ethers.ContractTransaction>
+	): Promise<ethers.ContractTransactionResponse>
+}
+
+/**
+ * Contract interface for the VaultTracker on Sepolia.
+ */
+export interface VaultTrackerContract extends ethers.BaseContract {
+	createVault(
+		_controller: string,
+		overrides?: ethers.Overrides
+	): Promise<ethers.ContractTransactionResponse>
 }
 
 let cachedIntentions: ExecutionObject[] = []
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let mainnetAlchemy: Alchemy
 let sepoliaAlchemy: Alchemy
 let wallet: Wallet
 let bundleTrackerContract: BundleTrackerContract
+let vaultTrackerContract: VaultTrackerContract
 
 let s: ReturnType<typeof strings>
 
@@ -94,7 +114,6 @@ let isInitialized = false
  * Connects the wallet for transaction signing.
  */
 async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
-	const { BUNDLE_TRACKER_ADDRESS } = getEnvConfig()
 	const abiPath = path.join(__dirname, 'abi', 'BundleTracker.json')
 	const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'))
 	const provider =
@@ -110,11 +129,29 @@ async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
 }
 
 /**
+ * Initializes the VaultTracker contract with ABI and provider.
+ * Connects the wallet for transaction signing.
+ */
+async function buildVaultTrackerContract(): Promise<VaultTrackerContract> {
+	const abiPath = path.join(__dirname, '..', 'dist', 'abi', 'VaultTracker.json')
+	const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'))
+	const provider =
+		(await sepoliaAlchemy.config.getProvider()) as unknown as ethers.Provider
+	const contract = new ethers.Contract(
+		VAULT_TRACKER_ADDRESS,
+		contractABI,
+		provider
+	)
+	return contract.connect(
+		wallet as unknown as ethers.ContractRunner
+	) as VaultTrackerContract
+}
+
+/**
  * Sets up Alchemy SDK instances for mainnet and Sepolia.
  * Initializes wallet with private key for blockchain transactions.
  */
 async function buildAlchemyInstances() {
-	const { ALCHEMY_API_KEY, PROPOSER_KEY } = getEnvConfig()
 	const mainnet = new Alchemy({
 		apiKey: ALCHEMY_API_KEY,
 		network: Network.ETH_MAINNET,
@@ -144,6 +181,66 @@ async function getLatestNonce(): Promise<number> {
 	)
 	if (result.rows.length === 0) return 0
 	return result.rows[0].nonce + 1
+}
+
+/**
+ * Fetches token decimals from mainnet for proper amount calculations.
+ * Returns 18 for ETH (zero address).
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function getTokenDecimals(tokenAddress: string): Promise<bigint> {
+	try {
+		if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+			return 18n
+		}
+		const tokenMetadata =
+			await mainnetAlchemy.core.getTokenMetadata(tokenAddress)
+		if (
+			tokenMetadata.decimals === null ||
+			tokenMetadata.decimals === undefined
+		) {
+			logger.error(
+				'Token metadata decimals is missing for token:',
+				tokenAddress
+			)
+			throw new Error('Token decimals missing')
+		}
+		return BigInt(tokenMetadata.decimals)
+	} catch (error) {
+		logger.error(`Failed to get token metadata for ${tokenAddress}:`, error)
+		throw new Error('Failed to retrieve token decimals')
+	}
+}
+
+/**
+ * Fetches token decimals from Sepolia for proper amount calculations.
+ * Returns 18 for ETH (zero address).
+ */
+async function getSepoliaTokenDecimals(tokenAddress: string): Promise<bigint> {
+	try {
+		if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+			return 18n
+		}
+		const tokenMetadata =
+			await sepoliaAlchemy.core.getTokenMetadata(tokenAddress)
+		if (
+			tokenMetadata.decimals === null ||
+			tokenMetadata.decimals === undefined
+		) {
+			logger.error(
+				'Token metadata decimals is missing for token:',
+				tokenAddress
+			)
+			throw new Error('Token decimals missing')
+		}
+		return BigInt(tokenMetadata.decimals)
+	} catch (error) {
+		logger.error(
+			`Failed to get Sepolia token metadata for ${tokenAddress}:`,
+			error
+		)
+		throw new Error('Failed to retrieve Sepolia token decimals')
+	}
 }
 
 /**
@@ -195,67 +292,54 @@ async function updateBalance(
 }
 
 /**
- * Checks if a vault has any balance records in the database.
+ * Seeds a new vault with initial token balances by transferring them from the
+ * proposer's vault.
  */
-async function vaultExists(vault: string | number): Promise<boolean> {
-	const result = await pool.query(
-		'SELECT 1 FROM balances WHERE LOWER(vault)=LOWER($1) LIMIT 1',
-		[vault.toString()]
+async function initializeBalancesForVault(newVaultId: number): Promise<void> {
+	logger.info(
+		`Seeding new vault (ID: ${newVaultId}) from proposer vault (ID: ${PROPOSER_VAULT_ID.value})...`
 	)
-	return result.rows.length > 0
-}
 
-/**
- * Initializes a new vault with default token balances if it doesn't exist.
- */
-async function initializeVault(vault: string | number) {
-	if (!(await vaultExists(vault))) {
-		// We can only initialize balances for vaults that are ETH addresses
-		if (typeof vault === 'string' && ethers.isAddress(vault)) {
-			await initializeBalancesForVault(vault)
+	for (const token of SEED_CONFIG) {
+		try {
+			const tokenDecimals = await getSepoliaTokenDecimals(token.address)
+			const seedAmount = parseUnits(token.amount, Number(tokenDecimals))
+
+			const proposerBalance = await getBalance(
+				PROPOSER_VAULT_ID.value,
+				token.address
+			)
+
+			if (proposerBalance < seedAmount) {
+				logger.warn(
+					`- Insufficient proposer balance for ${token.address}. Have: ${proposerBalance}, Need: ${seedAmount}. Skipping.`
+				)
+				continue
+			}
+
+			// Decrement proposer's balance
+			const newProposerBalance = proposerBalance - seedAmount
+			await updateBalance(
+				PROPOSER_VAULT_ID.value,
+				token.address,
+				newProposerBalance
+			)
+
+			// Increment new vault's balance (starts at 0)
+			const newUserBalance = await getBalance(newVaultId, token.address)
+			const newSeededBalance = newUserBalance + seedAmount
+			await updateBalance(newVaultId, token.address, newSeededBalance)
+
+			logger.info(
+				`- Successfully seeded vault ${newVaultId} with ${token.amount} of token ${token.address}`
+			)
+		} catch (error) {
+			logger.error(
+				`- Failed to seed vault ${newVaultId} with token ${token.address}:`,
+				error
+			)
 		}
 	}
-}
-
-/**
- * Sets up initial test token balances for a new vault.
- * Includes ETH, USDC, and OYA tokens with different decimal places.
- */
-async function initializeBalancesForVault(vault: string) {
-	// Validate vault address
-	const validatedVault = validateAddress(vault, 'vault')
-	const initialBalance18 = parseUnits('10000', 18)
-	const initialBalance6 = parseUnits('1000000', 6)
-	const supportedTokens18: string[] = [
-		'0x0000000000000000000000000000000000000000',
-	]
-	const supportedTokens6: string[] = [
-		'0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-	]
-	const oyaTokens: string[] = ['0x0000000000000000000000000000000000000001']
-	for (const token of supportedTokens18) {
-		await pool.query(
-			'INSERT INTO balances (vault, token, balance) VALUES ($1, LOWER($2), $3)',
-			[validatedVault, token, initialBalance18.toString()]
-		)
-	}
-	for (const token of supportedTokens6) {
-		await pool.query(
-			'INSERT INTO balances (vault, token, balance) VALUES ($1, LOWER($2), $3)',
-			[validatedVault, token, initialBalance6.toString()]
-		)
-	}
-	for (const token of oyaTokens) {
-		await pool.query(
-			'INSERT INTO balances (vault, token, balance) VALUES ($1, LOWER($2), $3)',
-			[
-				validatedVault,
-				token,
-				/* Note: Removed initialOyaBalance since rewards are not minted */ '0',
-			]
-		)
-	}
-	logger.info(`Vault ${validatedVault} initialized with test tokens`)
 }
 
 /**
@@ -285,7 +369,6 @@ async function saveBundleData(
 	cidToString: string,
 	proposerSignature: string
 ) {
-	const { PROPOSER_ADDRESS } = getEnvConfig()
 	// Convert the bundle (JSON) to a Buffer for the BYTEA column
 	const bundleBuffer = Buffer.from(JSON.stringify(bundleData.bundle), 'utf8')
 	await pool.query(
@@ -347,7 +430,6 @@ async function publishBundle(data: string, signature: string, from: string) {
 		timestamp: startTime,
 	})
 
-	const { PROPOSER_ADDRESS } = getEnvConfig()
 	if (validatedFrom !== PROPOSER_ADDRESS.toLowerCase()) {
 		throw new Error('Unauthorized: Only the proposer can publish new bundles.')
 	}
@@ -408,7 +490,6 @@ async function publishBundle(data: string, signature: string, from: string) {
 		)
 		logger.info('Blockchain transaction successful')
 		// Save proposer data after successful blockchain transaction.
-		const { PROPOSER_ADDRESS } = getEnvConfig()
 		await saveProposerData(PROPOSER_ADDRESS)
 	} catch (error) {
 		logger.error('Failed to propose bundle:', error)
@@ -510,11 +591,7 @@ async function updateBalances(
 	const validatedFrom = validateAddress(from, 'from')
 	const validatedToken = validateAddress(token, 'token')
 
-	await initializeVault(validatedFrom)
-	await initializeVault(to)
-
 	const amountBigInt = safeBigInt(amount)
-	const { PROPOSER_ADDRESS } = getEnvConfig()
 	if (validatedFrom === PROPOSER_ADDRESS.toLowerCase()) {
 		const largeBalance = parseUnits('1000000000000', 18)
 		await updateBalance(
@@ -571,7 +648,6 @@ async function handleIntention(
 		timestamp: startTime,
 	})
 
-	await initializeVault(validatedFrom)
 	logger.info('Handling intention. Raw intention:', JSON.stringify(intention))
 	logger.info('Received signature:', validatedSignature)
 
@@ -632,6 +708,53 @@ async function handleIntention(
 		'Intention after validation:',
 		JSON.stringify(validatedIntention)
 	)
+
+	// Handle CreateVault intention and trigger seeding
+	if (validatedIntention.action === 'CreateVault') {
+		try {
+			// This is the entry point for creating and seeding a new vault.
+			logger.info('Processing CreateVault intention...')
+
+			// 1. Call the on-chain contract to create the vault.
+			// The `validatedFrom` address becomes the controller of the new vault.
+			const tx = await vaultTrackerContract.createVault(validatedFrom)
+			const receipt = await tx.wait() // Wait for the transaction to be mined
+
+			if (!receipt) {
+				throw new Error('Transaction receipt is null, mining may have failed.')
+			}
+
+			// 2. Find and parse the VaultCreated event to get the new vault ID.
+			let newVaultId: number | null = null
+			for (const log of receipt.logs) {
+				try {
+					const parsedLog = vaultTrackerContract.interface.parseLog(log)
+					if (parsedLog && parsedLog.name === 'VaultCreated') {
+						// The first argument of the event is the vaultId
+						newVaultId = Number(parsedLog.args[0])
+						break
+					}
+				} catch {
+					// Ignore logs that are not from the VaultTracker ABI
+				}
+			}
+
+			if (newVaultId === null) {
+				throw new Error(
+					'Could not find VaultCreated event in transaction logs.'
+				)
+			}
+
+			logger.info(`On-chain vault created with ID: ${newVaultId}`)
+
+			// 3. After the vault is created on-chain, seed it in the database.
+			await initializeBalancesForVault(newVaultId)
+		} catch (error) {
+			logger.error('Failed to process CreateVault intention:', error)
+			// Re-throw or handle the error as appropriate for your application
+			throw error
+		}
+	}
 
 	// Check for expiry
 	if (validatedIntention.expiry < Date.now() / 1000) {
@@ -787,7 +910,6 @@ async function createAndPublishBundle() {
 	)
 	logger.info('Generated bundle proposer signature:', proposerSignature)
 	try {
-		const { PROPOSER_ADDRESS } = getEnvConfig()
 		await publishBundle(
 			JSON.stringify(bundleObject),
 			proposerSignature,
@@ -885,6 +1007,7 @@ async function initializeWalletAndContract() {
 	sepoliaAlchemy = sepAlchemy
 	wallet = walletInstance
 	bundleTrackerContract = await buildBundleTrackerContract()
+	vaultTrackerContract = await buildVaultTrackerContract()
 }
 
 /**

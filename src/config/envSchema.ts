@@ -94,6 +94,21 @@ export const envSchema: EnvVariable[] = [
 		transformer: (value) => ethers.getAddress(value),
 	},
 	{
+		name: 'VAULT_TRACKER_ADDRESS',
+		required: true,
+		type: 'address',
+		description: 'VaultTracker contract address on Sepolia',
+		validator: (value) => {
+			try {
+				ethers.getAddress(value)
+				return true
+			} catch {
+				return 'Must be a valid Ethereum address'
+			}
+		},
+		transformer: (value) => ethers.getAddress(value),
+	},
+	{
 		name: 'PROPOSER_ADDRESS',
 		required: true,
 		type: 'address',
@@ -107,6 +122,21 @@ export const envSchema: EnvVariable[] = [
 			}
 		},
 		transformer: (value) => ethers.getAddress(value),
+	},
+	{
+		name: 'PROPOSER_VAULT_ID',
+		required: false,
+		type: 'number',
+		description: 'The internal integer ID of the proposer vault',
+		defaultValue: 1,
+		validator: (value) => {
+			const id = parseInt(value)
+			if (isNaN(id) || id < 1) {
+				return 'Vault ID must be a positive integer'
+			}
+			return true
+		},
+		transformer: (value) => parseInt(value),
 	},
 	{
 		name: 'PROPOSER_KEY',
