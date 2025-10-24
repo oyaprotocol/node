@@ -559,7 +559,9 @@ export const submitIntention = async (req: Request, res: Response) => {
 				hasSignature: !!signature,
 				hasController: !!controller,
 			})
-			throw new Error('Missing required fields: intention, signature, or controller')
+			throw new Error(
+				'Missing required fields: intention, signature, or controller'
+			)
 		}
 
 		diagnostic.info('Intention endpoint called', {

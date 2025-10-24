@@ -147,7 +147,7 @@ export function validateNonce(
 /**
  * Validates a numeric ID (e.g., chain_id, vault_id)
  */
-function validateId(id: unknown, fieldName: string): number {
+export function validateId(id: unknown, fieldName: string): number {
 	if (typeof id !== 'number') {
 		throw new ValidationError('ID must be a number', fieldName, id, {
 			receivedType: typeof id,

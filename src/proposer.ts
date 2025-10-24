@@ -41,6 +41,7 @@ import {
 	validateIntention,
 	validateAddress,
 	validateSignature,
+	validateId,
 } from './utils/validator.js'
 import {
 	pinBundleToFilecoin,
@@ -587,27 +588,15 @@ async function setupHelia() {
  * Handles transfers between vaults with balance validation.
  */
 async function updateBalances(
-	from: string,
+	from: number, // from is now always a vault ID
 	to: string | number,
 	token: string,
 	amount: string
 ) {
-	// from is always an address, to can be an address or a vault ID
-	const validatedFrom = validateAddress(from, 'from')
+	const validatedFrom = validateId(from, 'from')
 	const validatedToken = validateAddress(token, 'token')
-
 	const amountBigInt = safeBigInt(amount)
-	if (validatedFrom === PROPOSER_ADDRESS.toLowerCase()) {
-		const largeBalance = parseUnits('1000000000000', 18)
-		await updateBalance(
-			validatedFrom,
-			validatedToken,
-			safeBigInt(largeBalance.toString())
-		)
-		logger.info(
-			`Bundle proposer balance updated to a large amount for token ${validatedToken}`
-		)
-	}
+
 	const fromBalance = await getBalance(validatedFrom, validatedToken)
 	const toBalance = await getBalance(to, validatedToken)
 	const newFromBalance = fromBalance - amountBigInt
@@ -837,7 +826,9 @@ async function handleIntention(
 	 */
 	const proof: unknown[] = []
 	const fromVaultIds = new Set(
-		validatedIntention.inputs.map((i) => i.from).filter((id) => id !== undefined)
+		validatedIntention.inputs
+			.map((i) => i.from)
+			.filter((id) => id !== undefined)
 	)
 	if (fromVaultIds.size > 1) {
 		// For now, we only support a single source vault per intention for simplicity in proof generation.
@@ -862,7 +853,8 @@ async function handleIntention(
 	}
 
 	const finalSourceVaultId =
-		sourceVaultId ?? parseInt((await getVaultsForController(validatedController))[0])
+		sourceVaultId ??
+		parseInt((await getVaultsForController(validatedController))[0])
 
 	for (const output of validatedIntention.outputs) {
 		const tokenAddress = output.asset
