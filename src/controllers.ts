@@ -17,7 +17,7 @@
  */
 
 import { Request, Response } from 'express'
-import { pool } from './index.js'
+import { pool } from './db.js'
 import { RequestBody } from './types/core.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { validateBundle, handleValidationError } from './utils/validator.js'
@@ -52,13 +52,15 @@ export const saveBundle = async (req: Request, res: Response) => {
 
 	try {
 		const bundleString = JSON.stringify(bundle)
+		// Convert bundle to Buffer for BYTEA storage (matches proposer implementation)
+		const bundleBuffer = Buffer.from(bundleString, 'utf8')
 
 		logger.info('Stringified bundle for DB:', bundleString)
 
 		const queryStart = Date.now()
 		const result = await pool.query(
-			'INSERT INTO bundles (bundle, nonce) VALUES ($1::jsonb, $2) RETURNING *',
-			[bundleString, nonce]
+			'INSERT INTO bundles (bundle, nonce, proposer, signature) VALUES ($1, $2, $3, $4) RETURNING *',
+			[bundleBuffer, nonce, 'manual', ''] // Mark as manual submission with no signature
 		)
 
 		diagnostic.info('Database operation', {
@@ -67,10 +69,15 @@ export const saveBundle = async (req: Request, res: Response) => {
 			queryTime: Date.now() - queryStart,
 			totalTime: Date.now() - startTime,
 			nonce,
-			bundleSize: bundleString.length,
+			bundleSize: bundleBuffer.length,
 		})
 
-		res.status(201).json(result.rows[0])
+		// Return bundle as JSON for API response (decode the buffer)
+		const response = {
+			...result.rows[0],
+			bundle: JSON.parse(result.rows[0].bundle.toString('utf8')),
+		}
+		res.status(201).json(response)
 	} catch (err) {
 		diagnostic.error('Database error', {
 			operation: 'saveBundle',
@@ -100,7 +107,13 @@ export const getBundle = async (req: Request, res: Response) => {
 			return res.status(404).json({ error: 'Bundle not found' })
 		}
 
-		res.status(200).json(result.rows)
+		// Decode bundle BYTEA to JSON for API response
+		const bundles = result.rows.map((row) => ({
+			...row,
+			bundle: JSON.parse(row.bundle.toString('utf8')),
+		}))
+
+		res.status(200).json(bundles)
 	} catch (err) {
 		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })
@@ -116,7 +129,14 @@ export const getAllBundles = async (req: Request, res: Response) => {
 		const result = await pool.query(
 			'SELECT * FROM bundles ORDER BY timestamp DESC'
 		)
-		res.status(200).json(result.rows)
+
+		// Decode bundle BYTEA to JSON for API response
+		const bundles = result.rows.map((row) => ({
+			...row,
+			bundle: JSON.parse(row.bundle.toString('utf8')),
+		}))
+
+		res.status(200).json(bundles)
 	} catch (err) {
 		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })
