@@ -356,8 +356,8 @@ Below is a summary of the main API endpoints:
     ```json
     {
       "intention": { /* intention object */ },
-      "signature": "signature_string",
-      "from": "vault_address"
+      "signature": "signature_string", // Intention signed by the Controller wallet
+      "controller": "eth_address" // address controlling a given Vault
     }
     ```
 
