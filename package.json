@@ -2,13 +2,13 @@
 	"name": "oya-fullnode",
 	"version": "1.0.0",
 	"type": "module",
-	"main": "src/index.ts",
+	"main": "src/server.ts",
 	"bin": {
 		"oya": "./bin/oya_cli"
 	},
 	"scripts": {
 		"setup": "bun run scripts/setup.js",
-		"start": "bun run src/index.ts",
+		"start": "bun run src/server.ts",
 		"test": "bun test",
 		"lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
 		"format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
