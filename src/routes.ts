@@ -37,12 +37,12 @@ import {
 	getMetrics,
 	submitIntention,
 	getFilecoinStatus,
-    getVaultIdsByController,
-    getControllersByVaultId,
-    getRulesByVaultId,
-    addControllerToVault,
-    removeControllerFromVault,
-    updateRulesForVault,
+	getVaultIdsByController,
+	getControllersByVaultId,
+	getRulesByVaultId,
+	addControllerToVault,
+	removeControllerFromVault,
+	updateRulesForVault,
 } from './controllers.js'
 
 /**
@@ -104,13 +104,13 @@ export const routeMounts: RouteMount[] = [
 		router: Router().get('/status/:cid', getFilecoinStatus),
 	},
 	{
-        basePath: '/vault',
-        router: Router()
-            .get('/by-controller/:address', getVaultIdsByController)
-            .get('/:vaultId/controllers', getControllersByVaultId)
-            .get('/:vaultId/rules', getRulesByVaultId)
-            .post('/:vaultId/controllers/add', addControllerToVault)
-            .post('/:vaultId/controllers/remove', removeControllerFromVault)
-            .post('/:vaultId/rules', updateRulesForVault),
-    },
+		basePath: '/vault',
+		router: Router()
+			.get('/by-controller/:address', getVaultIdsByController)
+			.get('/:vaultId/controllers', getControllersByVaultId)
+			.get('/:vaultId/rules', getRulesByVaultId)
+			.post('/:vaultId/controllers/add', addControllerToVault)
+			.post('/:vaultId/controllers/remove', removeControllerFromVault)
+			.post('/:vaultId/rules', updateRulesForVault),
+	},
 ]
