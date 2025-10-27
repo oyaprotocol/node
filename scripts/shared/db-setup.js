@@ -66,6 +66,14 @@ CREATE TABLE IF NOT EXISTS proposers (
   proposer TEXT NOT NULL UNIQUE,
   last_seen TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Create the vaults table (maps vault IDs to controllers and rules)
+CREATE TABLE IF NOT EXISTS vaults (
+  vault TEXT PRIMARY KEY,
+  controllers TEXT[] NOT NULL,
+  rules TEXT,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
 `
 
 /**
@@ -79,6 +87,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_vault_token_balances ON balances 
 -- Create indexes for Filecoin tracking
 CREATE INDEX IF NOT EXISTS idx_bundles_filecoin_status ON bundles(filecoin_status);
 CREATE INDEX IF NOT EXISTS idx_bundles_ipfs_cid ON bundles(ipfs_cid);
+
+-- Create a GIN index on the controllers array for efficient lookups
+CREATE INDEX IF NOT EXISTS idx_vaults_controllers ON vaults USING GIN (controllers);
 `
 
 /**
@@ -90,6 +101,7 @@ DROP TABLE IF EXISTS cids CASCADE;
 DROP TABLE IF EXISTS balances CASCADE;
 DROP TABLE IF EXISTS nonces CASCADE;
 DROP TABLE IF EXISTS proposers CASCADE;
+DROP TABLE IF EXISTS vaults CASCADE;
 `
 
 /**
@@ -159,7 +171,7 @@ export async function setupDatabase(options) {
 			SELECT table_name
 			FROM information_schema.tables
 			WHERE table_schema = 'public'
-			AND table_name IN ('bundles', 'cids', 'balances', 'nonces', 'proposers')
+			AND table_name IN ('bundles', 'cids', 'balances', 'nonces', 'proposers', 'vaults')
 			ORDER BY table_name
 		`)
 
