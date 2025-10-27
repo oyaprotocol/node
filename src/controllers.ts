@@ -552,30 +552,32 @@ export const detailedHealthCheck = async (req: Request, res: Response) => {
 export const submitIntention = async (req: Request, res: Response) => {
 	const startTime = Date.now()
 	try {
-		const { intention, signature, from } = req.body
-		if (!intention || !signature || !from) {
+		const { intention, signature, controller } = req.body
+		if (!intention || !signature || !controller) {
 			diagnostic.debug('Missing intention fields', {
 				hasIntention: !!intention,
 				hasSignature: !!signature,
-				hasFrom: !!from,
+				hasController: !!controller,
 			})
-			throw new Error('Missing required fields')
+			throw new Error(
+				'Missing required fields: intention, signature, or controller'
+			)
 		}
 
 		diagnostic.info('Intention endpoint called', {
-			from,
+			controller,
 			intentionType: intention.action_type || 'legacy',
 			signaturePreview: signature.slice(0, 10) + '...',
 		})
 
 		logger.info('Received signed intention', {
-			from,
+			controller,
 			signature: signature.slice(0, 10) + '...',
 		})
-		const response = await handleIntention(intention, signature, from)
+		const response = await handleIntention(intention, signature, controller)
 
 		diagnostic.info('Intention processed', {
-			from,
+			controller,
 			processingTime: Date.now() - startTime,
 			success: true,
 		})

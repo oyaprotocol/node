@@ -31,18 +31,30 @@ import { promisify } from 'util'
 import { getEnvConfig } from './utils/env.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { resolveIntentionENS } from './utils/ensResolver.js'
+import {
+	getControllersForVault,
+	getVaultsForController,
+	upsertVaultControllers,
+} from './utils/vaults.js'
 import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
 import {
 	validateIntention,
 	validateAddress,
 	validateSignature,
+	validateId,
 } from './utils/validator.js'
 import {
 	pinBundleToFilecoin,
 	initializeFilecoinPin,
 } from './utils/filecoinPin.js'
 import { sendWebhook } from './utils/webhook.js'
-import type { Intention, BundleData, ExecutionObject } from './types/core.js'
+import type {
+	Intention,
+	BundleData,
+	ExecutionObject,
+	IntentionInput,
+	IntentionOutput,
+} from './types/core.js'
 
 const gzip = promisify(zlib.gzip)
 
@@ -184,6 +196,20 @@ async function getLatestNonce(): Promise<number> {
 }
 
 /**
+ * Retrieves the latest nonce for a specific vault from the database.
+ * Returns 0 if no nonce is found for the vault.
+ */
+async function getVaultNonce(vaultId: number | string): Promise<number> {
+	const result = await pool.query('SELECT nonce FROM nonces WHERE vault = $1', [
+		String(vaultId),
+	])
+	if (result.rows.length === 0) {
+		return 0
+	}
+	return result.rows[0].nonce
+}
+
+/**
  * Fetches token decimals from mainnet for proper amount calculations.
  * Returns 18 for ETH (zero address).
  */
@@ -294,10 +320,12 @@ async function updateBalance(
 /**
  * Seeds a new vault with initial token balances by transferring them from the
  * proposer's vault.
+ * This is now a fallback/manual method. The primary path is via createAndSubmitSeedingIntention.
  */
+/*
 async function initializeBalancesForVault(newVaultId: number): Promise<void> {
 	logger.info(
-		`Seeding new vault (ID: ${newVaultId}) from proposer vault (ID: ${PROPOSER_VAULT_ID.value})...`
+		`Directly seeding new vault (ID: ${newVaultId}) from proposer vault (ID: ${PROPOSER_VAULT_ID.value})...`
 	)
 
 	for (const token of SEED_CONFIG) {
@@ -317,18 +345,13 @@ async function initializeBalancesForVault(newVaultId: number): Promise<void> {
 				continue
 			}
 
-			// Decrement proposer's balance
-			const newProposerBalance = proposerBalance - seedAmount
-			await updateBalance(
+			// Use the single, updated function for the transfer
+			await updateBalances(
 				PROPOSER_VAULT_ID.value,
+				newVaultId,
 				token.address,
-				newProposerBalance
+				seedAmount.toString()
 			)
-
-			// Increment new vault's balance (starts at 0)
-			const newUserBalance = await getBalance(newVaultId, token.address)
-			const newSeededBalance = newUserBalance + seedAmount
-			await updateBalance(newVaultId, token.address, newSeededBalance)
 
 			logger.info(
 				`- Successfully seeded vault ${newVaultId} with ${token.amount} of token ${token.address}`
@@ -341,6 +364,7 @@ async function initializeBalancesForVault(newVaultId: number): Promise<void> {
 		}
 	}
 }
+*/
 
 /**
  * Records proposer activity in the database.
@@ -397,10 +421,10 @@ async function saveBundleData(
 			const vault = execution.from
 			await pool.query(
 				`INSERT INTO nonces (vault, nonce)
-       VALUES (LOWER($1), $2)
+       VALUES ($1, $2)
        ON CONFLICT (vault)
        DO UPDATE SET nonce = EXCLUDED.nonce`,
-				[vault, vaultNonce]
+				[String(vault), vaultNonce]
 			)
 		}
 	}
@@ -582,27 +606,15 @@ async function setupHelia() {
  * Handles transfers between vaults with balance validation.
  */
 async function updateBalances(
-	from: string,
+	from: number, // from is now always a vault ID
 	to: string | number,
 	token: string,
 	amount: string
 ) {
-	// from is always an address, to can be an address or a vault ID
-	const validatedFrom = validateAddress(from, 'from')
+	const validatedFrom = validateId(from, 'from')
 	const validatedToken = validateAddress(token, 'token')
-
 	const amountBigInt = safeBigInt(amount)
-	if (validatedFrom === PROPOSER_ADDRESS.toLowerCase()) {
-		const largeBalance = parseUnits('1000000000000', 18)
-		await updateBalance(
-			validatedFrom,
-			validatedToken,
-			safeBigInt(largeBalance.toString())
-		)
-		logger.info(
-			`Bundle proposer balance updated to a large amount for token ${validatedToken}`
-		)
-	}
+
 	const fromBalance = await getBalance(validatedFrom, validatedToken)
 	const toBalance = await getBalance(to, validatedToken)
 	const newFromBalance = fromBalance - amountBigInt
@@ -622,27 +634,100 @@ async function updateBalances(
 }
 
 /**
+ * Creates and submits a signed intention to seed a new vault with initial tokens.
+ * This creates an auditable record of the seeding transaction.
+ */
+async function createAndSubmitSeedingIntention(
+	newVaultId: number
+): Promise<void> {
+	logger.info(`Creating seeding intention for new vault ${newVaultId}...`)
+
+	const inputs: IntentionInput[] = []
+	const outputs: IntentionOutput[] = []
+	const tokenSummary = SEED_CONFIG.map(
+		(token) => `${token.amount} ${token.symbol}`
+	).join(', ')
+	const action = `Transfer ${tokenSummary} to vault #${newVaultId}`
+
+	for (const token of SEED_CONFIG) {
+		const tokenDecimals = await getSepoliaTokenDecimals(token.address)
+		const seedAmount = parseUnits(token.amount, Number(tokenDecimals))
+
+		inputs.push({
+			asset: token.address,
+			amount: seedAmount.toString(),
+			from: PROPOSER_VAULT_ID.value,
+			chain_id: 11155111, // Sepolia
+		})
+
+		outputs.push({
+			asset: token.address,
+			amount: seedAmount.toString(),
+			to: newVaultId,
+			chain_id: 11155111, // Sepolia
+		})
+	}
+
+	const currentNonce = await getVaultNonce(PROPOSER_VAULT_ID.value)
+	const nextNonce = currentNonce + 1
+	const feeAmountInWei = parseUnits('0.0001', 18).toString()
+
+	const intention: Intention = {
+		action: action,
+		nonce: nextNonce,
+		expiry: Math.floor(Date.now() / 1000) + 300, // 5 minute expiry
+		inputs,
+		outputs,
+		totalFee: [
+			{
+				asset: ['ETH'],
+				amount: '0.0001',
+			},
+		],
+		proposerTip: [], // 0 tip for internal seeding
+		protocolFee: [
+			{
+				asset: '0x0000000000000000000000000000000000000000', // ETH
+				amount: feeAmountInWei,
+				chain_id: 11155111, // Sepolia
+			},
+		],
+	}
+
+	// Proposer signs the intention with its wallet
+	const signature = await wallet.signMessage(JSON.stringify(intention))
+
+	// Submit the intention to be processed and bundled
+	// The controller is the proposer's own address
+	await handleIntention(intention, signature, PROPOSER_ADDRESS)
+
+	logger.info(
+		`Successfully submitted seeding intention for vault ${newVaultId}.`
+	)
+}
+
+/**
  * Verifies and processes an incoming intention.
  * Validates signature, checks balances, and caches for bundling.
  */
 async function handleIntention(
 	intention: Intention,
 	signature: string,
-	from: string
+	controller: string
 ): Promise<ExecutionObject> {
 	const startTime = Date.now()
 
 	/**
-	 * STEP 1: Basic validation of signature format and from address
+	 * STEP 1: Basic validation of signature format and controller address
 	 * - Validates signature is properly formatted (0x + hex)
-	 * - Validates from is a valid Ethereum address
+	 * - Validates controller is a valid Ethereum address
 	 * - Does NOT validate intention fields yet (may contain ENS names)
 	 */
 	const validatedSignature = validateSignature(signature)
-	const validatedFrom = validateAddress(from, 'from')
+	const validatedController = validateAddress(controller, 'controller')
 
 	diagnostic.trace('Starting intention processing', {
-		from: validatedFrom,
+		controller: validatedController,
 		action: intention.action,
 		intentionNonce: intention.nonce,
 		timestamp: startTime,
@@ -655,7 +740,7 @@ async function handleIntention(
 	 * STEP 2: Verify signature against ORIGINAL intention
 	 * - Signature was created by user signing the original intention (with ENS names)
 	 * - Must verify BEFORE resolving ENS, otherwise signature won't match
-	 * - Recovers signer address and compares to 'from' parameter
+	 * - Recovers signer address and compares to 'controller' parameter
 	 */
 	const verifyStartTime = Date.now()
 	const signerAddress = verifyMessage(
@@ -665,21 +750,21 @@ async function handleIntention(
 
 	diagnostic.debug('Signature verification completed', {
 		recoveredAddress: signerAddress,
-		expectedAddress: validatedFrom,
+		expectedAddress: validatedController,
 		verificationTime: Date.now() - verifyStartTime,
-		signatureValid: signerAddress.toLowerCase() === validatedFrom,
+		signatureValid: signerAddress.toLowerCase() === validatedController,
 	})
 
 	logger.info('Recovered signer address from intention:', signerAddress)
-	if (signerAddress.toLowerCase() !== validatedFrom) {
+	if (signerAddress.toLowerCase() !== validatedController) {
 		logger.info(
 			'Signature verification failed. Expected:',
-			validatedFrom,
+			validatedController,
 			'Got:',
 			signerAddress
 		)
 		diagnostic.error('Signature mismatch', {
-			expected: validatedFrom,
+			expected: validatedController,
 			received: signerAddress,
 			intention: intention,
 		})
@@ -716,8 +801,8 @@ async function handleIntention(
 			logger.info('Processing CreateVault intention...')
 
 			// 1. Call the on-chain contract to create the vault.
-			// The `validatedFrom` address becomes the controller of the new vault.
-			const tx = await vaultTrackerContract.createVault(validatedFrom)
+			// The `validatedController` address becomes the controller of the new vault.
+			const tx = await vaultTrackerContract.createVault(validatedController)
 			const receipt = await tx.wait() // Wait for the transaction to be mined
 
 			if (!receipt) {
@@ -747,8 +832,13 @@ async function handleIntention(
 
 			logger.info(`On-chain vault created with ID: ${newVaultId}`)
 
-			// 3. After the vault is created on-chain, seed it in the database.
-			await initializeBalancesForVault(newVaultId)
+			// 3. Persist the new vault-to-controller mapping to the database.
+			// This is the canonical source of truth for vault ownership.
+			await upsertVaultControllers(newVaultId, [validatedController])
+
+			// 4. After the vault is created and its controller is mapped,
+			// submit an intention to seed it with initial balances.
+			await createAndSubmitSeedingIntention(newVaultId)
 		} catch (error) {
 			logger.error('Failed to process CreateVault intention:', error)
 			// Re-throw or handle the error as appropriate for your application
@@ -766,19 +856,45 @@ async function handleIntention(
 	}
 
 	/**
-	 * STEP 5: Verify vault balances based on intention inputs
+	 * STEP 5: Verify vault balances based on intention inputs.
+	 * This now involves resolving the fromVaultId and checking controller authorization.
 	 */
 	for (const input of validatedIntention.inputs) {
 		const tokenAddress = input.asset
 		const requiredAmount = safeBigInt(input.amount)
 
-		// For now, all inputs are debited from the user's main vault,
-		// which is identified by their validated 'from' address.
-		const balanceOwner = validatedFrom
-		const currentBalance = await getBalance(balanceOwner, tokenAddress)
+		// Determine the source vault for this input
+		let fromVaultId: number
+		if (input.from !== undefined) {
+			fromVaultId = input.from
+		} else {
+			// If 'from' is not in the input, resolve it via the controller
+			const vaults = await getVaultsForController(validatedController)
+			if (vaults.length === 0) {
+				throw new Error(
+					`Controller ${validatedController} has no associated vaults.`
+				)
+			}
+			if (vaults.length > 1) {
+				throw new Error(
+					`Controller has multiple vaults, but no specific 'from' vault was provided in intention input.`
+				)
+			}
+			fromVaultId = parseInt(vaults[0])
+		}
+
+		// Security Check: Verify the signer is a controller of the source vault
+		const authorizedControllers = await getControllersForVault(fromVaultId)
+		if (!authorizedControllers.includes(validatedController)) {
+			throw new Error(
+				`Controller ${validatedController} is not authorized for vault ${fromVaultId}.`
+			)
+		}
+
+		const currentBalance = await getBalance(fromVaultId, tokenAddress)
 
 		diagnostic.trace('Balance check', {
-			vault: balanceOwner,
+			vault: fromVaultId,
 			token: tokenAddress,
 			currentBalance: currentBalance.toString(),
 			requiredAmount: requiredAmount.toString(),
@@ -787,7 +903,7 @@ async function handleIntention(
 
 		if (currentBalance < requiredAmount) {
 			diagnostic.error('Insufficient balance', {
-				vault: balanceOwner,
+				vault: fromVaultId,
 				token: tokenAddress,
 				currentBalance: currentBalance.toString(),
 				requiredAmount: requiredAmount.toString(),
@@ -800,6 +916,25 @@ async function handleIntention(
 	 * STEP 6: Generate proof based on intention outputs
 	 */
 	const proof: unknown[] = []
+
+	// By this point, STEP 5 has guaranteed that every input has a `from` vault ID.
+	// We create a set to find the unique source vault(s).
+	const sourceVaultIds = new Set(validatedIntention.inputs.map((i) => i.from))
+
+	if (sourceVaultIds.size > 1) {
+		// For now, we only support a single source vault per intention.
+		throw new Error(
+			'Intentions with inputs from multiple source vaults are not yet supported.'
+		)
+	}
+
+	if (sourceVaultIds.size === 0 && validatedIntention.inputs.length > 0) {
+		// This should be an impossible state if the intention has inputs.
+		throw new Error('Could not determine source vault for proof generation.')
+	}
+
+	// Get the single, definitive source vault ID from the set.
+	const finalSourceVaultId = sourceVaultIds.values().next().value as number
 
 	for (const output of validatedIntention.outputs) {
 		const tokenAddress = output.asset
@@ -819,7 +954,7 @@ async function handleIntention(
 
 		proof.push({
 			token: tokenAddress,
-			from: validatedFrom, // All transfers originate from the user's vault
+			from: finalSourceVaultId, // All transfers originate from the resolved vault
 			to: toIdentifier,
 			amount: amountInWei.toString(),
 		})
@@ -829,7 +964,7 @@ async function handleIntention(
 		execution: [
 			{
 				intention: validatedIntention,
-				from: validatedFrom,
+				from: finalSourceVaultId,
 				proof: proof,
 				signature: validatedSignature,
 			},
@@ -838,7 +973,7 @@ async function handleIntention(
 	cachedIntentions.push(executionObject)
 
 	diagnostic.info('Intention processed successfully', {
-		from: validatedFrom,
+		controller: validatedController,
 		action: validatedIntention.action,
 		processingTime: Date.now() - startTime,
 		totalCachedIntentions: cachedIntentions.length,
@@ -955,6 +1090,9 @@ export async function initializeProposer() {
 
 	logger.info('Initializing proposer module...')
 
+	// Seed the proposer's own vault-to-controller mapping
+	await seedProposerVaultMapping()
+
 	// Initialize wallet and contract
 	await initializeWalletAndContract()
 
@@ -981,6 +1119,24 @@ export function getSepoliaAlchemy() {
 		throw new Error('Proposer not initialized')
 	}
 	return sepoliaAlchemy
+}
+
+/**
+ * Ensures the proposer's vault-to-controller mapping is seeded in the database.
+ * This is crucial for allowing the proposer to sign and submit seeding intentions.
+ */
+async function seedProposerVaultMapping() {
+	try {
+		await upsertVaultControllers(PROPOSER_VAULT_ID.value, [PROPOSER_ADDRESS])
+		logger.info(
+			`Proposer vault mapping seeded: Vault ${PROPOSER_VAULT_ID.value} -> Controller ${PROPOSER_ADDRESS}`
+		)
+	} catch (error) {
+		logger.error('Failed to seed proposer vault mapping:', error)
+		// We throw here because if the proposer can't control its own vault,
+		// it won't be able to perform critical functions like seeding new vaults.
+		throw new Error('Could not seed proposer vault mapping')
+	}
 }
 
 /**
