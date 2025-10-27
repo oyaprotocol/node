@@ -37,6 +37,7 @@
 
 - **Express Server:** The main entry point (`index.ts`) sets up the Express server, JSON parsing, and routes.
 - **Routing & Controllers:** API endpoints are defined in `routes.ts` and implemented in `controllers.ts`. These endpoints manage database operations for bundles, CIDs, balances, and vault nonces.
+ - **Vaults:** The `vaults` table maps vault IDs to controller addresses and vault rules; corresponding endpoints are mounted under `/vault`.
 - **Proposer Logic:** Implemented in `proposer.ts`, this module:
   - Processes incoming intentions from the `/intention` endpoint.
   - Caches intentions and bundles them into a bundle every 10 seconds.
@@ -139,6 +140,8 @@ The setup script creates the following tables:
 - **cids:** Stores IPFS CIDs corresponding to bundles.
 - **balances:** Tracks token balances per vault.
 - **nonces:** Tracks the latest nonce for each vault.
+ - **proposers:** Tracks last-seen timestamps for block proposers.
+ - **vaults:** Maps vault IDs (`vault` TEXT PK) to `controllers` (TEXT[]) and optional `rules` (TEXT). Includes a GIN index on `controllers` for fast lookups.
 
 If deploying to Heroku, run the migration script as follows:
 
@@ -350,6 +353,18 @@ Below is a summary of the main API endpoints:
   - `GET /nonce/:vault` — Get the nonce for a given vault.
   - `POST /nonce/:vault` — Set/update the nonce for a vault.
 
+- **Vaults**
+  - `GET /vault/by-controller/:address` — Get array of vault IDs controlled by an Ethereum `address`.
+  - `GET /vault/:vaultId/controllers` — Get the array of controller addresses for a `vaultId`.
+  - `GET /vault/:vaultId/rules` — Get the rules for a `vaultId` as `{ "vault": string, "rules": string | null }`.
+  - `POST /vault/:vaultId/controllers/add` — Add a `controller` to `vaultId` (idempotent). Returns `{ "vault": string, "controllers": string[] }`. 🔒
+  - `POST /vault/:vaultId/controllers/remove` — Remove a `controller` from `vaultId`. Returns `{ "vault": string, "controllers": string[] }`. 404 if vault not found. 🔒
+  - `POST /vault/:vaultId/rules` — Set or clear `rules` (string or null) for `vaultId`. Returns `{ "vault": string, "rules": string | null }`. 🔒
+
+  Notes:
+  - All POST endpoints are protected by Bearer auth (see `API_BEARER_TOKEN`).
+  - Controller addresses are validated and normalized to lowercase.
+  
 - **Intentions**
   - `POST /intention` — Accepts a JSON payload with the following structure:
 
