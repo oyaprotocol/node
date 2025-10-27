@@ -42,7 +42,7 @@ import {
 	getRulesByVaultId,
 	addControllerToVault,
 	removeControllerFromVault,
-	updateRulesForVault,
+	setRulesForVault,
 } from './controllers.js'
 
 /**
@@ -111,6 +111,6 @@ export const routeMounts: RouteMount[] = [
 			.get('/:vaultId/rules', getRulesByVaultId)
 			.post('/:vaultId/controllers/add', addControllerToVault)
 			.post('/:vaultId/controllers/remove', removeControllerFromVault)
-			.post('/:vaultId/rules', updateRulesForVault),
+			.post('/:vaultId/rules', setRulesForVault),
 	},
 ]

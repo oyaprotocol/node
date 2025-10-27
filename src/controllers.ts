@@ -767,9 +767,9 @@ export const removeControllerFromVault = async (
 
 /**
  * POST /vault/:vaultId/rules
- * Updates rules for a vault (creates row if missing). Returns \{ vault, rules \}
+ * Sets rules for a vault (creates row if missing). Returns \{ vault, rules \}
  */
-export const updateRulesForVault = async (req: Request, res: Response) => {
+export const setRulesForVault = async (req: Request, res: Response) => {
 	try {
 		const vaultId = validateId(Number(req.params.vaultId), 'vaultId')
 		const { rules } = req.body as { rules: string | null }
