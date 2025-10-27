@@ -17,7 +17,7 @@ import {
 import { checkUploadReadiness, executeUpload } from 'filecoin-pin/core/upload'
 import type { SynapseService } from 'filecoin-pin/core/synapse'
 import type { ProviderInfo } from '@filoz/synapse-sdk'
-import { pool } from '../index.js'
+import { pool } from '../db.js'
 import { createLogger } from './logger.js'
 import {
 	getFilecoinPinConfig,

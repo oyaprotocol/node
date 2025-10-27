@@ -1,31 +1,24 @@
 /**
  * ╔═══════════════════════════════════════════════════════════════════════════╗
  * ║                        🌪️  OYA PROTOCOL NODE  🌪️                          ║
- * ║                            Main Entry Point                               ║
+ * ║                            Server Entry Point                             ║
  * ╚═══════════════════════════════════════════════════════════════════════════╝
  *
  * Main entry point for the Oya Natural Language Protocol Node.
- * Sets up Express server with routes for handling signed intentions, creating bundles,
- * and managing blockchain interactions.
+ * Initializes the node, validates the database, and starts the Express server.
  *
  * @packageDocumentation
  */
 
-import express from 'express'
-import bppkg from 'body-parser'
-import pgpkg from 'pg'
-
 import { displayBanner } from './utils/banner.js'
-import { logger, logAvailableEndpoints } from './utils/logger.js'
+import { logger } from './utils/logger.js'
 import { setupEnvironment } from './utils/env.js'
 import { initializeDatabase } from './utils/database.js'
 import { registerShutdownHandlers } from './utils/gracefulShutdown.js'
 import type { DatabaseHealthMonitor } from './utils/database.js'
-import { routeMounts } from './routes.js'
 import { createAndPublishBundle, initializeProposer } from './proposer.js'
-import { diagnosticLogger } from './middleware/diagnostic.js'
-import { protectPostEndpoints } from './middleware/postAuth.js'
-import { createRateLimiter } from './middleware/rateLimit.js'
+import { createApp } from './app.js'
+import { pool } from './db.js'
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -38,7 +31,7 @@ displayBanner()
 
 // Initialize and validate environment
 const envConfig = setupEnvironment()
-const { PORT, DATABASE_URL, DATABASE_SSL } = envConfig
+const { PORT } = envConfig
 
 // Initialize proposer module
 try {
@@ -50,44 +43,9 @@ try {
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║                           SERVER SETUP                                    ║
+║                          DATABASE INITIALIZATION                          ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 */
-
-const { json } = bppkg
-
-/** Express application instance for the Oya node server */
-const app = express()
-
-// Parse JSON request bodies
-app.use(json())
-
-// Diagnostic logging for all requests/responses
-app.use(diagnosticLogger)
-
-// Protect all POST endpoints with Bearer token auth
-app.use(protectPostEndpoints)
-
-/*
-╔═══════════════════════════════════════════════════════════════════════════╗
-║                          DATABASE CONNECTION                              ║
-╚═══════════════════════════════════════════════════════════════════════════╝
-*/
-
-const { Pool } = pgpkg
-
-/**
- * PostgreSQL connection pool for database operations.
- * SSL configuration is determined by DATABASE_SSL environment variable.
- */
-export const pool = new Pool({
-	connectionString: DATABASE_URL,
-	ssl: DATABASE_SSL ? { rejectUnauthorized: false } : false,
-})
-
-if (!DATABASE_SSL) {
-	logger.debug('Database SSL disabled (DATABASE_SSL=false)')
-}
 
 /** Database health monitor instance */
 let dbHealthMonitor: DatabaseHealthMonitor | undefined
@@ -107,22 +65,12 @@ try {
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║                            ROUTE HANDLERS                                 ║
+║                           APPLICATION SETUP                               ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 */
 
-// Apply rate limiting to all endpoints (requires database)
-app.use(createRateLimiter('permissive'))
-
-// Mount route handlers
-logger.debug('Mounting route handlers')
-for (const { basePath, router } of routeMounts) {
-	app.use(basePath, router)
-}
-logger.debug('All routes mounted successfully')
-
-// Log available endpoints in debug mode
-logAvailableEndpoints(routeMounts)
+/** Express application instance for the Oya node server */
+const app = createApp()
 
 /*
 ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -162,5 +110,3 @@ registerShutdownHandlers({
 	dbHealthMonitor,
 	bundleInterval,
 })
-
-export { app }
