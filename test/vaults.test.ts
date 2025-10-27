@@ -134,13 +134,16 @@ describe('Vaults table behaviors', () => {
 	})
 
 	test('get vault IDs by controller (ANY on controllers array)', async () => {
-		// Seed two vaults controlled by TEST_ADDR_1
+		// Seed two vaults controlled by TEST_ADDR_1 (split into two separate statements)
 		await pool.query(
-			`INSERT INTO vaults (vault, controllers) VALUES ($1, ARRAY[LOWER($3)])
- 			 ON CONFLICT (vault) DO UPDATE SET controllers = EXCLUDED.controllers;
- 			INSERT INTO vaults (vault, controllers) VALUES ($2, ARRAY[LOWER($3)])
- 			 ON CONFLICT (vault) DO UPDATE SET controllers = EXCLUDED.controllers;`,
-			[String(TEST_VAULT_1), String(TEST_VAULT_2), TEST_ADDR_1]
+			`INSERT INTO vaults (vault, controllers) VALUES ($1, ARRAY[LOWER($2)])
+			 ON CONFLICT (vault) DO UPDATE SET controllers = EXCLUDED.controllers`,
+			[String(TEST_VAULT_1), TEST_ADDR_1]
+		)
+		await pool.query(
+			`INSERT INTO vaults (vault, controllers) VALUES ($1, ARRAY[LOWER($2)])
+			 ON CONFLICT (vault) DO UPDATE SET controllers = EXCLUDED.controllers`,
+			[String(TEST_VAULT_2), TEST_ADDR_1]
 		)
 
 		const res = await pool.query(
