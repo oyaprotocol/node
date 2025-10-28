@@ -817,13 +817,11 @@ export const createVault = async (req: Request, res: Response) => {
 		// Use shared util with pre-existence check
 		try {
 			const row = await createVaultRow(vaultId, controller, rules)
-			return res
-				.status(201)
-				.json({
-					vault: row.vault,
-					controllers: row.controllers,
-					rules: row.rules,
-				})
+			return res.status(201).json({
+				vault: row.vault,
+				controllers: row.controllers,
+				rules: row.rules,
+			})
 		} catch (e) {
 			if (e instanceof Error && e.message === 'Vault already exists') {
 				return res.status(409).json({ error: 'Vault already exists' })
