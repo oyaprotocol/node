@@ -817,30 +817,34 @@ export const createVault = async (req: Request, res: Response) => {
 				.status(400)
 				.json({ error: 'Invalid rules: must be string or null' })
 		}
-        // Attempt insert
-        const result = await pool.query(
-            `INSERT INTO vaults (vault, controllers, rules)
+		// Attempt insert
+		const result = await pool.query(
+			`INSERT INTO vaults (vault, controllers, rules)
              VALUES ($1, ARRAY[LOWER($2)], $3)
              RETURNING vault, controllers, rules`,
-            [String(vaultId), controller, rules]
-        )
+			[String(vaultId), controller, rules]
+		)
 
-        type VaultRow = {
-            vault: string
-            controllers: string[]
-            rules: string | null
-        }
-        const row = result.rows[0] as VaultRow
-        return res
-            .status(201)
-            .json({ vault: row.vault, controllers: row.controllers, rules: row.rules })
+		type VaultRow = {
+			vault: string
+			controllers: string[]
+			rules: string | null
+		}
+		const row = result.rows[0] as VaultRow
+		return res
+			.status(201)
+			.json({
+				vault: row.vault,
+				controllers: row.controllers,
+				rules: row.rules,
+			})
 	} catch (error) {
-        const pgErr = error as Error & { code?: string }
-        if (pgErr.code === '23505') {
-            return res.status(409).json({ error: 'Vault already exists' })
-        }
-        const err = handleValidationError(error)
-        if (err.status === 400) return res.status(400).json(err)
+		const pgErr = error as Error & { code?: string }
+		if (pgErr.code === '23505') {
+			return res.status(409).json({ error: 'Vault already exists' })
+		}
+		const err = handleValidationError(error)
+		if (err.status === 400) return res.status(400).json(err)
 		logger.error('Error creating vault:', error)
 		return res.status(500).json({ error: 'Internal Server Error' })
 	}

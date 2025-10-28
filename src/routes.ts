@@ -43,6 +43,7 @@ import {
 	addControllerToVault,
 	removeControllerFromVault,
 	setRulesForVault,
+    createVault,
 } from './controllers.js'
 
 /**
@@ -106,6 +107,7 @@ export const routeMounts: RouteMount[] = [
 	{
 		basePath: '/vault',
 		router: Router()
+			.post('/:vaultId', createVault)
 			.get('/by-controller/:address', getVaultIdsByController)
 			.get('/:vaultId/controllers', getControllersByVaultId)
 			.get('/:vaultId/rules', getRulesByVaultId)
