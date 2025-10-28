@@ -48,7 +48,10 @@ import {
 	initializeFilecoinPin,
 } from './utils/filecoinPin.js'
 import { sendWebhook } from './utils/webhook.js'
-import { insertDepositIfMissing } from './utils/deposits.js'
+import {
+  insertDepositIfMissing,
+  findExactUnassignedDeposit,
+} from './utils/deposits.js'
 import type {
 	Intention,
 	BundleData,
@@ -171,7 +174,7 @@ async function computeBlockRange(
  * Generic discovery for deposits into VaultTracker using Alchemy's decoded
  * asset transfers. Supports ERC-20 and ETH (internal/external) categories.
  */
- 
+
 async function discoverAndIngestDeposits(params: {
 	controller: string
 	chainId: number
@@ -253,57 +256,71 @@ async function discoverAndIngestDeposits(params: {
  *   - protocolFee must be empty
  *   - agentTip must be undefined or empty
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function validateAssignDepositStructure(intention: Intention): Promise<void> {
-  if (!Array.isArray(intention.inputs) || !Array.isArray(intention.outputs)) {
-    throw new Error('AssignDeposit requires inputs and outputs arrays')
-  }
-  if (intention.inputs.length !== intention.outputs.length) {
-    throw new Error('AssignDeposit requires 1:1 mapping between inputs and outputs')
-  }
+ 
+export async function validateAssignDepositStructure(
+	intention: Intention
+): Promise<void> {
+	if (!Array.isArray(intention.inputs) || !Array.isArray(intention.outputs)) {
+		throw new Error('AssignDeposit requires inputs and outputs arrays')
+	}
+	if (intention.inputs.length !== intention.outputs.length) {
+		throw new Error(
+			'AssignDeposit requires 1:1 mapping between inputs and outputs'
+		)
+	}
 
-  // Zero-fee enforcement
-  if (!Array.isArray(intention.totalFee) || intention.totalFee.length === 0) {
-    throw new Error('AssignDeposit requires totalFee with zero amount')
-  }
-  const allTotalZero = intention.totalFee.every((f) => f.amount === '0')
-  if (!allTotalZero) {
-    throw new Error('AssignDeposit totalFee must be zero')
-  }
-  if (Array.isArray(intention.proposerTip) && intention.proposerTip.length > 0) {
-    throw new Error('AssignDeposit proposerTip must be empty')
-  }
-  if (Array.isArray(intention.protocolFee) && intention.protocolFee.length > 0) {
-    throw new Error('AssignDeposit protocolFee must be empty')
-  }
-  if (Array.isArray(intention.agentTip) && intention.agentTip.length > 0) {
-    throw new Error('AssignDeposit agentTip must be empty if provided')
-  }
+	// Zero-fee enforcement
+	if (!Array.isArray(intention.totalFee) || intention.totalFee.length === 0) {
+		throw new Error('AssignDeposit requires totalFee with zero amount')
+	}
+	const allTotalZero = intention.totalFee.every((f) => f.amount === '0')
+	if (!allTotalZero) {
+		throw new Error('AssignDeposit totalFee must be zero')
+	}
+	if (
+		Array.isArray(intention.proposerTip) &&
+		intention.proposerTip.length > 0
+	) {
+		throw new Error('AssignDeposit proposerTip must be empty')
+	}
+	if (
+		Array.isArray(intention.protocolFee) &&
+		intention.protocolFee.length > 0
+	) {
+		throw new Error('AssignDeposit protocolFee must be empty')
+	}
+	if (Array.isArray(intention.agentTip) && intention.agentTip.length > 0) {
+		throw new Error('AssignDeposit agentTip must be empty if provided')
+	}
 
-  for (let i = 0; i < intention.inputs.length; i++) {
-    const input: IntentionInput = intention.inputs[i]
-    const output: IntentionOutput = intention.outputs[i]
+	for (let i = 0; i < intention.inputs.length; i++) {
+		const input: IntentionInput = intention.inputs[i]
+		const output: IntentionOutput = intention.outputs[i]
 
-    if (!output || (output.to === undefined && !output.to_external)) {
-      throw new Error('AssignDeposit requires outputs[].to (vault ID)')
-    }
-    if (output.to_external !== undefined) {
-      throw new Error('AssignDeposit does not support to_external')
-    }
+		if (!output || (output.to === undefined && !output.to_external)) {
+			throw new Error('AssignDeposit requires outputs[].to (vault ID)')
+		}
+		if (output.to_external !== undefined) {
+			throw new Error('AssignDeposit does not support to_external')
+		}
 
-    if (input.asset.toLowerCase() !== output.asset.toLowerCase()) {
-      throw new Error('AssignDeposit input/output asset mismatch at index ' + i)
-    }
-    if (input.amount !== output.amount) {
-      throw new Error('AssignDeposit input/output amount mismatch at index ' + i)
-    }
-    if (input.chain_id !== output.chain_id) {
-      throw new Error('AssignDeposit input/output chain_id mismatch at index ' + i)
-    }
+		if (input.asset.toLowerCase() !== output.asset.toLowerCase()) {
+			throw new Error('AssignDeposit input/output asset mismatch at index ' + i)
+		}
+		if (input.amount !== output.amount) {
+			throw new Error(
+				'AssignDeposit input/output amount mismatch at index ' + i
+			)
+		}
+		if (input.chain_id !== output.chain_id) {
+			throw new Error(
+				'AssignDeposit input/output chain_id mismatch at index ' + i
+			)
+		}
 
-    // Validate on-chain vault existence
-    await validateVaultIdOnChain(Number(output.to))
-  }
+		// Validate on-chain vault existence
+		await validateVaultIdOnChain(Number(output.to))
+	}
 }
 
 /**
@@ -314,7 +331,6 @@ export async function validateAssignDepositStructure(intention: Intention): Prom
  * If fromBlock/toBlock are not provided, computes a default lookback window
  * of ~7 days by subtracting ~50,400 blocks from the latest block.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function discoverAndIngestErc20Deposits(params: {
 	controller: string
 	token: string
@@ -336,7 +352,6 @@ async function discoverAndIngestErc20Deposits(params: {
  * Discovers ETH (internal) deposits made by `controller` into the VaultTracker
  * and ingests them into the local `deposits` table via idempotent inserts.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function discoverAndIngestEthDeposits(params: {
 	controller: string
 	chainId: number
@@ -1024,6 +1039,91 @@ async function handleIntention(
 		'Intention after validation:',
 		JSON.stringify(validatedIntention)
 	)
+
+  // Handle AssignDeposit intention (bypass generic balance checks)
+  if (validatedIntention.action === 'AssignDeposit') {
+    // Structural and zero-fee validation
+    await validateAssignDepositStructure(validatedIntention)
+
+    const zeroAddress = '0x0000000000000000000000000000000000000000'
+    const proof: unknown[] = []
+
+    for (let i = 0; i < validatedIntention.inputs.length; i++) {
+      const input = validatedIntention.inputs[i]
+      const output = validatedIntention.outputs[i]
+
+      // Optional discovery hints in input.data
+      let fromBlockHex: string | undefined
+      let toBlockHex: string | undefined
+      if (input.data) {
+        try {
+          const parsed = JSON.parse(input.data)
+          if (typeof parsed.fromBlock === 'string') fromBlockHex = parsed.fromBlock
+          if (typeof parsed.toBlock === 'string') toBlockHex = parsed.toBlock
+        } catch {
+          // ignore malformed hints
+        }
+      }
+
+      const isEth = input.asset.toLowerCase() === zeroAddress
+      if (isEth) {
+        await discoverAndIngestEthDeposits({
+          controller: validatedController,
+          chainId: input.chain_id,
+          fromBlockHex,
+          toBlockHex,
+        })
+      } else {
+        await discoverAndIngestErc20Deposits({
+          controller: validatedController,
+          token: input.asset,
+          chainId: input.chain_id,
+          fromBlockHex,
+          toBlockHex,
+        })
+      }
+
+      const match = await findExactUnassignedDeposit({
+        depositor: validatedController,
+        token: isEth ? zeroAddress : input.asset,
+        amount: input.amount,
+        chain_id: input.chain_id,
+      })
+      if (!match) {
+        throw new Error(
+          `No exact unassigned deposit found for asset ${input.asset} amount ${input.amount}`
+        )
+      }
+
+      proof.push({
+        token: isEth ? zeroAddress : input.asset,
+        to: output.to as number,
+        amount: input.amount,
+        deposit_id: match.id,
+        depositor: validatedController,
+      })
+    }
+
+    const executionObject: ExecutionObject = {
+      execution: [
+        {
+          intention: validatedIntention,
+          from: 0,
+          proof,
+          signature: validatedSignature,
+        },
+      ],
+    }
+    cachedIntentions.push(executionObject)
+
+    diagnostic.info('AssignDeposit intention processed', {
+      controller: validatedController,
+      count: validatedIntention.inputs.length,
+      processingTime: Date.now() - startTime,
+    })
+    logger.info('AssignDeposit cached. Total cached intentions:', cachedIntentions.length)
+    return executionObject
+  }
 
 	// Handle CreateVault intention and trigger seeding
 	if (validatedIntention.action === 'CreateVault') {
