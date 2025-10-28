@@ -16,7 +16,8 @@ import { createLogger } from './logger.js'
 const logger = createLogger('Vaults')
 
 /**
- * Inserts or updates the list of controllers for a given vault ID.
+ * Inserts a new vault row with the provided controllers.
+ * Insert-only: errors if the vault already exists.
  *
  * @param vaultId - The numeric ID of the vault.
  * @param controllers - An array of controller Ethereum addresses.
@@ -29,17 +30,15 @@ export async function upsertVaultControllers(
 	try {
 		await pool.query(
 			`INSERT INTO vaults (vault, controllers)
-       VALUES ($1, $2)
-       ON CONFLICT (vault)
-       DO UPDATE SET controllers = EXCLUDED.controllers`,
+		       VALUES ($1, $2)`,
 			[String(vaultId), lowercasedControllers]
 		)
 		logger.info(
-			`Upserted controllers for vault ${vaultId}: [${lowercasedControllers.join(', ')}]`
+			`Inserted controllers for new vault ${vaultId}: [${lowercasedControllers.join(', ')}]`
 		)
 	} catch (error) {
-		logger.error(`Failed to upsert controllers for vault ${vaultId}:`, error)
-		throw new Error('Database operation failed during vault upsert')
+		logger.error(`Failed to insert controllers for vault ${vaultId}:`, error)
+		throw new Error('Database operation failed during vault insert')
 	}
 }
 
@@ -114,8 +113,8 @@ export async function getRulesForVault(
 }
 
 /**
- * Sets or updates the rules for a given vault ID. Creates the row if it does not exist.
- * Returns the persisted rules value (may be null).
+ * Updates the rules for an existing vault (update-only). Returns persisted rules value.
+ * Errors if the vault row does not exist.
  *
  * @param vaultId - The numeric ID of the vault.
  * @param rules - The rules string or null to clear.
@@ -126,13 +125,12 @@ export async function setRulesForVault(
 ): Promise<string | null> {
 	try {
 		const result = await pool.query(
-			`INSERT INTO vaults (vault, controllers, rules)
-			 VALUES ($1, ARRAY[]::TEXT[], $2)
-			 ON CONFLICT (vault)
-			 DO UPDATE SET rules = EXCLUDED.rules
-			 RETURNING rules`,
+			`UPDATE vaults SET rules = $2 WHERE vault = $1 RETURNING rules`,
 			[String(vaultId), rules]
 		)
+		if (result.rows.length === 0) {
+			throw new Error('Vault not found')
+		}
 		return result.rows[0].rules as string | null
 	} catch (error) {
 		logger.error(`Failed to set rules for vault ${vaultId}:`, error)
@@ -141,8 +139,8 @@ export async function setRulesForVault(
 }
 
 /**
- * Adds a controller address to a vault's controllers array (idempotent). Creates the row if missing.
- * Returns the updated list of controllers in lowercase.
+ * Adds a controller address to a vault's controllers array (idempotent). Update-only.
+ * Returns the updated list of controllers in lowercase. Errors if the vault is missing.
  *
  * @param vaultId - The numeric ID of the vault.
  * @param controller - Controller Ethereum address.
@@ -154,15 +152,17 @@ export async function addControllerToVault(
 	const lower = controller.toLowerCase()
 	try {
 		const result = await pool.query(
-			`INSERT INTO vaults (vault, controllers)
-			 VALUES ($1, ARRAY[LOWER($2)])
-			 ON CONFLICT (vault)
-			 DO UPDATE SET controllers = (
-			   SELECT ARRAY(SELECT DISTINCT c FROM UNNEST(vaults.controllers || EXCLUDED.controllers) AS c)
+			`UPDATE vaults
+			 SET controllers = (
+			   SELECT ARRAY(SELECT DISTINCT c FROM UNNEST(controllers || ARRAY[LOWER($2)]) AS c)
 			 )
+			 WHERE vault = $1
 			 RETURNING controllers`,
 			[String(vaultId), lower]
 		)
+		if (result.rows.length === 0) {
+			throw new Error('Vault not found')
+		}
 		return (result.rows[0].controllers as string[]).map((c) => c.toLowerCase())
 	} catch (error) {
 		logger.error(
