@@ -106,6 +106,8 @@ export interface VaultTrackerContract extends ethers.BaseContract {
 		_controller: string,
 		overrides?: ethers.Overrides
 	): Promise<ethers.ContractTransactionResponse>
+	/** Returns the next unassigned vault ID (acts as current vault count). */
+	nextVaultId(): Promise<bigint>
 }
 
 let cachedIntentions: ExecutionObject[] = []
@@ -120,6 +122,28 @@ let s: ReturnType<typeof strings>
 
 // Initialization flag
 let isInitialized = false
+/**
+ * Validates that a vault ID exists on-chain by checking it is within range
+ * [1, nextVaultId - 1]. Throws if invalid or out of range.
+ */
+export async function validateVaultIdOnChain(vaultId: number): Promise<void> {
+  // Basic sanity
+  if (!Number.isInteger(vaultId) || vaultId < 1) {
+    throw new Error('Invalid vault ID')
+  }
+  // Ensure contracts are initialized
+  if (!vaultTrackerContract) {
+    throw new Error('VaultTracker contract not initialized')
+  }
+  const nextId = await vaultTrackerContract.nextVaultId()
+  const nextIdNumber = Number(nextId)
+  if (!Number.isFinite(nextIdNumber)) {
+    throw new Error('Could not determine nextVaultId from chain')
+  }
+  if (vaultId >= nextIdNumber) {
+    throw new Error('Vault ID does not exist on-chain')
+  }
+}
 
 /**
  * Initializes the BundleTracker contract with ABI and provider.
