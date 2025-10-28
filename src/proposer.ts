@@ -32,9 +32,9 @@ import { getEnvConfig } from './utils/env.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { resolveIntentionENS } from './utils/ensResolver.js'
 import {
-	getControllersForVault,
-	getVaultsForController,
-	updateVaultControllers,
+    getControllersForVault,
+    getVaultsForController,
+    createVaultRow,
 } from './utils/vaults.js'
 import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
 import {
@@ -832,9 +832,19 @@ async function handleIntention(
 
 			logger.info(`On-chain vault created with ID: ${newVaultId}`)
 
-			// 3. Persist the new vault-to-controller mapping to the database.
-			// This is the canonical source of truth for vault ownership.
-			await updateVaultControllers(newVaultId, [validatedController])
+            // 3. Persist the new vault-to-controller mapping to the database (insert-only via shared util).
+            try {
+                await createVaultRow(newVaultId, validatedController, null)
+            } catch (dbErr) {
+                const e = dbErr as Error & { code?: string }
+                if (e.code === '23505') {
+                    logger.warn(
+                        `Vault ${newVaultId} already exists in DB (duplicate insert avoided)`
+                    )
+                } else {
+                    throw dbErr
+                }
+            }
 
 			// 4. After the vault is created and its controller is mapped,
 			// submit an intention to seed it with initial balances.
@@ -1090,8 +1100,8 @@ export async function initializeProposer() {
 
 	logger.info('Initializing proposer module...')
 
-	// Seed the proposer's own vault-to-controller mapping
-	await seedProposerVaultMapping()
+    // Note: We no longer seed the proposer's vault mapping here.
+    // The DB is updated based on on-chain VaultCreated events.
 
 	// Initialize wallet and contract
 	await initializeWalletAndContract()
@@ -1125,19 +1135,7 @@ export function getSepoliaAlchemy() {
  * Ensures the proposer's vault-to-controller mapping is seeded in the database.
  * This is crucial for allowing the proposer to sign and submit seeding intentions.
  */
-async function seedProposerVaultMapping() {
-	try {
-		await updateVaultControllers(PROPOSER_VAULT_ID.value, [PROPOSER_ADDRESS])
-		logger.info(
-			`Proposer vault mapping seeded: Vault ${PROPOSER_VAULT_ID.value} -> Controller ${PROPOSER_ADDRESS}`
-		)
-	} catch (error) {
-		logger.error('Failed to seed proposer vault mapping:', error)
-		// We throw here because if the proposer can't control its own vault,
-		// it won't be able to perform critical functions like seeding new vaults.
-		throw new Error('Could not seed proposer vault mapping')
-	}
-}
+// Removed seedProposerVaultMapping; creation is handled via on-chain events
 
 /**
  * Exports IPFS node for health checks

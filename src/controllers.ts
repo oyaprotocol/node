@@ -29,11 +29,12 @@ import {
 import { getEnvConfig } from './utils/env.js'
 import { handleIntention } from './proposer.js'
 import {
-	getVaultsForController as getVaultsForControllerUtil,
-	getRulesForVault as getRulesForVaultUtil,
-	setRulesForVault as setRulesForVaultUtil,
-	addControllerToVault as addControllerToVaultUtil,
-	removeControllerFromVault as removeControllerFromVaultUtil,
+    getVaultsForController as getVaultsForControllerUtil,
+    getRulesForVault as getRulesForVaultUtil,
+    setRulesForVault as setRulesForVaultUtil,
+    addControllerToVault as addControllerToVaultUtil,
+    removeControllerFromVault as removeControllerFromVaultUtil,
+    createVaultRow,
 } from './utils/vaults.js'
 
 /** Logger instance for controllers module */
@@ -817,27 +818,12 @@ export const createVault = async (req: Request, res: Response) => {
 				.status(400)
 				.json({ error: 'Invalid rules: must be string or null' })
 		}
-		// Attempt insert
-		const result = await pool.query(
-			`INSERT INTO vaults (vault, controllers, rules)
-             VALUES ($1, ARRAY[LOWER($2)], $3)
-             RETURNING vault, controllers, rules`,
-			[String(vaultId), controller, rules]
-		)
-
-		type VaultRow = {
-			vault: string
-			controllers: string[]
-			rules: string | null
-		}
-		const row = result.rows[0] as VaultRow
-		return res
-			.status(201)
-			.json({
-				vault: row.vault,
-				controllers: row.controllers,
-				rules: row.rules,
-			})
+        const row = await createVaultRow(vaultId, controller, rules)
+		return res.status(201).json({
+			vault: row.vault,
+			controllers: row.controllers,
+			rules: row.rules,
+		})
 	} catch (error) {
 		const pgErr = error as Error & { code?: string }
 		if (pgErr.code === '23505') {

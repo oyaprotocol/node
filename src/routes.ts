@@ -43,7 +43,7 @@ import {
 	addControllerToVault,
 	removeControllerFromVault,
 	setRulesForVault,
-    createVault,
+	createVault,
 } from './controllers.js'
 
 /**

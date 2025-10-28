@@ -209,3 +209,38 @@ export async function removeControllerFromVault(
 		throw new Error('Database operation failed while removing controller')
 	}
 }
+
+/**
+ * Inserts a new vault row (insert-only). Returns the created row.
+ * Throws on conflict (unique violation 23505) or other DB errors.
+ *
+ * @param vaultId - The numeric ID of the vault.
+ * @param controller - Initial controller address.
+ * @param rules - Optional rules string or null.
+ */
+export async function createVaultRow(
+    vaultId: number,
+    controller: string,
+    rules: string | null
+): Promise<{ vault: string; controllers: string[]; rules: string | null }> {
+    try {
+        const result = await pool.query(
+            `INSERT INTO vaults (vault, controllers, rules)
+             VALUES ($1, ARRAY[LOWER($2)], $3)
+             RETURNING vault, controllers, rules`,
+            [String(vaultId), controller, rules]
+        )
+        const row = result.rows[0] as {
+            vault: string
+            controllers: string[]
+            rules: string | null
+        }
+        logger.info(
+            `Created vault row ${row.vault} with controller ${controller.toLowerCase()}`
+        )
+        return row
+    } catch (error) {
+        logger.error(`Failed to create vault row ${vaultId}:`, error)
+        throw error
+    }
+}
