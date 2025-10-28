@@ -50,7 +50,7 @@ import {
  * Route mount configuration
  *
  * Single source of truth for all route mounts. Used by:
- * - index.ts to mount routes on the Express app
+ * - app.ts to mount routes on the Express app
  * - logger.ts to display available endpoints
  *
  * Each router is defined inline and configured with its routes.
