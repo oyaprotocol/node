@@ -36,6 +36,10 @@ const { json } = bppkg
 export function createApp(): express.Application {
 	const app = express()
 
+	// Trust proxy to get real IP from X-Forwarded-For header
+	// Required for rate limiting by IP in production and testing
+	app.set('trust proxy', true)
+
 	// Parse JSON request bodies
 	app.use(json())
 
