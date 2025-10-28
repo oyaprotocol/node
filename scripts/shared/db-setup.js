@@ -74,6 +74,19 @@ CREATE TABLE IF NOT EXISTS vaults (
   rules TEXT,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Create the deposits table (tracks on-chain deposits to VaultTracker)
+CREATE TABLE IF NOT EXISTS deposits (
+  id SERIAL PRIMARY KEY,
+  tx_hash TEXT NOT NULL,
+  transfer_uid TEXT NOT NULL UNIQUE,
+  chain_id INTEGER NOT NULL,
+  depositor TEXT NOT NULL,
+  token TEXT NOT NULL,
+  amount NUMERIC(78, 0) NOT NULL,
+  credited_vault TEXT,
+  assigned_at TIMESTAMPTZ
+);
 `
 
 /**
@@ -90,12 +103,19 @@ CREATE INDEX IF NOT EXISTS idx_bundles_ipfs_cid ON bundles(ipfs_cid);
 
 -- Create GIN index on vaults controllers array for efficient lookups
 CREATE INDEX IF NOT EXISTS idx_vaults_controllers ON vaults USING GIN (controllers);
+
+-- Create indexes for deposits table
+CREATE INDEX IF NOT EXISTS idx_deposits_tx_hash ON deposits(tx_hash);
+CREATE INDEX IF NOT EXISTS idx_deposits_depositor ON deposits(depositor, chain_id);
+CREATE INDEX IF NOT EXISTS idx_deposits_token ON deposits(token);
+CREATE INDEX IF NOT EXISTS idx_deposits_vault ON deposits(credited_vault);
 `
 
 /**
  * SQL statements for dropping tables
  */
 export const dropTablesSql = `
+DROP TABLE IF EXISTS deposits CASCADE;
 DROP TABLE IF EXISTS bundles CASCADE;
 DROP TABLE IF EXISTS cids CASCADE;
 DROP TABLE IF EXISTS balances CASCADE;
@@ -171,7 +191,7 @@ export async function setupDatabase(options) {
 			SELECT table_name
 			FROM information_schema.tables
 			WHERE table_schema = 'public'
-			AND table_name IN ('bundles', 'cids', 'balances', 'nonces', 'proposers', 'vaults')
+			AND table_name IN ('bundles', 'cids', 'balances', 'nonces', 'proposers', 'vaults', 'deposits')
 			ORDER BY table_name
 		`)
 
