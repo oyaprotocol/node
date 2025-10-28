@@ -32,9 +32,9 @@ import { getEnvConfig } from './utils/env.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { resolveIntentionENS } from './utils/ensResolver.js'
 import {
-    getControllersForVault,
-    getVaultsForController,
-    createVaultRow,
+	getControllersForVault,
+	getVaultsForController,
+	createVaultRow,
 } from './utils/vaults.js'
 import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
 import {
@@ -832,19 +832,19 @@ async function handleIntention(
 
 			logger.info(`On-chain vault created with ID: ${newVaultId}`)
 
-            // 3. Persist the new vault-to-controller mapping to the database (insert-only via shared util).
-            try {
-                await createVaultRow(newVaultId, validatedController, null)
-            } catch (dbErr) {
-                const e = dbErr as Error & { code?: string }
-                if (e.code === '23505') {
-                    logger.warn(
-                        `Vault ${newVaultId} already exists in DB (duplicate insert avoided)`
-                    )
-                } else {
-                    throw dbErr
-                }
-            }
+			// 3. Persist the new vault-to-controller mapping to the database (insert-only via shared util).
+			try {
+				await createVaultRow(newVaultId, validatedController, null)
+			} catch (dbErr) {
+				const e = dbErr as Error & { code?: string }
+				if (e.code === '23505') {
+					logger.warn(
+						`Vault ${newVaultId} already exists in DB (duplicate insert avoided)`
+					)
+				} else {
+					throw dbErr
+				}
+			}
 
 			// 4. After the vault is created and its controller is mapped,
 			// submit an intention to seed it with initial balances.
@@ -1100,8 +1100,8 @@ export async function initializeProposer() {
 
 	logger.info('Initializing proposer module...')
 
-    // Note: We no longer seed the proposer's vault mapping here.
-    // The DB is updated based on on-chain VaultCreated events.
+	// Note: We no longer seed the proposer's vault mapping here.
+	// The DB is updated based on on-chain VaultCreated events.
 
 	// Initialize wallet and contract
 	await initializeWalletAndContract()

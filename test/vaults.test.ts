@@ -87,34 +87,39 @@ if (shouldRunDbTests) {
 }
 
 maybeDescribe('Vaults table behaviors', () => {
-	test('add controller to new vault (UPSERT + dedupe)', async () => {
-		const res = await pool.query(
-			`INSERT INTO vaults (vault, controllers)
- 			 VALUES ($1, ARRAY[LOWER($2)])
- 			 ON CONFLICT (vault)
- 			 DO UPDATE SET controllers = (
- 			   SELECT ARRAY(SELECT DISTINCT c FROM UNNEST(vaults.controllers || EXCLUDED.controllers) AS c)
- 			 )
- 			 RETURNING controllers`,
-			[String(TEST_VAULT_1), TEST_ADDR_1]
-		)
+    test('add controller to existing vault (update-only + dedupe)', async () => {
+        // Seed initial row
+        await pool.query(
+            `INSERT INTO vaults (vault, controllers) VALUES ($1, ARRAY[LOWER($2)])`,
+            [String(TEST_VAULT_1), TEST_ADDR_1]
+        )
 
-		expect(res.rows[0].controllers).toEqual([TEST_ADDR_1.toLowerCase()])
+        // Add the same controller again (should dedupe)
+        const res = await pool.query(
+            `UPDATE vaults
+             SET controllers = (
+               SELECT ARRAY(SELECT DISTINCT c FROM UNNEST(controllers || ARRAY[LOWER($2)]) AS c)
+             )
+             WHERE vault = $1
+             RETURNING controllers`,
+            [String(TEST_VAULT_1), TEST_ADDR_1]
+        )
+        expect(res.rows[0].controllers).toEqual([TEST_ADDR_1.toLowerCase()])
 
-		// Idempotent add (same controller)
-		const res2 = await pool.query(
-			`INSERT INTO vaults (vault, controllers)
- 			 VALUES ($1, ARRAY[LOWER($2)])
- 			 ON CONFLICT (vault)
- 			 DO UPDATE SET controllers = (
- 			   SELECT ARRAY(SELECT DISTINCT c FROM UNNEST(vaults.controllers || EXCLUDED.controllers) AS c)
- 			 )
- 			 RETURNING controllers`,
-			[String(TEST_VAULT_1), TEST_ADDR_1]
-		)
-
-		expect(res2.rows[0].controllers).toEqual([TEST_ADDR_1.toLowerCase()])
-	})
+        // Add a second controller
+        const res2 = await pool.query(
+            `UPDATE vaults
+             SET controllers = (
+               SELECT ARRAY(SELECT DISTINCT c FROM UNNEST(controllers || ARRAY[LOWER($2)]) AS c)
+             )
+             WHERE vault = $1
+             RETURNING controllers`,
+            [String(TEST_VAULT_1), TEST_ADDR_2]
+        )
+        expect(new Set(res2.rows[0].controllers)).toEqual(
+            new Set([TEST_ADDR_1.toLowerCase(), TEST_ADDR_2.toLowerCase()])
+        )
+    })
 
 	test('remove controller from existing vault', async () => {
 		await pool.query(
@@ -140,18 +145,16 @@ maybeDescribe('Vaults table behaviors', () => {
 		expect(res2.rows[0].controllers).toEqual([])
 	})
 
-	test('get vault IDs by controller (ANY on controllers array)', async () => {
-		// Seed two vaults controlled by TEST_ADDR_1 (split into two separate statements)
-		await pool.query(
-			`INSERT INTO vaults (vault, controllers) VALUES ($1, ARRAY[LOWER($2)])
-			 ON CONFLICT (vault) DO UPDATE SET controllers = EXCLUDED.controllers`,
-			[String(TEST_VAULT_1), TEST_ADDR_1]
-		)
-		await pool.query(
-			`INSERT INTO vaults (vault, controllers) VALUES ($1, ARRAY[LOWER($2)])
-			 ON CONFLICT (vault) DO UPDATE SET controllers = EXCLUDED.controllers`,
-			[String(TEST_VAULT_2), TEST_ADDR_1]
-		)
+    test('get vault IDs by controller (ANY on controllers array)', async () => {
+        // Seed two vaults controlled by TEST_ADDR_1
+        await pool.query(
+            `INSERT INTO vaults (vault, controllers) VALUES ($1, ARRAY[LOWER($2)])`,
+            [String(TEST_VAULT_1), TEST_ADDR_1]
+        )
+        await pool.query(
+            `INSERT INTO vaults (vault, controllers) VALUES ($1, ARRAY[LOWER($2)])`,
+            [String(TEST_VAULT_2), TEST_ADDR_1]
+        )
 
 		const res = await pool.query(
 			'SELECT vault FROM vaults WHERE $1 = ANY(controllers) ORDER BY vault',
@@ -164,36 +167,56 @@ maybeDescribe('Vaults table behaviors', () => {
 		])
 	})
 
-	test('set and get rules for a vault (UPSERT rules)', async () => {
-		// Set rules (insert new row)
-		const setRes = await pool.query(
-			`INSERT INTO vaults (vault, controllers, rules)
- 			 VALUES ($1, ARRAY[]::TEXT[], $2)
- 			 ON CONFLICT (vault)
- 			 DO UPDATE SET rules = EXCLUDED.rules
- 			 RETURNING rules`,
-			[String(TEST_VAULT_1), 'ALLOW_ALL']
-		)
-		expect(setRes.rows[0].rules).toBe('ALLOW_ALL')
+    test('set and get rules for a vault (update-only)', async () => {
+        // Seed row w/ empty controllers and null rules
+        await pool.query(
+            `INSERT INTO vaults (vault, controllers, rules) VALUES ($1, ARRAY[]::TEXT[], NULL)`,
+            [String(TEST_VAULT_1)]
+        )
 
-		// Get rules
-		const getRes = await pool.query(
-			'SELECT rules FROM vaults WHERE vault = $1',
-			[String(TEST_VAULT_1)]
-		)
-		expect(getRes.rows[0].rules).toBe('ALLOW_ALL')
+        // Set rules via UPDATE
+        const setRes = await pool.query(
+            `UPDATE vaults SET rules = $2 WHERE vault = $1 RETURNING rules`,
+            [String(TEST_VAULT_1), 'ALLOW_ALL']
+        )
+        expect(setRes.rows[0].rules).toBe('ALLOW_ALL')
 
-		// Clear rules (set to NULL)
-		const clearRes = await pool.query(
-			`INSERT INTO vaults (vault, controllers, rules)
- 			 VALUES ($1, ARRAY[]::TEXT[], $2)
- 			 ON CONFLICT (vault)
- 			 DO UPDATE SET rules = EXCLUDED.rules
- 			 RETURNING rules`,
-			[String(TEST_VAULT_1), null]
-		)
-		expect(clearRes.rows[0].rules).toBeNull()
-	})
+        // Get rules
+        const getRes = await pool.query(
+            'SELECT rules FROM vaults WHERE vault = $1',
+            [String(TEST_VAULT_1)]
+        )
+        expect(getRes.rows[0].rules).toBe('ALLOW_ALL')
+
+        // Clear rules (set to NULL)
+        const clearRes = await pool.query(
+            `UPDATE vaults SET rules = NULL WHERE vault = $1 RETURNING rules`,
+            [String(TEST_VAULT_1)]
+        )
+        expect(clearRes.rows[0].rules).toBeNull()
+    })
+
+    test('create vault insert-only and duplicate conflict', async () => {
+        // First insert succeeds
+        const first = await pool.query(
+            `INSERT INTO vaults (vault, controllers, rules) VALUES ($1, ARRAY[LOWER($2)], $3) RETURNING vault`,
+            [String(TEST_VAULT_2), TEST_ADDR_1, null]
+        )
+        expect(first.rows[0].vault).toBe(String(TEST_VAULT_2))
+
+        // Duplicate insert should raise unique violation
+        let conflict = false
+        try {
+            await pool.query(
+                `INSERT INTO vaults (vault, controllers, rules) VALUES ($1, ARRAY[LOWER($2)], $3)`,
+                [String(TEST_VAULT_2), TEST_ADDR_1, null]
+            )
+        } catch (err) {
+            const e = err as Error & { code?: string }
+            if (e.code === '23505') conflict = true
+        }
+        expect(conflict).toBe(true)
+    })
 
 	test('controllers are stored lowercased', async () => {
 		await pool.query(

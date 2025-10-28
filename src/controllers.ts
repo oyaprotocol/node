@@ -29,12 +29,12 @@ import {
 import { getEnvConfig } from './utils/env.js'
 import { handleIntention } from './proposer.js'
 import {
-    getVaultsForController as getVaultsForControllerUtil,
-    getRulesForVault as getRulesForVaultUtil,
-    setRulesForVault as setRulesForVaultUtil,
-    addControllerToVault as addControllerToVaultUtil,
-    removeControllerFromVault as removeControllerFromVaultUtil,
-    createVaultRow,
+	getVaultsForController as getVaultsForControllerUtil,
+	getRulesForVault as getRulesForVaultUtil,
+	setRulesForVault as setRulesForVaultUtil,
+	addControllerToVault as addControllerToVaultUtil,
+	removeControllerFromVault as removeControllerFromVaultUtil,
+	createVaultRow,
 } from './utils/vaults.js'
 
 /** Logger instance for controllers module */
@@ -818,7 +818,7 @@ export const createVault = async (req: Request, res: Response) => {
 				.status(400)
 				.json({ error: 'Invalid rules: must be string or null' })
 		}
-        const row = await createVaultRow(vaultId, controller, rules)
+		const row = await createVaultRow(vaultId, controller, rules)
 		return res.status(201).json({
 			vault: row.vault,
 			controllers: row.controllers,
