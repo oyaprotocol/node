@@ -48,6 +48,7 @@ import {
 	initializeFilecoinPin,
 } from './utils/filecoinPin.js'
 import { sendWebhook } from './utils/webhook.js'
+import { insertDepositIfMissing } from './utils/deposits.js'
 import type {
 	Intention,
 	BundleData,
@@ -122,27 +123,168 @@ let s: ReturnType<typeof strings>
 
 // Initialization flag
 let isInitialized = false
+
+// ~7 days at ~12s blocks
+const APPROX_7D_BLOCKS = 50400
 /**
  * Validates that a vault ID exists on-chain by checking it is within range
  * [1, nextVaultId - 1]. Throws if invalid or out of range.
  */
 export async function validateVaultIdOnChain(vaultId: number): Promise<void> {
-  // Basic sanity
-  if (!Number.isInteger(vaultId) || vaultId < 1) {
-    throw new Error('Invalid vault ID')
+	// Basic sanity
+	if (!Number.isInteger(vaultId) || vaultId < 1) {
+		throw new Error('Invalid vault ID')
+	}
+	// Ensure contracts are initialized
+	if (!vaultTrackerContract) {
+		throw new Error('VaultTracker contract not initialized')
+	}
+	const nextId = await vaultTrackerContract.nextVaultId()
+	const nextIdNumber = Number(nextId)
+	if (!Number.isFinite(nextIdNumber)) {
+		throw new Error('Could not determine nextVaultId from chain')
+	}
+	if (vaultId >= nextIdNumber) {
+		throw new Error('Vault ID does not exist on-chain')
+	}
+}
+
+/**
+ * Computes block range hex strings for Alchemy getAssetTransfers requests,
+ * defaulting to a ~7 day lookback if not provided.
+ */
+async function computeBlockRange(
+  fromBlockHex?: string,
+  toBlockHex?: string
+): Promise<{ fromBlockHex: string; toBlockHex: string }> {
+  const provider = (await sepoliaAlchemy.config.getProvider()) as unknown as {
+    getBlockNumber: () => Promise<number>
   }
-  // Ensure contracts are initialized
-  if (!vaultTrackerContract) {
-    throw new Error('VaultTracker contract not initialized')
+  const latest = await provider.getBlockNumber()
+  const resolvedTo = toBlockHex ?? '0x' + latest.toString(16)
+  const fromBlock = Math.max(0, latest - APPROX_7D_BLOCKS)
+  const resolvedFrom = fromBlockHex ?? '0x' + fromBlock.toString(16)
+  return { fromBlockHex: resolvedFrom, toBlockHex: resolvedTo }
+}
+
+/**
+ * Generic discovery for deposits into VaultTracker using Alchemy's decoded
+ * asset transfers. Supports ERC-20 and ETH (internal/external) categories.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function discoverAndIngestDeposits(params: {
+  controller: string
+  chainId: number
+  categories: Array<'erc20' | 'internal' | 'external'>
+  token?: string
+  fromBlockHex?: string
+  toBlockHex?: string
+}): Promise<void> {
+  const controller = validateAddress(params.controller, 'controller')
+
+  if (!isInitialized) {
+    throw new Error('Proposer not initialized')
   }
-  const nextId = await vaultTrackerContract.nextVaultId()
-  const nextIdNumber = Number(nextId)
-  if (!Number.isFinite(nextIdNumber)) {
-    throw new Error('Could not determine nextVaultId from chain')
+  if (params.chainId !== 11155111) {
+    throw new Error('Unsupported chain_id for discovery')
   }
-  if (vaultId >= nextIdNumber) {
-    throw new Error('Vault ID does not exist on-chain')
-  }
+
+  const { fromBlockHex, toBlockHex } = await computeBlockRange(
+    params.fromBlockHex,
+    params.toBlockHex
+  )
+
+  let pageKey: string | undefined = undefined
+  do {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const req: any = {
+      fromBlock: fromBlockHex,
+      toBlock: toBlockHex,
+      fromAddress: controller,
+      toAddress: VAULT_TRACKER_ADDRESS,
+      category: params.categories,
+      withMetadata: true,
+      excludeZeroValue: true,
+    }
+    if (params.token) {
+      req.contractAddresses = [validateAddress(params.token, 'token')]
+    }
+    if (pageKey) req.pageKey = pageKey
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res: any = await sepoliaAlchemy.core.getAssetTransfers(req)
+    const transfers = res?.transfers ?? []
+    for (const t of transfers) {
+      const txHash: string = t.hash
+      const raw = t.rawContract || {}
+      const rawAddr: string | undefined = raw.address
+      const rawValueHex: string | undefined = raw.value
+      if (!rawValueHex) continue
+
+      // Determine token address: ERC-20 uses raw.address; ETH uses zero address
+      const tokenAddr = rawAddr ?? '0x0000000000000000000000000000000000000000'
+
+      const uniqueId: string | undefined = (t as { uniqueId?: string }).uniqueId
+      const transferUid = uniqueId ?? `${txHash}:${tokenAddr}:${rawValueHex}`
+      const amountWei = BigInt(rawValueHex).toString()
+
+      await insertDepositIfMissing({
+        tx_hash: txHash,
+        transfer_uid: transferUid,
+        chain_id: params.chainId,
+        depositor: t.from,
+        token: tokenAddr,
+        amount: amountWei,
+      })
+    }
+    pageKey = res?.pageKey
+  } while (pageKey)
+}
+
+/**
+ * Discovers ERC-20 deposits made by `controller` into the VaultTracker and
+ * ingests them into the local `deposits` table. Uses Alchemy's decoded
+ * getAssetTransfers API for reliability and simplicity.
+ *
+ * If fromBlock/toBlock are not provided, computes a default lookback window
+ * of ~7 days by subtracting ~50,400 blocks from the latest block.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function discoverAndIngestErc20Deposits(params: {
+  controller: string
+  token: string
+  chainId: number
+  fromBlockHex?: string
+  toBlockHex?: string
+}): Promise<void> {
+  await discoverAndIngestDeposits({
+    controller: params.controller,
+    chainId: params.chainId,
+    categories: ['erc20'],
+    token: params.token,
+    fromBlockHex: params.fromBlockHex,
+    toBlockHex: params.toBlockHex,
+  })
+}
+
+/**
+ * Discovers ETH (internal) deposits made by `controller` into the VaultTracker
+ * and ingests them into the local `deposits` table via idempotent inserts.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function discoverAndIngestEthDeposits(params: {
+  controller: string
+  chainId: number
+  fromBlockHex?: string
+  toBlockHex?: string
+}): Promise<void> {
+  await discoverAndIngestDeposits({
+    controller: params.controller,
+    chainId: params.chainId,
+    categories: ['internal', 'external'],
+    fromBlockHex: params.fromBlockHex,
+    toBlockHex: params.toBlockHex,
+  })
 }
 
 /**
