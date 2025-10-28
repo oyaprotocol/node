@@ -145,7 +145,7 @@ async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
  * Connects the wallet for transaction signing.
  */
 async function buildVaultTrackerContract(): Promise<VaultTrackerContract> {
-	const abiPath = path.join(__dirname, '..', 'dist', 'abi', 'VaultTracker.json')
+    const abiPath = path.join(__dirname, 'abi', 'VaultTracker.json')
 	const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'))
 	const provider =
 		(await sepoliaAlchemy.config.getProvider()) as unknown as ethers.Provider
