@@ -709,7 +709,7 @@ export const getRulesByVaultId = async (req: Request, res: Response) => {
 
 /**
  * POST /vault/:vaultId/controllers/add
- * Adds a controller to a vault (creates vault row if missing). Returns \{ vault, controllers \}
+ * Adds a controller to an existing vault. Returns \{ vault, controllers \}
  */
 export const addControllerToVault = async (req: Request, res: Response) => {
 	try {
@@ -722,10 +722,13 @@ export const addControllerToVault = async (req: Request, res: Response) => {
 			[String(vaultId)]
 		)
 		const existed = existsResult.rows.length > 0
+		if (!existed) {
+			return res.status(404).json({ error: 'Vault not found' })
+		}
 
 		const controllers = await addControllerToVaultUtil(vaultId, controller)
 		const payload = { vault: String(vaultId), controllers }
-		return res.status(existed ? 200 : 201).json(payload)
+		return res.status(200).json(payload)
 	} catch (error) {
 		const err = handleValidationError(error)
 		if (err.status === 400) return res.status(400).json(err)
@@ -767,7 +770,7 @@ export const removeControllerFromVault = async (
 
 /**
  * POST /vault/:vaultId/rules
- * Sets rules for a vault (creates row if missing). Returns \{ vault, rules \}
+ * Sets rules for an existing vault. Returns \{ vault, rules \}
  */
 export const setRulesForVault = async (req: Request, res: Response) => {
 	try {
@@ -785,15 +788,60 @@ export const setRulesForVault = async (req: Request, res: Response) => {
 			[String(vaultId)]
 		)
 		const existed = existsResult.rows.length > 0
+		if (!existed) {
+			return res.status(404).json({ error: 'Vault not found' })
+		}
 
 		const persisted = await setRulesForVaultUtil(vaultId, rules ?? null)
-		return res
-			.status(existed ? 200 : 201)
-			.json({ vault: String(vaultId), rules: persisted })
+		return res.status(200).json({ vault: String(vaultId), rules: persisted })
 	} catch (error) {
 		const err = handleValidationError(error)
 		if (err.status === 400) return res.status(400).json(err)
 		logger.error('Error updating rules for vault:', error)
+		return res.status(500).json({ error: 'Internal Server Error' })
+	}
+}
+
+/**
+ * POST /vault/:vaultId
+ * Creates a new vault row with initial controller and optional rules.
+ * Returns \{ vault, controllers, rules \}. 409 if vault already exists.
+ */
+export const createVault = async (req: Request, res: Response) => {
+	try {
+		const vaultId = validateId(Number(req.params.vaultId), 'vaultId')
+		const controller = validateAddress(req.body.controller, 'controller')
+		const rules = (req.body?.rules ?? null) as string | null
+		if (rules !== null && typeof rules !== 'string') {
+			return res
+				.status(400)
+				.json({ error: 'Invalid rules: must be string or null' })
+		}
+        // Attempt insert
+        const result = await pool.query(
+            `INSERT INTO vaults (vault, controllers, rules)
+             VALUES ($1, ARRAY[LOWER($2)], $3)
+             RETURNING vault, controllers, rules`,
+            [String(vaultId), controller, rules]
+        )
+
+        type VaultRow = {
+            vault: string
+            controllers: string[]
+            rules: string | null
+        }
+        const row = result.rows[0] as VaultRow
+        return res
+            .status(201)
+            .json({ vault: row.vault, controllers: row.controllers, rules: row.rules })
+	} catch (error) {
+        const pgErr = error as Error & { code?: string }
+        if (pgErr.code === '23505') {
+            return res.status(409).json({ error: 'Vault already exists' })
+        }
+        const err = handleValidationError(error)
+        if (err.status === 400) return res.status(400).json(err)
+		logger.error('Error creating vault:', error)
 		return res.status(500).json({ error: 'Internal Server Error' })
 	}
 }
