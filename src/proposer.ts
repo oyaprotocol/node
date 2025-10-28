@@ -32,9 +32,9 @@ import { getEnvConfig } from './utils/env.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { resolveIntentionENS } from './utils/ensResolver.js'
 import {
-	getControllersForVault,
-	getVaultsForController,
-	upsertVaultControllers,
+    getControllersForVault,
+    getVaultsForController,
+    updateVaultControllers,
 } from './utils/vaults.js'
 import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
 import {
@@ -834,7 +834,7 @@ async function handleIntention(
 
 			// 3. Persist the new vault-to-controller mapping to the database.
 			// This is the canonical source of truth for vault ownership.
-			await upsertVaultControllers(newVaultId, [validatedController])
+            await updateVaultControllers(newVaultId, [validatedController])
 
 			// 4. After the vault is created and its controller is mapped,
 			// submit an intention to seed it with initial balances.
@@ -1127,7 +1127,7 @@ export function getSepoliaAlchemy() {
  */
 async function seedProposerVaultMapping() {
 	try {
-		await upsertVaultControllers(PROPOSER_VAULT_ID.value, [PROPOSER_ADDRESS])
+        await updateVaultControllers(PROPOSER_VAULT_ID.value, [PROPOSER_ADDRESS])
 		logger.info(
 			`Proposer vault mapping seeded: Vault ${PROPOSER_VAULT_ID.value} -> Controller ${PROPOSER_ADDRESS}`
 		)

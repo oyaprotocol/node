@@ -16,29 +16,32 @@ import { createLogger } from './logger.js'
 const logger = createLogger('Vaults')
 
 /**
- * Inserts a new vault row with the provided controllers.
- * Insert-only: errors if the vault already exists.
+ * Updates the controllers for an existing vault (update-only).
+ * Replaces the controllers array with the provided, lowercased set.
+ * Errors if the vault row does not exist.
  *
  * @param vaultId - The numeric ID of the vault.
  * @param controllers - An array of controller Ethereum addresses.
  */
-export async function upsertVaultControllers(
+export async function updateVaultControllers(
 	vaultId: number,
 	controllers: string[]
 ): Promise<void> {
 	const lowercasedControllers = controllers.map((c) => c.toLowerCase())
 	try {
-		await pool.query(
-			`INSERT INTO vaults (vault, controllers)
-		       VALUES ($1, $2)`,
+		const result = await pool.query(
+			`UPDATE vaults SET controllers = $2 WHERE vault = $1`,
 			[String(vaultId), lowercasedControllers]
 		)
+		if (result.rowCount === 0) {
+			throw new Error('Vault not found')
+		}
 		logger.info(
-			`Inserted controllers for new vault ${vaultId}: [${lowercasedControllers.join(', ')}]`
+			`Updated controllers for vault ${vaultId}: [${lowercasedControllers.join(', ')}]`
 		)
 	} catch (error) {
-		logger.error(`Failed to insert controllers for vault ${vaultId}:`, error)
-		throw new Error('Database operation failed during vault insert')
+		logger.error(`Failed to update controllers for vault ${vaultId}:`, error)
+		throw new Error('Database operation failed during vault controllers update')
 	}
 }
 
