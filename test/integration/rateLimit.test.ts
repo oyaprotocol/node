@@ -15,16 +15,24 @@ import {
 	ensureRateLimitSchema,
 	requestWithIP,
 } from '../helpers/rateLimitHelpers.js'
+import { getEnvConfig } from '../../src/utils/env.js'
 import type { Server } from 'http'
 
 describe('Rate Limiting Integration', () => {
 	let server: Server
 	let baseURL: string
+	let rateLimit: number
+	// let rateLimitWindow: number // Used in comment on line 225
 
 	beforeAll(async () => {
 		const testServer = await startTestServer()
 		server = testServer.server
 		baseURL = testServer.baseURL
+
+		// Get rate limit configuration from environment
+		const config = getEnvConfig()
+		rateLimit = config.RATE_LIMIT_PERMISSIVE
+		// rateLimitWindow = config.RATE_LIMIT_WINDOW_MS
 
 		// Ensure rate limit schema and tables exist (only once)
 		await ensureRateLimitSchema(pool)
@@ -53,12 +61,12 @@ describe('Rate Limiting Integration', () => {
 			const testIP = generateTestIP('test-under-limit-' + Date.now())
 			const url = `${baseURL}/health`
 
-			// Make 3 requests (well under permissive limit of 300/min)
-			let previousRemaining = 300
+			// Make 3 requests (well under permissive limit)
+			let previousRemaining = rateLimit
 			for (let i = 0; i < 3; i++) {
 				const response = await requestWithIP(url, testIP)
 				expect(response.status).toBe(200)
-				expect(response.headers.get('RateLimit-Limit')).toBe('300')
+				expect(response.headers.get('RateLimit-Limit')).toBe(String(rateLimit))
 
 				const remaining = parseInt(
 					response.headers.get('RateLimit-Remaining') || '0'
@@ -72,14 +80,13 @@ describe('Rate Limiting Integration', () => {
 			const testIP = generateTestIP('test-exceed-limit-' + Date.now())
 			const url = `${baseURL}/health`
 
-			// Permissive tier allows 300 requests per minute
-			// Make exactly 300 requests in parallel (much faster than sequential)
-			const requests = Array.from({ length: 300 }, () =>
+			// Make exactly rateLimit requests in parallel (much faster than sequential)
+			const requests = Array.from({ length: rateLimit }, () =>
 				requestWithIP(url, testIP)
 			)
 			await Promise.all(requests)
 
-			// 301st request should be rate limited
+			// (rateLimit + 1)st request should be rate limited
 			const blockedResponse = await requestWithIP(url, testIP)
 			expect(blockedResponse.status).toBe(429)
 
@@ -94,8 +101,8 @@ describe('Rate Limiting Integration', () => {
 			const ip2 = generateTestIP('test-ip-2-' + Date.now())
 			const url = `${baseURL}/health`
 
-			// Make 300 requests from IP1 in parallel to hit its limit
-			const ip1Requests = Array.from({ length: 300 }, () =>
+			// Make rateLimit requests from IP1 in parallel to hit its limit
+			const ip1Requests = Array.from({ length: rateLimit }, () =>
 				requestWithIP(url, ip1)
 			)
 			await Promise.all(ip1Requests)
@@ -116,15 +123,15 @@ describe('Rate Limiting Integration', () => {
 			const response = await requestWithIP(url, testIP)
 
 			// Check standard rate limit headers (RateLimit-*)
-			expect(response.headers.get('RateLimit-Limit')).toBe('300')
+			expect(response.headers.get('RateLimit-Limit')).toBe(String(rateLimit))
 			expect(response.headers.get('RateLimit-Remaining')).toBeDefined()
 			expect(response.headers.get('RateLimit-Reset')).toBeDefined()
 
-			// First request with unique IP should have exactly 299 remaining
+			// First request with unique IP should have exactly (rateLimit - 1) remaining
 			const remaining = parseInt(
 				response.headers.get('RateLimit-Remaining') || '0'
 			)
-			expect(remaining).toBe(299)
+			expect(remaining).toBe(rateLimit - 1)
 		})
 
 		it('should decrement remaining count with each request', async () => {
@@ -157,8 +164,8 @@ describe('Rate Limiting Integration', () => {
 			const ip1 = generateTestIP('token-test-ip-1-' + Date.now())
 			const ip2 = generateTestIP('token-test-ip-2-' + Date.now())
 
-			// Make 300 requests with token from IP1 in parallel
-			const tokenRequests = Array.from({ length: 300 }, () =>
+			// Make rateLimit requests with token from IP1 in parallel
+			const tokenRequests = Array.from({ length: rateLimit }, () =>
 				requestWithIP(url, ip1, {
 					headers: { Authorization: `Bearer ${token}` },
 				})
@@ -186,7 +193,7 @@ describe('Rate Limiting Integration', () => {
 			// Make requests without token
 			const response = await requestWithIP(url, testIP)
 			expect(response.status).toBe(200)
-			expect(response.headers.get('RateLimit-Limit')).toBe('300')
+			expect(response.headers.get('RateLimit-Limit')).toBe(String(rateLimit))
 		})
 	})
 
@@ -195,8 +202,8 @@ describe('Rate Limiting Integration', () => {
 			const testIP = generateTestIP('test-window-' + Date.now())
 			const url = `${baseURL}/health`
 
-			// Note: Default window is 60000ms (1 minute)
-			// Testing full window expiration would take too long
+			// Note: Window is configured via RATE_LIMIT_WINDOW_MS env var
+			// Testing full window expiration would take too long in CI
 			// Instead, we verify that rate limit tracking works within the window
 
 			// Make 5 requests
@@ -214,10 +221,9 @@ describe('Rate Limiting Integration', () => {
 				expect(responses[i]).toBeLessThan(responses[i - 1])
 			}
 
-			// NOTE: Full window expiration test is skipped because it takes 60+ seconds
-			// To test window reset in production:
-			// 1. Configure shorter RATE_LIMIT_WINDOW_MS for tests
-			// 2. Or run manual window expiration tests separately
+			// NOTE: Full window expiration test is skipped because it would take
+			// ${RATE_LIMIT_WINDOW_MS}ms (${RATE_LIMIT_WINDOW_MS / 1000}s) to complete
+			// To test window reset: Configure shorter RATE_LIMIT_WINDOW_MS for tests
 		})
 	})
 
