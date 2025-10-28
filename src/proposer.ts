@@ -32,9 +32,9 @@ import { getEnvConfig } from './utils/env.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { resolveIntentionENS } from './utils/ensResolver.js'
 import {
-    getControllersForVault,
-    getVaultsForController,
-    createVaultRow,
+	getControllersForVault,
+	getVaultsForController,
+	createVaultRow,
 } from './utils/vaults.js'
 import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
 import {
@@ -1091,7 +1091,7 @@ export async function initializeProposer() {
 
 	logger.info('Initializing proposer module...')
 
-    // Note: Vault-controller mapping is created from on-chain VaultCreated events
+	// Note: Vault-controller mapping is created from on-chain VaultCreated events
 
 	// Initialize wallet and contract
 	await initializeWalletAndContract()
