@@ -94,19 +94,19 @@ export async function getVaultsForController(
  * Returns undefined if the vault row does not exist, or null if rules is explicitly NULL.
  */
 export async function getRulesForVault(
-    vaultId: number
+	vaultId: number
 ): Promise<string | null | undefined> {
-    try {
-        const result = await pool.query(
-            'SELECT rules FROM vaults WHERE vault = $1',
-            [String(vaultId)]
-        )
-        if (result.rows.length === 0) return undefined
-        return result.rows[0].rules as string | null
-    } catch (error) {
-        logger.error(`Failed to get rules for vault ${vaultId}:`, error)
-        throw new Error('Database operation failed while fetching rules')
-    }
+	try {
+		const result = await pool.query(
+			'SELECT rules FROM vaults WHERE vault = $1',
+			[String(vaultId)]
+		)
+		if (result.rows.length === 0) return undefined
+		return result.rows[0].rules as string | null
+	} catch (error) {
+		logger.error(`Failed to get rules for vault ${vaultId}:`, error)
+		throw new Error('Database operation failed while fetching rules')
+	}
 }
 
 /**
@@ -114,22 +114,22 @@ export async function getRulesForVault(
  * Throws 'Vault not found' if the vault row does not exist.
  */
 export async function setRulesForVault(
-    vaultId: number,
-    rules: string | null
+	vaultId: number,
+	rules: string | null
 ): Promise<string | null> {
-    try {
-        const result = await pool.query(
-            'UPDATE vaults SET rules = $2 WHERE vault = $1 RETURNING rules',
-            [String(vaultId), rules]
-        )
-        if (result.rows.length === 0) {
-            throw new Error('Vault not found')
-        }
-        return result.rows[0].rules as string | null
-    } catch (error) {
-        logger.error(`Failed to set rules for vault ${vaultId}:`, error)
-        throw new Error('Database operation failed while setting rules')
-    }
+	try {
+		const result = await pool.query(
+			'UPDATE vaults SET rules = $2 WHERE vault = $1 RETURNING rules',
+			[String(vaultId), rules]
+		)
+		if (result.rows.length === 0) {
+			throw new Error('Vault not found')
+		}
+		return result.rows[0].rules as string | null
+	} catch (error) {
+		logger.error(`Failed to set rules for vault ${vaultId}:`, error)
+		throw new Error('Database operation failed while setting rules')
+	}
 }
 
 /**
@@ -137,31 +137,31 @@ export async function setRulesForVault(
  * Throws 'Vault not found' if the row does not exist.
  */
 export async function addControllerToVault(
-    vaultId: number,
-    controller: string
+	vaultId: number,
+	controller: string
 ): Promise<string[]> {
-    const lower = controller.toLowerCase()
-    try {
-        const result = await pool.query(
-            `UPDATE vaults
+	const lower = controller.toLowerCase()
+	try {
+		const result = await pool.query(
+			`UPDATE vaults
              SET controllers = (
                SELECT ARRAY(SELECT DISTINCT c FROM UNNEST(controllers || ARRAY[LOWER($2)]) AS c)
              )
              WHERE vault = $1
              RETURNING controllers`,
-            [String(vaultId), lower]
-        )
-        if (result.rows.length === 0) {
-            throw new Error('Vault not found')
-        }
-        return (result.rows[0].controllers as string[]).map((c) => c.toLowerCase())
-    } catch (error) {
-        logger.error(
-            `Failed to add controller ${controller} to vault ${vaultId}:`,
-            error
-        )
-        throw new Error('Database operation failed while adding controller')
-    }
+			[String(vaultId), lower]
+		)
+		if (result.rows.length === 0) {
+			throw new Error('Vault not found')
+		}
+		return (result.rows[0].controllers as string[]).map((c) => c.toLowerCase())
+	} catch (error) {
+		logger.error(
+			`Failed to add controller ${controller} to vault ${vaultId}:`,
+			error
+		)
+		throw new Error('Database operation failed while adding controller')
+	}
 }
 
 /**
@@ -169,29 +169,29 @@ export async function addControllerToVault(
  * Throws 'Vault not found' if the row does not exist.
  */
 export async function removeControllerFromVault(
-    vaultId: number,
-    controller: string
+	vaultId: number,
+	controller: string
 ): Promise<string[]> {
-    const lower = controller.toLowerCase()
-    try {
-        const result = await pool.query(
-            `UPDATE vaults
+	const lower = controller.toLowerCase()
+	try {
+		const result = await pool.query(
+			`UPDATE vaults
              SET controllers = array_remove(controllers, LOWER($2))
              WHERE vault = $1
              RETURNING controllers`,
-            [String(vaultId), lower]
-        )
-        if (result.rows.length === 0) {
-            throw new Error('Vault not found')
-        }
-        return (result.rows[0].controllers as string[]).map((c) => c.toLowerCase())
-    } catch (error) {
-        logger.error(
-            `Failed to remove controller ${controller} from vault ${vaultId}:`,
-            error
-        )
-        throw new Error('Database operation failed while removing controller')
-    }
+			[String(vaultId), lower]
+		)
+		if (result.rows.length === 0) {
+			throw new Error('Vault not found')
+		}
+		return (result.rows[0].controllers as string[]).map((c) => c.toLowerCase())
+	} catch (error) {
+		logger.error(
+			`Failed to remove controller ${controller} from vault ${vaultId}:`,
+			error
+		)
+		throw new Error('Database operation failed while removing controller')
+	}
 }
 
 /**
@@ -199,36 +199,35 @@ export async function removeControllerFromVault(
  * Performs an existence pre-check before inserting.
  */
 export async function createVaultRow(
-    vaultId: number,
-    controller: string,
-    rules: string | null
+	vaultId: number,
+	controller: string,
+	rules: string | null
 ): Promise<{ vault: string; controllers: string[]; rules: string | null }> {
-    try {
-        const exists = await pool.query(
-            'SELECT 1 FROM vaults WHERE vault = $1',
-            [String(vaultId)]
-        )
-        if (exists.rows.length > 0) {
-            throw new Error('Vault already exists')
-        }
+	try {
+		const exists = await pool.query('SELECT 1 FROM vaults WHERE vault = $1', [
+			String(vaultId),
+		])
+		if (exists.rows.length > 0) {
+			throw new Error('Vault already exists')
+		}
 
-        const result = await pool.query(
-            `INSERT INTO vaults (vault, controllers, rules)
+		const result = await pool.query(
+			`INSERT INTO vaults (vault, controllers, rules)
              VALUES ($1, ARRAY[LOWER($2)], $3)
              RETURNING vault, controllers, rules`,
-            [String(vaultId), controller, rules]
-        )
-        const row = result.rows[0] as {
-            vault: string
-            controllers: string[]
-            rules: string | null
-        }
-        logger.info(
-            `Created vault row ${row.vault} with controller ${controller.toLowerCase()}`
-        )
-        return row
-    } catch (error) {
-        logger.error(`Failed to create vault row ${vaultId}:`, error)
-        throw error
-    }
+			[String(vaultId), controller, rules]
+		)
+		const row = result.rows[0] as {
+			vault: string
+			controllers: string[]
+			rules: string | null
+		}
+		logger.info(
+			`Created vault row ${row.vault} with controller ${controller.toLowerCase()}`
+		)
+		return row
+	} catch (error) {
+		logger.error(`Failed to create vault row ${vaultId}:`, error)
+		throw error
+	}
 }
