@@ -154,91 +154,156 @@ export async function validateVaultIdOnChain(vaultId: number): Promise<void> {
  * defaulting to a ~7 day lookback if not provided.
  */
 async function computeBlockRange(
-  fromBlockHex?: string,
-  toBlockHex?: string
+	fromBlockHex?: string,
+	toBlockHex?: string
 ): Promise<{ fromBlockHex: string; toBlockHex: string }> {
-  const provider = (await sepoliaAlchemy.config.getProvider()) as unknown as {
-    getBlockNumber: () => Promise<number>
-  }
-  const latest = await provider.getBlockNumber()
-  const resolvedTo = toBlockHex ?? '0x' + latest.toString(16)
-  const fromBlock = Math.max(0, latest - APPROX_7D_BLOCKS)
-  const resolvedFrom = fromBlockHex ?? '0x' + fromBlock.toString(16)
-  return { fromBlockHex: resolvedFrom, toBlockHex: resolvedTo }
+	const provider = (await sepoliaAlchemy.config.getProvider()) as unknown as {
+		getBlockNumber: () => Promise<number>
+	}
+	const latest = await provider.getBlockNumber()
+	const resolvedTo = toBlockHex ?? '0x' + latest.toString(16)
+	const fromBlock = Math.max(0, latest - APPROX_7D_BLOCKS)
+	const resolvedFrom = fromBlockHex ?? '0x' + fromBlock.toString(16)
+	return { fromBlockHex: resolvedFrom, toBlockHex: resolvedTo }
 }
 
 /**
  * Generic discovery for deposits into VaultTracker using Alchemy's decoded
  * asset transfers. Supports ERC-20 and ETH (internal/external) categories.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 async function discoverAndIngestDeposits(params: {
-  controller: string
-  chainId: number
-  categories: Array<'erc20' | 'internal' | 'external'>
-  token?: string
-  fromBlockHex?: string
-  toBlockHex?: string
+	controller: string
+	chainId: number
+	categories: Array<'erc20' | 'internal' | 'external'>
+	token?: string
+	fromBlockHex?: string
+	toBlockHex?: string
 }): Promise<void> {
-  const controller = validateAddress(params.controller, 'controller')
+	const controller = validateAddress(params.controller, 'controller')
 
-  if (!isInitialized) {
-    throw new Error('Proposer not initialized')
+	if (!isInitialized) {
+		throw new Error('Proposer not initialized')
+	}
+	if (params.chainId !== 11155111) {
+		throw new Error('Unsupported chain_id for discovery')
+	}
+
+	const { fromBlockHex, toBlockHex } = await computeBlockRange(
+		params.fromBlockHex,
+		params.toBlockHex
+	)
+
+	let pageKey: string | undefined = undefined
+	do {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const req: any = {
+			fromBlock: fromBlockHex,
+			toBlock: toBlockHex,
+			fromAddress: controller,
+			toAddress: VAULT_TRACKER_ADDRESS,
+			category: params.categories,
+			withMetadata: true,
+			excludeZeroValue: true,
+		}
+		if (params.token) {
+			req.contractAddresses = [validateAddress(params.token, 'token')]
+		}
+		if (pageKey) req.pageKey = pageKey
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const res: any = await sepoliaAlchemy.core.getAssetTransfers(req)
+		const transfers = res?.transfers ?? []
+		for (const t of transfers) {
+			const txHash: string = t.hash
+			const raw = t.rawContract || {}
+			const rawAddr: string | undefined = raw.address
+			const rawValueHex: string | undefined = raw.value
+			if (!rawValueHex) continue
+
+			// Determine token address: ERC-20 uses raw.address; ETH uses zero address
+			const tokenAddr = rawAddr ?? '0x0000000000000000000000000000000000000000'
+
+			const uniqueId: string | undefined = (t as { uniqueId?: string }).uniqueId
+			const transferUid = uniqueId ?? `${txHash}:${tokenAddr}:${rawValueHex}`
+			const amountWei = BigInt(rawValueHex).toString()
+
+			await insertDepositIfMissing({
+				tx_hash: txHash,
+				transfer_uid: transferUid,
+				chain_id: params.chainId,
+				depositor: t.from,
+				token: tokenAddr,
+				amount: amountWei,
+			})
+		}
+		pageKey = res?.pageKey
+	} while (pageKey)
+}
+
+/**
+ * Validates structural and fee constraints for AssignDeposit intentions.
+ * Rules:
+ * - inputs.length === outputs.length
+ * - For each index i: asset/amount/chain_id must match between input and output
+ * - outputs[i].to must be provided (no to_external) and must be a valid on-chain vault ID
+ * - Fees must be zero:
+ *   - totalFee amounts must all be "0"
+ *   - proposerTip must be empty
+ *   - protocolFee must be empty
+ *   - agentTip must be undefined or empty
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function validateAssignDepositStructure(intention: Intention): Promise<void> {
+  if (!Array.isArray(intention.inputs) || !Array.isArray(intention.outputs)) {
+    throw new Error('AssignDeposit requires inputs and outputs arrays')
   }
-  if (params.chainId !== 11155111) {
-    throw new Error('Unsupported chain_id for discovery')
+  if (intention.inputs.length !== intention.outputs.length) {
+    throw new Error('AssignDeposit requires 1:1 mapping between inputs and outputs')
   }
 
-  const { fromBlockHex, toBlockHex } = await computeBlockRange(
-    params.fromBlockHex,
-    params.toBlockHex
-  )
+  // Zero-fee enforcement
+  if (!Array.isArray(intention.totalFee) || intention.totalFee.length === 0) {
+    throw new Error('AssignDeposit requires totalFee with zero amount')
+  }
+  const allTotalZero = intention.totalFee.every((f) => f.amount === '0')
+  if (!allTotalZero) {
+    throw new Error('AssignDeposit totalFee must be zero')
+  }
+  if (Array.isArray(intention.proposerTip) && intention.proposerTip.length > 0) {
+    throw new Error('AssignDeposit proposerTip must be empty')
+  }
+  if (Array.isArray(intention.protocolFee) && intention.protocolFee.length > 0) {
+    throw new Error('AssignDeposit protocolFee must be empty')
+  }
+  if (Array.isArray(intention.agentTip) && intention.agentTip.length > 0) {
+    throw new Error('AssignDeposit agentTip must be empty if provided')
+  }
 
-  let pageKey: string | undefined = undefined
-  do {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const req: any = {
-      fromBlock: fromBlockHex,
-      toBlock: toBlockHex,
-      fromAddress: controller,
-      toAddress: VAULT_TRACKER_ADDRESS,
-      category: params.categories,
-      withMetadata: true,
-      excludeZeroValue: true,
+  for (let i = 0; i < intention.inputs.length; i++) {
+    const input: IntentionInput = intention.inputs[i]
+    const output: IntentionOutput = intention.outputs[i]
+
+    if (!output || (output.to === undefined && !output.to_external)) {
+      throw new Error('AssignDeposit requires outputs[].to (vault ID)')
     }
-    if (params.token) {
-      req.contractAddresses = [validateAddress(params.token, 'token')]
+    if (output.to_external !== undefined) {
+      throw new Error('AssignDeposit does not support to_external')
     }
-    if (pageKey) req.pageKey = pageKey
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res: any = await sepoliaAlchemy.core.getAssetTransfers(req)
-    const transfers = res?.transfers ?? []
-    for (const t of transfers) {
-      const txHash: string = t.hash
-      const raw = t.rawContract || {}
-      const rawAddr: string | undefined = raw.address
-      const rawValueHex: string | undefined = raw.value
-      if (!rawValueHex) continue
-
-      // Determine token address: ERC-20 uses raw.address; ETH uses zero address
-      const tokenAddr = rawAddr ?? '0x0000000000000000000000000000000000000000'
-
-      const uniqueId: string | undefined = (t as { uniqueId?: string }).uniqueId
-      const transferUid = uniqueId ?? `${txHash}:${tokenAddr}:${rawValueHex}`
-      const amountWei = BigInt(rawValueHex).toString()
-
-      await insertDepositIfMissing({
-        tx_hash: txHash,
-        transfer_uid: transferUid,
-        chain_id: params.chainId,
-        depositor: t.from,
-        token: tokenAddr,
-        amount: amountWei,
-      })
+    if (input.asset.toLowerCase() !== output.asset.toLowerCase()) {
+      throw new Error('AssignDeposit input/output asset mismatch at index ' + i)
     }
-    pageKey = res?.pageKey
-  } while (pageKey)
+    if (input.amount !== output.amount) {
+      throw new Error('AssignDeposit input/output amount mismatch at index ' + i)
+    }
+    if (input.chain_id !== output.chain_id) {
+      throw new Error('AssignDeposit input/output chain_id mismatch at index ' + i)
+    }
+
+    // Validate on-chain vault existence
+    await validateVaultIdOnChain(Number(output.to))
+  }
 }
 
 /**
@@ -251,20 +316,20 @@ async function discoverAndIngestDeposits(params: {
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function discoverAndIngestErc20Deposits(params: {
-  controller: string
-  token: string
-  chainId: number
-  fromBlockHex?: string
-  toBlockHex?: string
+	controller: string
+	token: string
+	chainId: number
+	fromBlockHex?: string
+	toBlockHex?: string
 }): Promise<void> {
-  await discoverAndIngestDeposits({
-    controller: params.controller,
-    chainId: params.chainId,
-    categories: ['erc20'],
-    token: params.token,
-    fromBlockHex: params.fromBlockHex,
-    toBlockHex: params.toBlockHex,
-  })
+	await discoverAndIngestDeposits({
+		controller: params.controller,
+		chainId: params.chainId,
+		categories: ['erc20'],
+		token: params.token,
+		fromBlockHex: params.fromBlockHex,
+		toBlockHex: params.toBlockHex,
+	})
 }
 
 /**
@@ -273,18 +338,18 @@ async function discoverAndIngestErc20Deposits(params: {
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function discoverAndIngestEthDeposits(params: {
-  controller: string
-  chainId: number
-  fromBlockHex?: string
-  toBlockHex?: string
+	controller: string
+	chainId: number
+	fromBlockHex?: string
+	toBlockHex?: string
 }): Promise<void> {
-  await discoverAndIngestDeposits({
-    controller: params.controller,
-    chainId: params.chainId,
-    categories: ['internal', 'external'],
-    fromBlockHex: params.fromBlockHex,
-    toBlockHex: params.toBlockHex,
-  })
+	await discoverAndIngestDeposits({
+		controller: params.controller,
+		chainId: params.chainId,
+		categories: ['internal', 'external'],
+		fromBlockHex: params.fromBlockHex,
+		toBlockHex: params.toBlockHex,
+	})
 }
 
 /**
