@@ -6,12 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
-import {
-	startTestServer,
-	stopTestServer,
-	pool,
-	get,
-} from '../helpers/testServer.js'
+import { startTestServer, stopTestServer, get } from '../helpers/testServer.js'
 import type { Server } from 'http'
 
 describe('Health Endpoint', () => {
@@ -26,7 +21,8 @@ describe('Health Endpoint', () => {
 
 	afterAll(async () => {
 		await stopTestServer(server)
-		await pool.end()
+		// Note: Don't call pool.end() here as other tests may share the same pool
+		// The pool will be cleaned up when the test process exits
 	})
 
 	it('should return 200 OK on /health', async () => {
