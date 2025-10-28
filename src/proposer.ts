@@ -49,9 +49,9 @@ import {
 } from './utils/filecoinPin.js'
 import { sendWebhook } from './utils/webhook.js'
 import {
-  insertDepositIfMissing,
-  findExactUnassignedDeposit,
-  markDepositAssigned,
+	insertDepositIfMissing,
+	findExactUnassignedDeposit,
+	markDepositAssigned,
 } from './utils/deposits.js'
 import type {
 	Intention,
@@ -792,30 +792,30 @@ async function publishBundle(data: string, signature: string, from: string) {
 		logger.warn('Filecoin pinning failed (bundle still valid):', err.message)
 	})
 	try {
-    for (const execution of bundleData.bundle) {
-      if (!Array.isArray(execution.proof)) {
-        logger.error('Invalid proof structure in execution:', execution)
-        throw new Error('Invalid proof structure')
-      }
+		for (const execution of bundleData.bundle) {
+			if (!Array.isArray(execution.proof)) {
+				logger.error('Invalid proof structure in execution:', execution)
+				throw new Error('Invalid proof structure')
+			}
 
-      if (execution.intention?.action === 'AssignDeposit') {
-        // Publish-time crediting for AssignDeposit
-        for (const proof of execution.proof) {
-          // Mark the specific deposit row as assigned (transaction inside helper)
-          await markDepositAssigned(proof.deposit_id, String(proof.to))
+			if (execution.intention?.action === 'AssignDeposit') {
+				// Publish-time crediting for AssignDeposit
+				for (const proof of execution.proof) {
+					// Mark the specific deposit row as assigned (transaction inside helper)
+					await markDepositAssigned(proof.deposit_id, String(proof.to))
 
-          // Credit the destination vault balance
-          const current = await getBalance(proof.to, proof.token)
-          const increment = safeBigInt(proof.amount)
-          const newBalance = current + increment
-          await updateBalance(proof.to, proof.token, newBalance)
-        }
-      } else {
-        for (const proof of execution.proof) {
-          await updateBalances(proof.from, proof.to, proof.token, proof.amount)
-        }
-      }
-    }
+					// Credit the destination vault balance
+					const current = await getBalance(proof.to, proof.token)
+					const increment = safeBigInt(proof.amount)
+					const newBalance = current + increment
+					await updateBalance(proof.to, proof.token, newBalance)
+				}
+			} else {
+				for (const proof of execution.proof) {
+					await updateBalances(proof.from, proof.to, proof.token, proof.amount)
+				}
+			}
+		}
 		logger.info('Balances updated successfully')
 	} catch (error) {
 		logger.error('Failed to update balances:', error)
