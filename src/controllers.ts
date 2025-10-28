@@ -17,7 +17,7 @@
  */
 
 import { Request, Response } from 'express'
-import { pool } from './index.js'
+import { pool } from './db.js'
 import { RequestBody } from './types/core.js'
 import { createLogger, diagnostic } from './utils/logger.js'
 import { validateBundle, handleValidationError } from './utils/validator.js'

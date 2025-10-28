@@ -10,7 +10,7 @@
  * @packageDocumentation
  */
 
-import { pool } from '../index.js'
+import { pool } from '../db.js'
 import { createLogger } from './logger.js'
 
 const logger = createLogger('Vaults')

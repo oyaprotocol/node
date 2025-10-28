@@ -29,4 +29,4 @@ EXPOSE 3000
 ENV NODE_ENV=production
 
 # Run TypeScript directly with Bun
-CMD ["bun", "run", "src/index.ts"]
+CMD ["bun", "run", "src/server.ts"]

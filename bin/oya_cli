@@ -31,7 +31,7 @@ const command = args[0]
 const commands = {
 	'start': {
 		description: 'Start the Oya node',
-		run: () => runBun(['run', 'src/index.ts']),
+		run: () => runBun(['run', 'src/server.ts']),
 	},
 	'start:debug': {
 		description: 'Start with debug logging enabled',
@@ -42,7 +42,7 @@ const commands = {
 				DIAGNOSTIC_LOGGER: 'true',
 				LOG_LEVEL: '2', // DEBUG level
 			}
-			return runBun(['run', 'src/index.ts'], env)
+			return runBun(['run', 'src/server.ts'], env)
 		},
 	},
 	'health': {

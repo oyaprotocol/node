@@ -24,7 +24,7 @@ import { strings } from '@helia/strings'
 import fs from 'fs'
 import path from 'path'
 import dotenv from 'dotenv'
-import { pool } from './index.js'
+import { pool } from './db.js'
 import { fileURLToPath } from 'url'
 import zlib from 'zlib'
 import { promisify } from 'util'
@@ -145,7 +145,7 @@ async function buildBundleTrackerContract(): Promise<BundleTrackerContract> {
  * Connects the wallet for transaction signing.
  */
 async function buildVaultTrackerContract(): Promise<VaultTrackerContract> {
-	const abiPath = path.join(__dirname, '..', 'dist', 'abi', 'VaultTracker.json')
+	const abiPath = path.join(__dirname, 'abi', 'VaultTracker.json')
 	const contractABI = JSON.parse(fs.readFileSync(abiPath, 'utf8'))
 	const provider =
 		(await sepoliaAlchemy.config.getProvider()) as unknown as ethers.Provider
