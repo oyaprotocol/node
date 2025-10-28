@@ -51,6 +51,7 @@ import { sendWebhook } from './utils/webhook.js'
 import {
   insertDepositIfMissing,
   findExactUnassignedDeposit,
+  markDepositAssigned,
 } from './utils/deposits.js'
 import type {
 	Intention,
@@ -256,7 +257,7 @@ async function discoverAndIngestDeposits(params: {
  *   - protocolFee must be empty
  *   - agentTip must be undefined or empty
  */
- 
+
 export async function validateAssignDepositStructure(
 	intention: Intention
 ): Promise<void> {
@@ -791,15 +792,30 @@ async function publishBundle(data: string, signature: string, from: string) {
 		logger.warn('Filecoin pinning failed (bundle still valid):', err.message)
 	})
 	try {
-		for (const execution of bundleData.bundle) {
-			if (!Array.isArray(execution.proof)) {
-				logger.error('Invalid proof structure in execution:', execution)
-				throw new Error('Invalid proof structure')
-			}
-			for (const proof of execution.proof) {
-				await updateBalances(proof.from, proof.to, proof.token, proof.amount)
-			}
-		}
+    for (const execution of bundleData.bundle) {
+      if (!Array.isArray(execution.proof)) {
+        logger.error('Invalid proof structure in execution:', execution)
+        throw new Error('Invalid proof structure')
+      }
+
+      if (execution.intention?.action === 'AssignDeposit') {
+        // Publish-time crediting for AssignDeposit
+        for (const proof of execution.proof) {
+          // Mark the specific deposit row as assigned (transaction inside helper)
+          await markDepositAssigned(proof.deposit_id, String(proof.to))
+
+          // Credit the destination vault balance
+          const current = await getBalance(proof.to, proof.token)
+          const increment = safeBigInt(proof.amount)
+          const newBalance = current + increment
+          await updateBalance(proof.to, proof.token, newBalance)
+        }
+      } else {
+        for (const proof of execution.proof) {
+          await updateBalances(proof.from, proof.to, proof.token, proof.amount)
+        }
+      }
+    }
 		logger.info('Balances updated successfully')
 	} catch (error) {
 		logger.error('Failed to update balances:', error)
@@ -1040,90 +1056,94 @@ async function handleIntention(
 		JSON.stringify(validatedIntention)
 	)
 
-  // Handle AssignDeposit intention (bypass generic balance checks)
-  if (validatedIntention.action === 'AssignDeposit') {
-    // Structural and zero-fee validation
-    await validateAssignDepositStructure(validatedIntention)
+	// Handle AssignDeposit intention (bypass generic balance checks)
+	if (validatedIntention.action === 'AssignDeposit') {
+		// Structural and zero-fee validation
+		await validateAssignDepositStructure(validatedIntention)
 
-    const zeroAddress = '0x0000000000000000000000000000000000000000'
-    const proof: unknown[] = []
+		const zeroAddress = '0x0000000000000000000000000000000000000000'
+		const proof: unknown[] = []
 
-    for (let i = 0; i < validatedIntention.inputs.length; i++) {
-      const input = validatedIntention.inputs[i]
-      const output = validatedIntention.outputs[i]
+		for (let i = 0; i < validatedIntention.inputs.length; i++) {
+			const input = validatedIntention.inputs[i]
+			const output = validatedIntention.outputs[i]
 
-      // Optional discovery hints in input.data
-      let fromBlockHex: string | undefined
-      let toBlockHex: string | undefined
-      if (input.data) {
-        try {
-          const parsed = JSON.parse(input.data)
-          if (typeof parsed.fromBlock === 'string') fromBlockHex = parsed.fromBlock
-          if (typeof parsed.toBlock === 'string') toBlockHex = parsed.toBlock
-        } catch {
-          // ignore malformed hints
-        }
-      }
+			// Optional discovery hints in input.data
+			let fromBlockHex: string | undefined
+			let toBlockHex: string | undefined
+			if (input.data) {
+				try {
+					const parsed = JSON.parse(input.data)
+					if (typeof parsed.fromBlock === 'string')
+						fromBlockHex = parsed.fromBlock
+					if (typeof parsed.toBlock === 'string') toBlockHex = parsed.toBlock
+				} catch {
+					// ignore malformed hints
+				}
+			}
 
-      const isEth = input.asset.toLowerCase() === zeroAddress
-      if (isEth) {
-        await discoverAndIngestEthDeposits({
-          controller: validatedController,
-          chainId: input.chain_id,
-          fromBlockHex,
-          toBlockHex,
-        })
-      } else {
-        await discoverAndIngestErc20Deposits({
-          controller: validatedController,
-          token: input.asset,
-          chainId: input.chain_id,
-          fromBlockHex,
-          toBlockHex,
-        })
-      }
+			const isEth = input.asset.toLowerCase() === zeroAddress
+			if (isEth) {
+				await discoverAndIngestEthDeposits({
+					controller: validatedController,
+					chainId: input.chain_id,
+					fromBlockHex,
+					toBlockHex,
+				})
+			} else {
+				await discoverAndIngestErc20Deposits({
+					controller: validatedController,
+					token: input.asset,
+					chainId: input.chain_id,
+					fromBlockHex,
+					toBlockHex,
+				})
+			}
 
-      const match = await findExactUnassignedDeposit({
-        depositor: validatedController,
-        token: isEth ? zeroAddress : input.asset,
-        amount: input.amount,
-        chain_id: input.chain_id,
-      })
-      if (!match) {
-        throw new Error(
-          `No exact unassigned deposit found for asset ${input.asset} amount ${input.amount}`
-        )
-      }
+			const match = await findExactUnassignedDeposit({
+				depositor: validatedController,
+				token: isEth ? zeroAddress : input.asset,
+				amount: input.amount,
+				chain_id: input.chain_id,
+			})
+			if (!match) {
+				throw new Error(
+					`No exact unassigned deposit found for asset ${input.asset} amount ${input.amount}`
+				)
+			}
 
-      proof.push({
-        token: isEth ? zeroAddress : input.asset,
-        to: output.to as number,
-        amount: input.amount,
-        deposit_id: match.id,
-        depositor: validatedController,
-      })
-    }
+			proof.push({
+				token: isEth ? zeroAddress : input.asset,
+				to: output.to as number,
+				amount: input.amount,
+				deposit_id: match.id,
+				depositor: validatedController,
+			})
+		}
 
-    const executionObject: ExecutionObject = {
-      execution: [
-        {
-          intention: validatedIntention,
-          from: 0,
-          proof,
-          signature: validatedSignature,
-        },
-      ],
-    }
-    cachedIntentions.push(executionObject)
+		const executionObject: ExecutionObject = {
+			execution: [
+				{
+					intention: validatedIntention,
+					from: 0,
+					proof,
+					signature: validatedSignature,
+				},
+			],
+		}
+		cachedIntentions.push(executionObject)
 
-    diagnostic.info('AssignDeposit intention processed', {
-      controller: validatedController,
-      count: validatedIntention.inputs.length,
-      processingTime: Date.now() - startTime,
-    })
-    logger.info('AssignDeposit cached. Total cached intentions:', cachedIntentions.length)
-    return executionObject
-  }
+		diagnostic.info('AssignDeposit intention processed', {
+			controller: validatedController,
+			count: validatedIntention.inputs.length,
+			processingTime: Date.now() - startTime,
+		})
+		logger.info(
+			'AssignDeposit cached. Total cached intentions:',
+			cachedIntentions.length
+		)
+		return executionObject
+	}
 
 	// Handle CreateVault intention and trigger seeding
 	if (validatedIntention.action === 'CreateVault') {
