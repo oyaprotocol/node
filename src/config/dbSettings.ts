@@ -38,4 +38,6 @@ export const REQUIRED_TABLES = [
 	'balances',
 	'nonces',
 	'proposers',
+	'vaults',
+	'deposits',
 ] as const
