@@ -25,13 +25,10 @@ describe('Health Endpoint', () => {
 		// The pool will be cleaned up when the test process exits
 	})
 
-	it('should return 200 OK on /health', async () => {
+	it('should return 200 OK with healthy status', async () => {
 		const response = await get(baseURL, '/health')
 		expect(response.status).toBe(200)
-	})
 
-	it('should return healthy status in response body', async () => {
-		const response = await get(baseURL, '/health')
 		const data = await response.json()
 		expect(data.status).toBe('healthy')
 	})
