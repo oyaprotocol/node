@@ -357,13 +357,15 @@ Below is a summary of the main API endpoints:
   - `GET /vault/by-controller/:address` — Get array of vault IDs controlled by an Ethereum `address`.
   - `GET /vault/:vaultId/controllers` — Get the array of controller addresses for a `vaultId`.
   - `GET /vault/:vaultId/rules` — Get the rules for a `vaultId` as `{ "vault": string, "rules": string | null }`.
+  - `POST /vault/:vaultId` — Create a vault row with an initial `controller` and optional `rules`. 201 on success, 409 if it already exists. 🔒
   - `POST /vault/:vaultId/controllers/add` — Add a `controller` to `vaultId` (idempotent). Returns `{ "vault": string, "controllers": string[] }`. 🔒
   - `POST /vault/:vaultId/controllers/remove` — Remove a `controller` from `vaultId`. Returns `{ "vault": string, "controllers": string[] }`. 404 if vault not found. 🔒
-  - `POST /vault/:vaultId/rules` — Set or clear `rules` (string or null) for `vaultId`. Returns `{ "vault": string, "rules": string | null }`. 🔒
+  - `POST /vault/:vaultId/rules` — Set or clear `rules` (string or null) for `vaultId`. Returns `{ "vault": string, "rules": string | null }`. 404 if vault not found. 🔒
 
   Notes:
   - All POST endpoints are protected by Bearer auth (see `API_BEARER_TOKEN`).
   - Controller addresses are validated and normalized to lowercase.
+  - Vault creation is explicit (on-chain VaultCreated event or `POST /vault/:vaultId`), and update endpoints do not implicitly create vaults.
   
 - **Intentions**
   - `POST /intention` — Accepts a JSON payload with the following structure:
