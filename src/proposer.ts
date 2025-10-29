@@ -50,8 +50,8 @@ import {
 import { sendWebhook } from './utils/webhook.js'
 import {
 	insertDepositIfMissing,
-    findDepositWithSufficientRemaining,
-	markDepositAssigned,
+	findDepositWithSufficientRemaining,
+    createAssignmentEventTransactional,
 } from './utils/deposits.js'
 import { handleAssignDeposit } from './utils/intentionHandlers/AssignDeposit.js'
 import { handleCreateVault } from './utils/intentionHandlers/CreateVault.js'
@@ -803,8 +803,12 @@ async function publishBundle(data: string, signature: string, from: string) {
 			if (execution.intention?.action === 'AssignDeposit') {
 				// Publish-time crediting for AssignDeposit
 				for (const proof of execution.proof) {
-					// Mark the specific deposit row as assigned (transaction inside helper)
-					await markDepositAssigned(proof.deposit_id, String(proof.to))
+					// Create a transactional assignment event (partial or full)
+					await createAssignmentEventTransactional(
+						proof.deposit_id,
+						proof.amount,
+						String(proof.to)
+					)
 
 					// Credit the destination vault balance
 					const current = await getBalance(proof.to, proof.token)
@@ -1068,7 +1072,7 @@ async function handleIntention(
 				validateAssignDepositStructure,
 				discoverAndIngestErc20Deposits,
 				discoverAndIngestEthDeposits,
-                findDepositWithSufficientRemaining,
+				findDepositWithSufficientRemaining,
 				validateVaultIdOnChain,
 				logger,
 				diagnostic,

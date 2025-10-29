@@ -24,12 +24,12 @@ type AssignDepositContext = {
 		fromBlockHex?: string
 		toBlockHex?: string
 	}) => Promise<void>
-    findDepositWithSufficientRemaining: (args: {
-        depositor: string
-        token: string
-        chain_id: number
-        minAmount: string
-    }) => Promise<{ id: number; remaining: string } | null>
+	findDepositWithSufficientRemaining: (args: {
+		depositor: string
+		token: string
+		chain_id: number
+		minAmount: string
+	}) => Promise<{ id: number; remaining: string } | null>
 	validateVaultIdOnChain: (vaultId: number) => Promise<void>
 	logger: { info: (...args: unknown[]) => void }
 	diagnostic: { info: (...args: unknown[]) => void }
@@ -84,15 +84,15 @@ export async function handleAssignDeposit(params: {
 			})
 		}
 
-        const match = await context.findDepositWithSufficientRemaining({
-            depositor: validatedController,
-            token: isEth ? zeroAddress : input.asset,
-            chain_id: input.chain_id,
-            minAmount: input.amount,
-        })
+		const match = await context.findDepositWithSufficientRemaining({
+			depositor: validatedController,
+			token: isEth ? zeroAddress : input.asset,
+			chain_id: input.chain_id,
+			minAmount: input.amount,
+		})
 		if (!match) {
 			throw new Error(
-                `No deposit with sufficient remaining found for asset ${input.asset} amount ${input.amount}`
+				`No deposit with sufficient remaining found for asset ${input.asset} amount ${input.amount}`
 			)
 		}
 
