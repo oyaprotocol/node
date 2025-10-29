@@ -230,8 +230,8 @@ async function discoverAndIngestDeposits(params: {
 			// Determine token address: ERC-20 uses raw.address; ETH uses zero address
 			const tokenAddr = rawAddr ?? '0x0000000000000000000000000000000000000000'
 
-			const uniqueId: string | undefined = (t as { uniqueId?: string }).uniqueId
-			const transferUid = uniqueId ?? `${txHash}:${tokenAddr}:${rawValueHex}`
+			// Deterministic transfer UID to avoid dependency on provider-specific IDs
+			const transferUid = `${txHash}:${tokenAddr}:${rawValueHex}`
 			const amountWei = BigInt(rawValueHex).toString()
 
 			await insertDepositIfMissing({
