@@ -87,6 +87,15 @@ CREATE TABLE IF NOT EXISTS deposits (
   credited_vault TEXT,
   assigned_at TIMESTAMPTZ
 );
+
+-- Create the deposit_assignment_events table (supports partial assignments)
+CREATE TABLE IF NOT EXISTS deposit_assignment_events (
+  id SERIAL PRIMARY KEY,
+  deposit_id INTEGER NOT NULL REFERENCES deposits(id) ON DELETE CASCADE,
+  amount NUMERIC(78, 0) NOT NULL,
+  credited_vault TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
 `
 
 /**
@@ -109,12 +118,17 @@ CREATE INDEX IF NOT EXISTS idx_deposits_tx_hash ON deposits(tx_hash);
 CREATE INDEX IF NOT EXISTS idx_deposits_depositor ON deposits(depositor, chain_id);
 CREATE INDEX IF NOT EXISTS idx_deposits_token ON deposits(token);
 CREATE INDEX IF NOT EXISTS idx_deposits_vault ON deposits(credited_vault);
+
+-- Create indexes for deposit_assignment_events table
+CREATE INDEX IF NOT EXISTS idx_assignment_deposit ON deposit_assignment_events(deposit_id);
+CREATE INDEX IF NOT EXISTS idx_assignment_credited_vault ON deposit_assignment_events(credited_vault);
 `
 
 /**
  * SQL statements for dropping tables
  */
 export const dropTablesSql = `
+DROP TABLE IF EXISTS deposit_assignment_events CASCADE;
 DROP TABLE IF EXISTS deposits CASCADE;
 DROP TABLE IF EXISTS bundles CASCADE;
 DROP TABLE IF EXISTS cids CASCADE;
@@ -191,7 +205,7 @@ export async function setupDatabase(options) {
 			SELECT table_name
 			FROM information_schema.tables
 			WHERE table_schema = 'public'
-			AND table_name IN ('bundles', 'cids', 'balances', 'nonces', 'proposers', 'vaults', 'deposits')
+			AND table_name IN ('bundles', 'cids', 'balances', 'nonces', 'proposers', 'vaults', 'deposits', 'deposit_assignment_events')
 			ORDER BY table_name
 		`)
 

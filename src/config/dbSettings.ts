@@ -40,4 +40,5 @@ export const REQUIRED_TABLES = [
 	'proposers',
 	'vaults',
 	'deposits',
+	'deposit_assignment_events',
 ] as const
