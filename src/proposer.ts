@@ -34,7 +34,7 @@ import { resolveIntentionENS } from './utils/ensResolver.js'
 import {
 	getControllersForVault,
 	getVaultsForController,
-	createVaultRow,
+	upsertVaultControllers,
 } from './utils/vaults.js'
 import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
 import {
@@ -1336,7 +1336,8 @@ export async function initializeProposer() {
 
 	logger.info('Initializing proposer module...')
 
-	// Note: Vault-controller mapping is created from on-chain VaultCreated events
+	// Seed the proposer's own vault-to-controller mapping
+	await seedProposerVaultMapping()
 
 	// Initialize wallet and contract
 	await initializeWalletAndContract()
@@ -1370,7 +1371,19 @@ export function getSepoliaAlchemy() {
  * Ensures the proposer's vault-to-controller mapping is seeded in the database.
  * This is crucial for allowing the proposer to sign and submit seeding intentions.
  */
-// Removed seedProposerVaultMapping(); creation is handled via on-chain events
+async function seedProposerVaultMapping() {
+	try {
+		await upsertVaultControllers(PROPOSER_VAULT_ID.value, [PROPOSER_ADDRESS])
+		logger.info(
+			`Proposer vault mapping seeded: Vault ${PROPOSER_VAULT_ID.value} -> Controller ${PROPOSER_ADDRESS}`
+		)
+	} catch (error) {
+		logger.error('Failed to seed proposer vault mapping:', error)
+		// We throw here because if the proposer can't control its own vault,
+		// it won't be able to perform critical functions like seeding new vaults.
+		throw new Error('Could not seed proposer vault mapping')
+	}
+}
 
 /**
  * Exports IPFS node for health checks
