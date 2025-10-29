@@ -64,8 +64,11 @@ BEGIN
   END IF;
 END
 \$\$;
+-- 4) Drop legacy index and table if they exist (cleanup)
+DROP INDEX IF EXISTS unique_lower_vault_nonces;
+DROP TABLE IF EXISTS nonces;
 EOF
 
-echo "Merge complete: vaults.nonce added, controllers non-empty enforced, nonces backfilled."
+echo "Merge complete: vaults.nonce added, controllers non-empty enforced, nonces backfilled, legacy table dropped."
 
 

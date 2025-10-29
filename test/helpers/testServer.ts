@@ -72,9 +72,9 @@ export async function clearTestDatabase(pool: Pool): Promise<void> {
 	const client = await pool.connect()
 	try {
 		// Clear application tables
-        await client.query(
-            'TRUNCATE TABLE bundles, cids, balances, proposers, vaults CASCADE'
-        )
+		await client.query(
+			'TRUNCATE TABLE bundles, cids, balances, proposers, vaults CASCADE'
+		)
 	} finally {
 		client.release()
 	}

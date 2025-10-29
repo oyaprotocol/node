@@ -28,7 +28,6 @@ heroku pg:psql --app "$APP_NAME" DATABASE_URL <<EOF
 DROP TABLE IF EXISTS bundles;
 DROP TABLE IF EXISTS cids;
 DROP TABLE IF EXISTS balances;
-DROP TABLE IF EXISTS nonces;
 DROP TABLE IF EXISTS proposers;
 
 -- Create the bundles table
@@ -61,15 +60,6 @@ CREATE TABLE IF NOT EXISTS balances (
   UNIQUE (vault, token)
 );
 
--- Create the nonces table
-CREATE TABLE IF NOT EXISTS nonces (
-  id SERIAL PRIMARY KEY,
-  vault TEXT NOT NULL,
-  nonce INTEGER NOT NULL,
-  timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (vault)
-);
-
 -- Create the proposers table
 CREATE TABLE IF NOT EXISTS proposers (
   id SERIAL PRIMARY KEY,
@@ -78,22 +68,13 @@ CREATE TABLE IF NOT EXISTS proposers (
 );
 EOF
 
-echo "Tables 'bundles', 'cids', 'balances', 'nonces', and 'proposers' created successfully."
+echo "Tables 'bundles', 'cids', 'balances', and 'proposers' created successfully."
 
 echo "Adding case-insensitive indexes and updating existing data to lowercase..."
-# Create a unique index on nonces (lowercase vault)
-heroku pg:psql --app "$APP_NAME" DATABASE_URL -c "
-CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_vault_nonces ON nonces (LOWER(vault));
-"
 
 # Create a unique index on balances (lowercase vault and token)
 heroku pg:psql --app "$APP_NAME" DATABASE_URL -c "
 CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_vault_token_balances ON balances (LOWER(vault), LOWER(token));
-"
-
-# Update existing vault values in nonces to lowercase
-heroku pg:psql --app "$APP_NAME" DATABASE_URL -c "
-UPDATE nonces SET vault = LOWER(vault);
 "
 
 # Update existing vault and token values in balances to lowercase
