@@ -753,6 +753,14 @@ export const removeControllerFromVault = async (
 			if (inner instanceof Error && inner.message === 'Vault not found') {
 				return res.status(404).json({ error: 'Vault not found' })
 			}
+			if (
+				inner instanceof Error &&
+				inner.message === 'Controllers cannot be empty'
+			) {
+				return res
+					.status(400)
+					.json({ error: 'Cannot remove the last controller from a vault' })
+			}
 			throw inner
 		}
 	} catch (error) {

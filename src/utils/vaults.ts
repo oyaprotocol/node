@@ -25,7 +25,10 @@ export async function updateVaultControllers(
 	vaultId: number,
 	controllers: string[]
 ): Promise<void> {
-	const lowercasedControllers = controllers.map((c) => c.toLowerCase())
+    if (!Array.isArray(controllers) || controllers.length === 0) {
+        throw new Error('Controllers cannot be empty')
+    }
+    const lowercasedControllers = controllers.map((c) => c.toLowerCase())
 	try {
 		const result = await pool.query(
 			`UPDATE vaults SET controllers = $2 WHERE vault = $1`,
@@ -174,7 +177,7 @@ export async function removeControllerFromVault(
 ): Promise<string[]> {
 	const lower = controller.toLowerCase()
 	try {
-		const result = await pool.query(
+        const result = await pool.query(
 			`UPDATE vaults
              SET controllers = array_remove(controllers, LOWER($2))
              WHERE vault = $1
@@ -184,7 +187,20 @@ export async function removeControllerFromVault(
 		if (result.rows.length === 0) {
 			throw new Error('Vault not found')
 		}
-		return (result.rows[0].controllers as string[]).map((c) => c.toLowerCase())
+        const updated = (result.rows[0].controllers as string[]).map((c) =>
+            c.toLowerCase()
+        )
+        if (updated.length === 0) {
+            // Revert removal to satisfy invariant and report an error
+            await pool.query(
+                `UPDATE vaults
+                 SET controllers = ARRAY[LOWER($2)] || controllers
+                 WHERE vault = $1`,
+                [String(vaultId), lower]
+            )
+            throw new Error('Controllers cannot be empty')
+        }
+        return updated
 	} catch (error) {
 		logger.error(
 			`Failed to remove controller ${controller} from vault ${vaultId}:`,

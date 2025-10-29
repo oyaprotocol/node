@@ -449,9 +449,9 @@ async function getLatestNonce(): Promise<number> {
  * Returns 0 if no nonce is found for the vault.
  */
 async function getVaultNonce(vaultId: number | string): Promise<number> {
-    const result = await pool.query('SELECT nonce FROM vaults WHERE vault = $1', [
-        String(vaultId),
-    ])
+	const result = await pool.query('SELECT nonce FROM vaults WHERE vault = $1', [
+		String(vaultId),
+	])
 	if (result.rows.length === 0) {
 		return 0
 	}
@@ -667,14 +667,16 @@ async function saveBundleData(
 	if (Array.isArray(bundleData.bundle)) {
 		for (const execution of bundleData.bundle) {
 			const vaultNonce = execution.intention.nonce
-            const vault = execution.from
-            const updateResult = await pool.query(
-                `UPDATE vaults SET nonce = $2 WHERE vault = $1`,
-                [String(vault), vaultNonce]
-            )
-            if (updateResult.rowCount === 0) {
-                logger.warn(`Nonce update skipped: vault ${String(vault)} does not exist`)
-            }
+			const vault = execution.from
+			const updateResult = await pool.query(
+				`UPDATE vaults SET nonce = $2 WHERE vault = $1`,
+				[String(vault), vaultNonce]
+			)
+			if (updateResult.rowCount === 0) {
+				logger.warn(
+					`Nonce update skipped: vault ${String(vault)} does not exist`
+				)
+			}
 		}
 	}
 }
