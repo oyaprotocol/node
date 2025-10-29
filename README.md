@@ -35,8 +35,8 @@
 
 ## Architecture Overview
 
-- **Express Server:** The main entry point (`index.ts`) sets up the Express server, JSON parsing, and routes.
-- **Routing & Controllers:** API endpoints are defined in `routes.ts` and implemented in `controllers.ts`. These endpoints manage database operations for bundles, CIDs, balances, and vault nonces.
+- **Express Server:** The main entry point (`server.ts`) starts the server. The Express app is composed via `createApp()` in `app.ts` (enables testing without binding a port).
+- **Routing & Controllers:** API endpoints are defined in `routes.ts` and implemented in `controllers.ts`. These endpoints manage database operations for bundles, CIDs, balances, vault nonces, and vault metadata (controllers/rules).
 - **Proposer Logic:** Implemented in `proposer.ts`, this module:
   - Processes incoming intentions from the `/intention` endpoint.
   - Caches intentions and bundles them into a bundle every 10 seconds.
@@ -139,6 +139,8 @@ The setup script creates the following tables:
 - **cids:** Stores IPFS CIDs corresponding to bundles.
 - **balances:** Tracks token balances per vault.
 - **nonces:** Tracks the latest nonce for each vault.
+- **proposers:** Records block proposers.
+- **vaults:** Maps vault IDs to controller addresses and optional rules.
 
 If deploying to Heroku, run the migration script as follows:
 
@@ -309,7 +311,7 @@ RUN bun link
 EXPOSE 3000
 ENV NODE_ENV=production
 
-CMD ["bun", "run", "src/index.ts"]
+CMD ["bun", "run", "src/server.ts"]
 ```
 
 To build and run the container locally:
@@ -350,6 +352,20 @@ Below is a summary of the main API endpoints:
   - `GET /nonce/:vault` — Get the nonce for a given vault.
   - `POST /nonce/:vault` — Set/update the nonce for a vault.
 
+- **Vaults**
+  - `POST /vault/:vaultId` — Explicitly create a vault row with initial controller and optional rules.
+    - Request body: `{ "controller": "0x...", "rules"?: string | null }`
+    - Responses: `201 Created` on success; `409 Conflict` if the vault already exists.
+  - `GET /vault/by-controller/:address` — Get all vault IDs controlled by the given address (array of strings).
+  - `GET /vault/:vaultId/controllers` — Get the controller address list for a vault (array of strings).
+  - `GET /vault/:vaultId/rules` — Get the rules string for a vault (nullable).
+  - `POST /vault/:vaultId/controllers/add` — Add a controller to an existing vault.
+    - Update-only; returns `404 Not Found` if the vault does not exist; dedupes controllers.
+  - `POST /vault/:vaultId/controllers/remove` — Remove a controller from an existing vault.
+    - Update-only; returns `404 Not Found` if the vault does not exist.
+  - `POST /vault/:vaultId/rules` — Set or clear rules for an existing vault.
+    - Update-only; returns `404 Not Found` if the vault does not exist; `null` clears rules.
+
 - **Intentions**
   - `POST /intention` — Accepts a JSON payload with the following structure:
 
@@ -384,13 +400,15 @@ Below is a summary of the main API endpoints:
 
 ## Testing
 
-To run the test suite, use:
+Separated test commands in package.json:
 
 ```bash
-bun test
+bun run test             # Unit tests only (test/*.test.ts) - no database required
+bun run test:integration # Integration tests (test/integration/*.test.ts) - requires database
+bun run test:all         # All tests, same as `bun test`
 ```
 
-Tests are written using Bun's built-in test runner and are located in the `test` directory.
+Tests are written using Bun's built-in test runner and are located in the `test` directory. Integration tests live under `test/integration` and require a configured database (see Database Setup). CI runs unit tests only by default.
 
 ## Deployment
 

@@ -20,7 +20,20 @@ import { Request, Response } from 'express'
 import { pool } from './db.js'
 import { RequestBody } from './types/core.js'
 import { createLogger, diagnostic } from './utils/logger.js'
-import { validateBundle, handleValidationError } from './utils/validator.js'
+import {
+	validateBundle,
+	handleValidationError,
+	validateAddress,
+	validateId,
+} from './utils/validator.js'
+import {
+	getVaultsForController,
+	getRulesForVault,
+	setRulesForVault as setRulesForVaultUtil,
+	addControllerToVault as addControllerToVaultUtil,
+	removeControllerFromVault as removeControllerFromVaultUtil,
+	createVaultRow,
+} from './utils/vaults.js'
 import { getEnvConfig } from './utils/env.js'
 import { handleIntention } from './proposer.js'
 
@@ -629,5 +642,196 @@ export const getFilecoinStatus = async (req: Request, res: Response) => {
 	} catch (err) {
 		logger.error('Error fetching Filecoin status:', err)
 		res.status(500).json({ error: 'Internal Server Error' })
+	}
+}
+
+/**
+ * GET /vault/by-controller/:address
+ * Returns array of vault IDs (strings) controlled by an address
+ */
+export const getVaultIdsByController = async (req: Request, res: Response) => {
+	try {
+		const address = validateAddress(req.params.address, 'address')
+		const vaults = await getVaultsForController(address)
+		return res.status(200).json(vaults)
+	} catch (error) {
+		const err = handleValidationError(error)
+		if (err.status === 400) return res.status(400).json(err)
+		logger.error('Error getting vaults by controller:', error)
+		return res.status(500).json({ error: 'Internal Server Error' })
+	}
+}
+
+/**
+ * GET /vault/:vaultId/controllers
+ * Returns array of controller addresses for a given vault ID (404 if vault not found)
+ */
+export const getControllersByVaultId = async (req: Request, res: Response) => {
+	try {
+		const vaultId = validateId(Number(req.params.vaultId), 'vaultId')
+		const result = await pool.query(
+			'SELECT controllers FROM vaults WHERE vault = $1',
+			[String(vaultId)]
+		)
+		if (result.rows.length === 0) {
+			return res.status(404).json({ error: 'Vault not found' })
+		}
+		const controllers = (result.rows[0].controllers as string[]).map((c) =>
+			c.toLowerCase()
+		)
+		return res.status(200).json(controllers)
+	} catch (error) {
+		const err = handleValidationError(error)
+		if (err.status === 400) return res.status(400).json(err)
+		logger.error('Error getting controllers by vaultId:', error)
+		return res.status(500).json({ error: 'Internal Server Error' })
+	}
+}
+
+/**
+ * GET /vault/:vaultId/rules
+ * Returns \{ vault, rules \} for the given vault ID (404 if vault not found)
+ */
+export const getRulesByVaultId = async (req: Request, res: Response) => {
+	try {
+		const vaultId = validateId(Number(req.params.vaultId), 'vaultId')
+		const rules = await getRulesForVault(vaultId)
+		if (rules === undefined) {
+			return res.status(404).json({ error: 'Vault not found' })
+		}
+		return res.status(200).json({ vault: String(vaultId), rules })
+	} catch (error) {
+		const err = handleValidationError(error)
+		if (err.status === 400) return res.status(400).json(err)
+		logger.error('Error getting rules by vaultId:', error)
+		return res.status(500).json({ error: 'Internal Server Error' })
+	}
+}
+
+/**
+ * POST /vault/:vaultId/controllers/add
+ * Adds a controller to an existing vault. Returns \{ vault, controllers \}
+ */
+export const addControllerToVault = async (req: Request, res: Response) => {
+	try {
+		const vaultId = validateId(Number(req.params.vaultId), 'vaultId')
+		const controller = validateAddress(req.body.controller, 'controller')
+
+		// Check existence
+		const exists = await pool.query('SELECT 1 FROM vaults WHERE vault = $1', [
+			String(vaultId),
+		])
+		if (exists.rows.length === 0) {
+			return res.status(404).json({ error: 'Vault not found' })
+		}
+
+		const controllers = await addControllerToVaultUtil(vaultId, controller)
+		return res.status(200).json({ vault: String(vaultId), controllers })
+	} catch (error) {
+		const err = handleValidationError(error)
+		if (err.status === 400) return res.status(400).json(err)
+		logger.error('Error adding controller to vault:', error)
+		return res.status(500).json({ error: 'Internal Server Error' })
+	}
+}
+
+/**
+ * POST /vault/:vaultId/controllers/remove
+ * Removes a controller from a vault. Returns \{ vault, controllers \}
+ */
+export const removeControllerFromVault = async (
+	req: Request,
+	res: Response
+) => {
+	try {
+		const vaultId = validateId(Number(req.params.vaultId), 'vaultId')
+		const controller = validateAddress(req.body.controller, 'controller')
+		try {
+			const controllers = await removeControllerFromVaultUtil(
+				vaultId,
+				controller
+			)
+			return res.status(200).json({ vault: String(vaultId), controllers })
+		} catch (inner) {
+			if (inner instanceof Error && inner.message === 'Vault not found') {
+				return res.status(404).json({ error: 'Vault not found' })
+			}
+			throw inner
+		}
+	} catch (error) {
+		const err = handleValidationError(error)
+		if (err.status === 400) return res.status(400).json(err)
+		logger.error('Error removing controller from vault:', error)
+		return res.status(500).json({ error: 'Internal Server Error' })
+	}
+}
+
+/**
+ * POST /vault/:vaultId/rules
+ * Sets rules for an existing vault. Returns \{ vault, rules \}
+ */
+export const setRulesForVault = async (req: Request, res: Response) => {
+	try {
+		const vaultId = validateId(Number(req.params.vaultId), 'vaultId')
+		const { rules } = req.body as { rules: string | null }
+		if (rules !== null && typeof rules !== 'string') {
+			return res
+				.status(400)
+				.json({ error: 'Invalid rules: must be string or null' })
+		}
+
+		// Check existence
+		const exists = await pool.query('SELECT 1 FROM vaults WHERE vault = $1', [
+			String(vaultId),
+		])
+		if (exists.rows.length === 0) {
+			return res.status(404).json({ error: 'Vault not found' })
+		}
+
+		const persisted = await setRulesForVaultUtil(vaultId, rules ?? null)
+		return res.status(200).json({ vault: String(vaultId), rules: persisted })
+	} catch (error) {
+		const err = handleValidationError(error)
+		if (err.status === 400) return res.status(400).json(err)
+		logger.error('Error updating rules for vault:', error)
+		return res.status(500).json({ error: 'Internal Server Error' })
+	}
+}
+
+/**
+ * POST /vault/:vaultId
+ * Creates a new vault row with initial controller and optional rules.
+ * Returns \{ vault, controllers, rules \}. 409 if vault already exists.
+ */
+export const createVault = async (req: Request, res: Response) => {
+	try {
+		const vaultId = validateId(Number(req.params.vaultId), 'vaultId')
+		const controller = validateAddress(req.body.controller, 'controller')
+		const rules = (req.body?.rules ?? null) as string | null
+		if (rules !== null && typeof rules !== 'string') {
+			return res
+				.status(400)
+				.json({ error: 'Invalid rules: must be string or null' })
+		}
+
+		// Use shared util with pre-existence check
+		try {
+			const row = await createVaultRow(vaultId, controller, rules)
+			return res.status(201).json({
+				vault: row.vault,
+				controllers: row.controllers,
+				rules: row.rules,
+			})
+		} catch (e) {
+			if (e instanceof Error && e.message === 'Vault already exists') {
+				return res.status(409).json({ error: 'Vault already exists' })
+			}
+			throw e
+		}
+	} catch (error) {
+		const err = handleValidationError(error)
+		if (err.status === 400) return res.status(400).json(err)
+		logger.error('Error creating vault:', error)
+		return res.status(500).json({ error: 'Internal Server Error' })
 	}
 }

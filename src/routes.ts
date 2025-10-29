@@ -37,13 +37,20 @@ import {
 	getMetrics,
 	submitIntention,
 	getFilecoinStatus,
+	getVaultIdsByController,
+	getControllersByVaultId,
+	getRulesByVaultId,
+	addControllerToVault,
+	removeControllerFromVault,
+	setRulesForVault,
+	createVault,
 } from './controllers.js'
 
 /**
  * Route mount configuration
  *
  * Single source of truth for all route mounts. Used by:
- * - index.ts to mount routes on the Express app
+ * - app.ts to mount routes on the Express app
  * - logger.ts to display available endpoints
  *
  * Each router is defined inline and configured with its routes.
@@ -96,5 +103,16 @@ export const routeMounts: RouteMount[] = [
 	{
 		basePath: '/filecoin',
 		router: Router().get('/status/:cid', getFilecoinStatus),
+	},
+	{
+		basePath: '/vault',
+		router: Router()
+			.post('/:vaultId', createVault)
+			.get('/by-controller/:address', getVaultIdsByController)
+			.get('/:vaultId/controllers', getControllersByVaultId)
+			.get('/:vaultId/rules', getRulesByVaultId)
+			.post('/:vaultId/controllers/add', addControllerToVault)
+			.post('/:vaultId/controllers/remove', removeControllerFromVault)
+			.post('/:vaultId/rules', setRulesForVault),
 	},
 ]

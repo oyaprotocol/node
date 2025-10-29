@@ -165,7 +165,7 @@ export async function setupDatabase(options) {
 
 			if (!forceDropConfirm) {
 				console.log(chalk.red('\n⚠️  WARNING: This will DELETE ALL DATA in the following tables:'))
-				console.log(chalk.red('  - bundles, cids, balances, nonces, proposers'))
+				console.log(chalk.red('  - bundles, cids, balances, nonces, proposers, vaults'))
 				console.log(chalk.yellow('\nTo confirm, set FORCE_DROP=true or remove --drop-existing flag'))
 				await pool.end()
 				process.exit(1)
