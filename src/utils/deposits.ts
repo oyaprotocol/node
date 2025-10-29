@@ -69,8 +69,6 @@ export async function insertDepositIfMissing(
 	}
 }
 
-
-
 /**
  * Returns remaining (unassigned) amount for a deposit as a decimal string (wei).
  */
