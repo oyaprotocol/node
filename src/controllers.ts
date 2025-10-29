@@ -295,7 +295,7 @@ export const getVaultNonce = async (req: Request, res: Response) => {
 	const { vault } = req.params
 	try {
 		const result = await pool.query(
-			'SELECT nonce FROM nonces WHERE LOWER(vault) = LOWER($1)',
+			'SELECT nonce FROM vaults WHERE LOWER(vault) = LOWER($1)',
 			[vault]
 		)
 		logger.info('Getting vault nonce:', result.rows)
@@ -320,14 +320,13 @@ export const setVaultNonce = async (req: Request, res: Response) => {
 
 	try {
 		const result = await pool.query(
-			`INSERT INTO nonces (vault, nonce)
-       VALUES (LOWER($1), $2)
-       ON CONFLICT (LOWER(vault))
-       DO UPDATE SET nonce = EXCLUDED.nonce
-       RETURNING *`,
+			`UPDATE vaults SET nonce = $2 WHERE LOWER(vault) = LOWER($1) RETURNING vault, nonce`,
 			[vault, nonce]
 		)
-		res.status(201).json(result.rows[0])
+		if (result.rows.length === 0) {
+			return res.status(404).json({ error: 'Vault not found' })
+		}
+		res.status(200).json(result.rows[0])
 	} catch (err) {
 		logger.error(err)
 		res.status(500).json({ error: 'Internal Server Error' })
@@ -397,9 +396,9 @@ export const getMetrics = async (req: Request, res: Response) => {
 		const latestCIDNonce =
 			latestCIDResult.rows.length > 0 ? latestCIDResult.rows[0].nonce : null
 
-		// Get unique vault count
+		// Get vault count
 		const vaultCountResult = await pool.query(
-			'SELECT COUNT(DISTINCT vault) FROM nonces'
+			'SELECT COUNT(*) FROM vaults'
 		)
 		const totalVaults = parseInt(vaultCountResult.rows[0].count)
 

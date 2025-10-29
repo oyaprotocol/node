@@ -36,7 +36,6 @@ export const REQUIRED_TABLES = [
 	'bundles',
 	'cids',
 	'balances',
-	'nonces',
 	'proposers',
 	'vaults',
 	'deposits',
