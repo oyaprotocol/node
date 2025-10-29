@@ -34,7 +34,7 @@ import { resolveIntentionENS } from './utils/ensResolver.js'
 import {
 	getControllersForVault,
 	getVaultsForController,
-	upsertVaultControllers,
+	createVaultRow,
 } from './utils/vaults.js'
 import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
 import {
@@ -834,7 +834,8 @@ async function handleIntention(
 
 			// 3. Persist the new vault-to-controller mapping to the database.
 			// This is the canonical source of truth for vault ownership.
-			await upsertVaultControllers(newVaultId, [validatedController])
+			// Prefer insert-only creation; falls back to update-only seeding elsewhere if needed
+			await createVaultRow(newVaultId, validatedController, null)
 
 			// 4. After the vault is created and its controller is mapped,
 			// submit an intention to seed it with initial balances.
@@ -1090,8 +1091,7 @@ export async function initializeProposer() {
 
 	logger.info('Initializing proposer module...')
 
-	// Seed the proposer's own vault-to-controller mapping
-	await seedProposerVaultMapping()
+	// Note: Vault-controller mapping is created from on-chain VaultCreated events
 
 	// Initialize wallet and contract
 	await initializeWalletAndContract()
@@ -1125,19 +1125,7 @@ export function getSepoliaAlchemy() {
  * Ensures the proposer's vault-to-controller mapping is seeded in the database.
  * This is crucial for allowing the proposer to sign and submit seeding intentions.
  */
-async function seedProposerVaultMapping() {
-	try {
-		await upsertVaultControllers(PROPOSER_VAULT_ID.value, [PROPOSER_ADDRESS])
-		logger.info(
-			`Proposer vault mapping seeded: Vault ${PROPOSER_VAULT_ID.value} -> Controller ${PROPOSER_ADDRESS}`
-		)
-	} catch (error) {
-		logger.error('Failed to seed proposer vault mapping:', error)
-		// We throw here because if the proposer can't control its own vault,
-		// it won't be able to perform critical functions like seeding new vaults.
-		throw new Error('Could not seed proposer vault mapping')
-	}
-}
+// Removed seedProposerVaultMapping(); creation is handled via on-chain events
 
 /**
  * Exports IPFS node for health checks

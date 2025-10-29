@@ -53,6 +53,7 @@ ${chalk.yellow('Tables Created:')}
   - balances  : Manages vault token balances
   - nonces    : Tracks vault nonces
   - proposers : Records block proposers
+  - vaults    : Maps vault IDs to controllers and rules
 
 ${chalk.red('Warning:')} Using --drop-existing will DELETE ALL EXISTING DATA!
 `)
