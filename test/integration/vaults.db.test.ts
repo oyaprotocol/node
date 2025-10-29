@@ -13,13 +13,13 @@ import {
 } from 'bun:test'
 import { pool } from '../../src/db.js'
 import {
-	createVaultRow,
-	addControllerToVault,
-	removeControllerFromVault,
-	setRulesForVault,
-	getRulesForVault,
-	getControllersForVault,
-	getVaultsForController,
+    createVaultRow,
+    addControllerToVault,
+    removeControllerFromVault,
+    setRulesForVault,
+    getRulesForVault,
+    getControllersForVault,
+    getVaultsForController,
 } from '../../src/utils/vaults.js'
 
 const TEST_VAULT_1 = 5001
@@ -73,11 +73,27 @@ describe('Vault utils (DB)', () => {
 		)
 	})
 
-	test('removeControllerFromVault: update-only', async () => {
-		await createVaultRow(TEST_VAULT_1, CTRL_1, null)
-		const removed = await removeControllerFromVault(TEST_VAULT_1, CTRL_1)
-		expect(removed).toEqual([])
-	})
+    test('removeControllerFromVault: cannot remove last controller', async () => {
+        await createVaultRow(TEST_VAULT_1, CTRL_1, null)
+        let threw = false
+        try {
+            await removeControllerFromVault(TEST_VAULT_1, CTRL_1)
+        } catch (e) {
+            threw = e instanceof Error && e.message === 'Controllers cannot be empty'
+        }
+        expect(threw).toBe(true)
+        const controllers = await getControllersForVault(TEST_VAULT_1)
+        expect(controllers).toEqual([CTRL_1.toLowerCase()])
+    })
+
+    test('vault nonce defaults to 0 and can be updated', async () => {
+        await createVaultRow(TEST_VAULT_1, CTRL_1, null)
+        const initial = await pool.query('SELECT nonce FROM vaults WHERE vault = $1', [String(TEST_VAULT_1)])
+        expect(initial.rows[0].nonce).toBe(0)
+        await pool.query('UPDATE vaults SET nonce = $2 WHERE vault = $1', [String(TEST_VAULT_1), 7])
+        const updated = await pool.query('SELECT nonce FROM vaults WHERE vault = $1', [String(TEST_VAULT_1)])
+        expect(updated.rows[0].nonce).toBe(7)
+    })
 
 	test('setRulesForVault and getRulesForVault: update-only', async () => {
 		await createVaultRow(TEST_VAULT_1, CTRL_1, null)
