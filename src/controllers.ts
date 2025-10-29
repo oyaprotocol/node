@@ -397,9 +397,7 @@ export const getMetrics = async (req: Request, res: Response) => {
 			latestCIDResult.rows.length > 0 ? latestCIDResult.rows[0].nonce : null
 
 		// Get vault count
-		const vaultCountResult = await pool.query(
-			'SELECT COUNT(*) FROM vaults'
-		)
+		const vaultCountResult = await pool.query('SELECT COUNT(*) FROM vaults')
 		const totalVaults = parseInt(vaultCountResult.rows[0].count)
 
 		// Get latest bundle nonce
