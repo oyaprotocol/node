@@ -50,7 +50,7 @@ import {
 import { sendWebhook } from './utils/webhook.js'
 import {
 	insertDepositIfMissing,
-	findExactUnassignedDeposit,
+    findDepositWithSufficientRemaining,
 	markDepositAssigned,
 } from './utils/deposits.js'
 import { handleAssignDeposit } from './utils/intentionHandlers/AssignDeposit.js'
@@ -1068,7 +1068,7 @@ async function handleIntention(
 				validateAssignDepositStructure,
 				discoverAndIngestErc20Deposits,
 				discoverAndIngestEthDeposits,
-				findExactUnassignedDeposit,
+                findDepositWithSufficientRemaining,
 				validateVaultIdOnChain,
 				logger,
 				diagnostic,
