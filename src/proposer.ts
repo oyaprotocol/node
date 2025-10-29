@@ -53,6 +53,8 @@ import {
 	findExactUnassignedDeposit,
 	markDepositAssigned,
 } from './utils/deposits.js'
+import { handleAssignDeposit } from './utils/intentionHandlers/AssignDeposit.js'
+import { handleCreateVault } from './utils/intentionHandlers/CreateVault.js'
 import type {
 	Intention,
 	BundleData,
@@ -1058,143 +1060,36 @@ async function handleIntention(
 
 	// Handle AssignDeposit intention (bypass generic balance checks)
 	if (validatedIntention.action === 'AssignDeposit') {
-		// Structural and zero-fee validation
-		await validateAssignDepositStructure(validatedIntention)
-
-		const zeroAddress = '0x0000000000000000000000000000000000000000'
-		const proof: unknown[] = []
-
-		for (let i = 0; i < validatedIntention.inputs.length; i++) {
-			const input = validatedIntention.inputs[i]
-			const output = validatedIntention.outputs[i]
-
-			// Optional discovery hints in input.data
-			let fromBlockHex: string | undefined
-			let toBlockHex: string | undefined
-			if (input.data) {
-				try {
-					const parsed = JSON.parse(input.data)
-					if (typeof parsed.fromBlock === 'string')
-						fromBlockHex = parsed.fromBlock
-					if (typeof parsed.toBlock === 'string') toBlockHex = parsed.toBlock
-				} catch {
-					// ignore malformed hints
-				}
-			}
-
-			const isEth = input.asset.toLowerCase() === zeroAddress
-			if (isEth) {
-				await discoverAndIngestEthDeposits({
-					controller: validatedController,
-					chainId: input.chain_id,
-					fromBlockHex,
-					toBlockHex,
-				})
-			} else {
-				await discoverAndIngestErc20Deposits({
-					controller: validatedController,
-					token: input.asset,
-					chainId: input.chain_id,
-					fromBlockHex,
-					toBlockHex,
-				})
-			}
-
-			const match = await findExactUnassignedDeposit({
-				depositor: validatedController,
-				token: isEth ? zeroAddress : input.asset,
-				amount: input.amount,
-				chain_id: input.chain_id,
-			})
-			if (!match) {
-				throw new Error(
-					`No exact unassigned deposit found for asset ${input.asset} amount ${input.amount}`
-				)
-			}
-
-			proof.push({
-				token: isEth ? zeroAddress : input.asset,
-				to: output.to as number,
-				amount: input.amount,
-				deposit_id: match.id,
-				depositor: validatedController,
-			})
-		}
-
-		const executionObject: ExecutionObject = {
-			execution: [
-				{
-					intention: validatedIntention,
-					from: 0,
-					proof,
-					signature: validatedSignature,
-				},
-			],
-		}
-		cachedIntentions.push(executionObject)
-
-		diagnostic.info('AssignDeposit intention processed', {
-			controller: validatedController,
-			count: validatedIntention.inputs.length,
-			processingTime: Date.now() - startTime,
+		const executionObject = await handleAssignDeposit({
+			intention: validatedIntention,
+			validatedController,
+			validatedSignature,
+			context: {
+				validateAssignDepositStructure,
+				discoverAndIngestErc20Deposits,
+				discoverAndIngestEthDeposits,
+				findExactUnassignedDeposit,
+				validateVaultIdOnChain,
+				logger,
+				diagnostic,
+			},
 		})
-		logger.info(
-			'AssignDeposit cached. Total cached intentions:',
-			cachedIntentions.length
-		)
+		cachedIntentions.push(executionObject)
 		return executionObject
 	}
 
 	// Handle CreateVault intention and trigger seeding
 	if (validatedIntention.action === 'CreateVault') {
-		try {
-			// This is the entry point for creating and seeding a new vault.
-			logger.info('Processing CreateVault intention...')
-
-			// 1. Call the on-chain contract to create the vault.
-			// The `validatedController` address becomes the controller of the new vault.
-			const tx = await vaultTrackerContract.createVault(validatedController)
-			const receipt = await tx.wait() // Wait for the transaction to be mined
-
-			if (!receipt) {
-				throw new Error('Transaction receipt is null, mining may have failed.')
-			}
-
-			// 2. Find and parse the VaultCreated event to get the new vault ID.
-			let newVaultId: number | null = null
-			for (const log of receipt.logs) {
-				try {
-					const parsedLog = vaultTrackerContract.interface.parseLog(log)
-					if (parsedLog && parsedLog.name === 'VaultCreated') {
-						// The first argument of the event is the vaultId
-						newVaultId = Number(parsedLog.args[0])
-						break
-					}
-				} catch {
-					// Ignore logs that are not from the VaultTracker ABI
-				}
-			}
-
-			if (newVaultId === null) {
-				throw new Error(
-					'Could not find VaultCreated event in transaction logs.'
-				)
-			}
-
-			logger.info(`On-chain vault created with ID: ${newVaultId}`)
-
-			// 3. Persist the new vault-to-controller mapping to the database.
-			// This is the canonical source of truth for vault ownership.
-			await upsertVaultControllers(newVaultId, [validatedController])
-
-			// 4. After the vault is created and its controller is mapped,
-			// submit an intention to seed it with initial balances.
-			await createAndSubmitSeedingIntention(newVaultId)
-		} catch (error) {
-			logger.error('Failed to process CreateVault intention:', error)
-			// Re-throw or handle the error as appropriate for your application
-			throw error
-		}
+		await handleCreateVault({
+			intention: validatedIntention,
+			validatedController,
+			deps: {
+				vaultTrackerContract,
+				upsertVaultControllers,
+				createAndSubmitSeedingIntention,
+				logger,
+			},
+		})
 	}
 
 	// Check for expiry
