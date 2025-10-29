@@ -51,7 +51,7 @@ import { sendWebhook } from './utils/webhook.js'
 import {
 	insertDepositIfMissing,
 	findDepositWithSufficientRemaining,
-    createAssignmentEventTransactional,
+	createAssignmentEventTransactional,
 } from './utils/deposits.js'
 import { handleAssignDeposit } from './utils/intentionHandlers/AssignDeposit.js'
 import { handleCreateVault } from './utils/intentionHandlers/CreateVault.js'
