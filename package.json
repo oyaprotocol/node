@@ -9,7 +9,7 @@
 	"scripts": {
 		"setup": "bun run scripts/setup.js",
 		"start": "bun run src/server.ts",
-		"test": "bun test test/*.test.ts",
+		"test:unit": "bun test test/*.test.ts",
 		"test:integration": "bun test test/integration/*.test.ts",
 		"test:all": "bun test",
 		"lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
