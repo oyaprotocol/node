@@ -10,7 +10,7 @@ export async function handleCreateVault(params: {
 	validatedController: string
 	deps: {
 		vaultTrackerContract: VaultTrackerContract
-		upsertVaultControllers: (
+		updateVaultControllers: (
 			vaultId: number,
 			controllers: string[]
 		) => Promise<void>
@@ -53,7 +53,7 @@ export async function handleCreateVault(params: {
 		deps.logger.info(`On-chain vault created with ID: ${newVaultId}`)
 
 		// 3. Persist the new vault-to-controller mapping to the database.
-		await deps.upsertVaultControllers(newVaultId, [validatedController])
+		await deps.updateVaultControllers(newVaultId, [validatedController])
 
 		// 4. Submit an intention to seed it with initial balances.
 		await deps.createAndSubmitSeedingIntention(newVaultId)

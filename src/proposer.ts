@@ -34,7 +34,7 @@ import { resolveIntentionENS } from './utils/ensResolver.js'
 import {
 	getControllersForVault,
 	getVaultsForController,
-	upsertVaultControllers,
+	updateVaultControllers,
 } from './utils/vaults.js'
 import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
 import {
@@ -1085,7 +1085,7 @@ async function handleIntention(
 			validatedController,
 			deps: {
 				vaultTrackerContract,
-				upsertVaultControllers,
+				updateVaultControllers,
 				createAndSubmitSeedingIntention,
 				logger,
 			},
@@ -1373,7 +1373,7 @@ export function getSepoliaAlchemy() {
  */
 async function seedProposerVaultMapping() {
 	try {
-		await upsertVaultControllers(PROPOSER_VAULT_ID.value, [PROPOSER_ADDRESS])
+		await updateVaultControllers(PROPOSER_VAULT_ID.value, [PROPOSER_ADDRESS])
 		logger.info(
 			`Proposer vault mapping seeded: Vault ${PROPOSER_VAULT_ID.value} -> Controller ${PROPOSER_ADDRESS}`
 		)
