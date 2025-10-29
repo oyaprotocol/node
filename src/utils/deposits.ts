@@ -69,70 +69,7 @@ export async function insertDepositIfMissing(
 	}
 }
 
-export interface FindExactUnassignedParams {
-	depositor: string
-	token: string
-	amount: string
-	chain_id: number
-}
 
-export async function findExactUnassignedDeposit(
-	params: FindExactUnassignedParams
-): Promise<{ id: number } | null> {
-	const depositor = params.depositor.toLowerCase()
-	const token = params.token.toLowerCase()
-	const amount = params.amount
-	const chainId = params.chain_id
-
-	const result = await pool.query(
-		`SELECT id
-     FROM deposits
-     WHERE depositor = $1
-       AND LOWER(token) = LOWER($2)
-       AND amount = $3
-       AND chain_id = $4
-       AND assigned_at IS NULL
-     ORDER BY id ASC
-     LIMIT 1`,
-		[depositor, token, amount, chainId]
-	)
-
-	if (result.rows.length === 0) return null
-	return { id: result.rows[0].id as number }
-}
-
-export async function markDepositAssigned(
-	deposit_id: number,
-	credited_vault: string
-): Promise<void> {
-	const client = await pool.connect()
-	try {
-		await client.query('BEGIN')
-		const update = await client.query(
-			`UPDATE deposits
-       SET credited_vault = $2,
-           assigned_at = CURRENT_TIMESTAMP
-       WHERE id = $1
-         AND assigned_at IS NULL
-       RETURNING id`,
-			[deposit_id, String(credited_vault)]
-		)
-		if (update.rows.length === 0) {
-			await client.query('ROLLBACK')
-			throw new Error('Deposit already assigned or not found')
-		}
-		await client.query('COMMIT')
-	} catch (error) {
-		try {
-			await client.query('ROLLBACK')
-		} catch (rollbackError) {
-			logger.warn('Rollback failed during markDepositAssigned', rollbackError)
-		}
-		throw error
-	} finally {
-		client.release()
-	}
-}
 
 /**
  * Returns remaining (unassigned) amount for a deposit as a decimal string (wei).

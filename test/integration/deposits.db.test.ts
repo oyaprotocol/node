@@ -12,9 +12,7 @@ import {
 } from 'bun:test'
 import { pool } from '../../src/db.js'
 import {
-	insertDepositIfMissing,
-	findExactUnassignedDeposit,
-	markDepositAssigned,
+    insertDepositIfMissing,
     getDepositRemaining,
     findDepositWithSufficientRemaining,
     createAssignmentEventTransactional,
@@ -63,7 +61,7 @@ describe('Deposits utils (DB)', () => {
 		expect(row.rows[0].assigned_at).toBeNull()
 	})
 
-	test('findExactUnassignedDeposit then markDepositAssigned', async () => {
+test('sufficient-remaining selection and full assignment event', async () => {
 		// two deposits, distinct amounts
 		await insertDepositIfMissing({
 			tx_hash: TEST_TX,
@@ -82,106 +80,113 @@ describe('Deposits utils (DB)', () => {
 			amount: '555',
 		})
 
-		const found1 = await findExactUnassignedDeposit({
-			depositor: CTRL,
-			token: TOKEN,
-			amount: '123',
-			chain_id: 11155111,
-		})
-		expect(found1?.id).toBeDefined()
+    const found1 = await findDepositWithSufficientRemaining({
+        depositor: CTRL,
+        token: TOKEN,
+        chain_id: 11155111,
+        minAmount: '123',
+    })
+    expect(found1?.id).toBeDefined()
 
-		const found2 = await findExactUnassignedDeposit({
-			depositor: CTRL,
-			token: ZERO,
-			amount: '555',
-			chain_id: 11155111,
-		})
-		expect(found2?.id).toBe(ins.id)
+    const found2 = await findDepositWithSufficientRemaining({
+        depositor: CTRL,
+        token: ZERO,
+        chain_id: 11155111,
+        minAmount: '555',
+    })
+    expect(found2?.id).toBe(ins.id)
 
-		// mark assigned
-		await markDepositAssigned(found2!.id, '9999')
-		const reread = await pool.query(
-			'SELECT credited_vault, assigned_at FROM deposits WHERE id = $1',
-			[found2!.id]
-		)
-		expect(reread.rows[0].credited_vault).toBe('9999')
-		expect(reread.rows[0].assigned_at).not.toBeNull()
+    // full assignment via event
+    await createAssignmentEventTransactional(found2!.id, '555', '9999')
+    const remaining = await getDepositRemaining(found2!.id)
+    expect(remaining).toBe('0')
+    const reread = await pool.query(
+        'SELECT assigned_at FROM deposits WHERE id = $1',
+        [found2!.id]
+    )
+    expect(reread.rows[0].assigned_at).not.toBeNull()
 
-		// no longer available for selection
-		const notFound = await findExactUnassignedDeposit({
-			depositor: CTRL,
-			token: ZERO,
-			amount: '555',
-			chain_id: 11155111,
-		})
+    // no longer available for selection for any positive amount
+    const notFound = await findDepositWithSufficientRemaining({
+        depositor: CTRL,
+        token: ZERO,
+        chain_id: 11155111,
+        minAmount: '1',
+    })
 		expect(notFound).toBeNull()
 	})
 })
 
 describe('Partial assignment events (DB)', () => {
-    test('remaining decreases with partial assignments and assigned_at set when fully assigned', async () => {
-        const ins = await insertDepositIfMissing({
-            tx_hash: TEST_TX,
-            transfer_uid: TEST_UID(100),
-            chain_id: 11155111,
-            depositor: CTRL,
-            token: TOKEN,
-            amount: '1000',
-        })
+	test('remaining decreases with partial assignments and assigned_at set when fully assigned', async () => {
+		const ins = await insertDepositIfMissing({
+			tx_hash: TEST_TX,
+			transfer_uid: TEST_UID(100),
+			chain_id: 11155111,
+			depositor: CTRL,
+			token: TOKEN,
+			amount: '1000',
+		})
 
-        const before = await getDepositRemaining(ins.id)
-        expect(before).toBe('1000')
+		const before = await getDepositRemaining(ins.id)
+		expect(before).toBe('1000')
 
-        // Assign 400
-        await createAssignmentEventTransactional(ins.id, '400', '8001')
-        const after400 = await getDepositRemaining(ins.id)
-        expect(after400).toBe('600')
+		// Assign 400
+		await createAssignmentEventTransactional(ins.id, '400', '8001')
+		const after400 = await getDepositRemaining(ins.id)
+		expect(after400).toBe('600')
 
-        // Not fully assigned yet
-        const row1 = await pool.query('SELECT assigned_at FROM deposits WHERE id = $1', [ins.id])
-        expect(row1.rows[0].assigned_at).toBeNull()
+		// Not fully assigned yet
+		const row1 = await pool.query(
+			'SELECT assigned_at FROM deposits WHERE id = $1',
+			[ins.id]
+		)
+		expect(row1.rows[0].assigned_at).toBeNull()
 
-        // Assign remaining 600
-        await createAssignmentEventTransactional(ins.id, '600', '8002')
-        const afterFull = await getDepositRemaining(ins.id)
-        expect(afterFull).toBe('0')
+		// Assign remaining 600
+		await createAssignmentEventTransactional(ins.id, '600', '8002')
+		const afterFull = await getDepositRemaining(ins.id)
+		expect(afterFull).toBe('0')
 
-        const row2 = await pool.query('SELECT assigned_at FROM deposits WHERE id = $1', [ins.id])
-        expect(row2.rows[0].assigned_at).not.toBeNull()
-    })
+		const row2 = await pool.query(
+			'SELECT assigned_at FROM deposits WHERE id = $1',
+			[ins.id]
+		)
+		expect(row2.rows[0].assigned_at).not.toBeNull()
+	})
 
-    test('selection uses sufficient remaining and fails on over-assignment', async () => {
-        const ins = await insertDepositIfMissing({
-            tx_hash: TEST_TX,
-            transfer_uid: TEST_UID(101),
-            chain_id: 11155111,
-            depositor: CTRL,
-            token: TOKEN,
-            amount: '700',
-        })
+	test('selection uses sufficient remaining and fails on over-assignment', async () => {
+		const ins = await insertDepositIfMissing({
+			tx_hash: TEST_TX,
+			transfer_uid: TEST_UID(101),
+			chain_id: 11155111,
+			depositor: CTRL,
+			token: TOKEN,
+			amount: '700',
+		})
 
-        // Oldest deposit with remaining >= 500 should be this one initially
-        const pick1 = await findDepositWithSufficientRemaining({
-            depositor: CTRL,
-            token: TOKEN,
-            chain_id: 11155111,
-            minAmount: '500',
-        })
-        expect(pick1?.id).toBe(ins.id)
+		// Oldest deposit with remaining >= 500 should be this one initially
+		const pick1 = await findDepositWithSufficientRemaining({
+			depositor: CTRL,
+			token: TOKEN,
+			chain_id: 11155111,
+			minAmount: '500',
+		})
+		expect(pick1?.id).toBe(ins.id)
 
-        // Assign 650 (leave 50)
-        await createAssignmentEventTransactional(ins.id, '650', '9001')
-        const remaining = await getDepositRemaining(ins.id)
-        expect(remaining).toBe('50')
+		// Assign 650 (leave 50)
+		await createAssignmentEventTransactional(ins.id, '650', '9001')
+		const remaining = await getDepositRemaining(ins.id)
+		expect(remaining).toBe('50')
 
-        // Cannot assign 100 now
-        await expect(
-            createAssignmentEventTransactional(ins.id, '100', '9002')
-        ).rejects.toThrow()
+		// Cannot assign 100 now
+		await expect(
+			createAssignmentEventTransactional(ins.id, '100', '9002')
+		).rejects.toThrow()
 
-        // But can assign 50
-        await createAssignmentEventTransactional(ins.id, '50', '9003')
-        const remaining2 = await getDepositRemaining(ins.id)
-        expect(remaining2).toBe('0')
-    })
+		// But can assign 50
+		await createAssignmentEventTransactional(ins.id, '50', '9003')
+		const remaining2 = await getDepositRemaining(ins.id)
+		expect(remaining2).toBe('0')
+	})
 })
