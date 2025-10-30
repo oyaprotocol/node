@@ -42,6 +42,8 @@ import {
 	validateAddress,
 	validateSignature,
 	validateId,
+  validateAssignDepositStructure as baseValidateAssignDepositStructure,
+  validateVaultIdOnChain as baseValidateVaultIdOnChain,
 } from './utils/validator.js'
 import {
 	pinBundleToFilecoin,
@@ -132,27 +134,14 @@ let isInitialized = false
 
 // ~7 days at ~12s blocks
 const APPROX_7D_BLOCKS = 50400
-/**
- * Validates that a vault ID exists on-chain by checking it is within range
- * [1, nextVaultId - 1]. Throws if invalid or out of range.
- */
-export async function validateVaultIdOnChain(vaultId: number): Promise<void> {
-	// Basic sanity
-	if (!Number.isInteger(vaultId) || vaultId < 1) {
-		throw new Error('Invalid vault ID')
-	}
-	// Ensure contracts are initialized
+// Wrapper to use validator's on-chain vault ID validation with contract dependency
+const validateVaultIdOnChain = async (vaultId: number): Promise<void> => {
 	if (!vaultTrackerContract) {
 		throw new Error('VaultTracker contract not initialized')
 	}
 	const nextId = await vaultTrackerContract.nextVaultId()
 	const nextIdNumber = Number(nextId)
-	if (!Number.isFinite(nextIdNumber)) {
-		throw new Error('Could not determine nextVaultId from chain')
-	}
-	if (vaultId >= nextIdNumber) {
-		throw new Error('Vault ID does not exist on-chain')
-	}
+	await baseValidateVaultIdOnChain(vaultId, async () => nextIdNumber)
 }
 
 /**
@@ -260,70 +249,13 @@ async function discoverAndIngestDeposits(params: {
  *   - agentTip must be undefined or empty
  */
 
-export async function validateAssignDepositStructure(
+// Wrapper to use validator's AssignDeposit structural validation with on-chain vault check
+const validateAssignDepositStructure = async (
 	intention: Intention
-): Promise<void> {
-	if (!Array.isArray(intention.inputs) || !Array.isArray(intention.outputs)) {
-		throw new Error('AssignDeposit requires inputs and outputs arrays')
-	}
-	if (intention.inputs.length !== intention.outputs.length) {
-		throw new Error(
-			'AssignDeposit requires 1:1 mapping between inputs and outputs'
-		)
-	}
-
-	// Zero-fee enforcement
-	if (!Array.isArray(intention.totalFee) || intention.totalFee.length === 0) {
-		throw new Error('AssignDeposit requires totalFee with zero amount')
-	}
-	const allTotalZero = intention.totalFee.every((f) => f.amount === '0')
-	if (!allTotalZero) {
-		throw new Error('AssignDeposit totalFee must be zero')
-	}
-	if (
-		Array.isArray(intention.proposerTip) &&
-		intention.proposerTip.length > 0
-	) {
-		throw new Error('AssignDeposit proposerTip must be empty')
-	}
-	if (
-		Array.isArray(intention.protocolFee) &&
-		intention.protocolFee.length > 0
-	) {
-		throw new Error('AssignDeposit protocolFee must be empty')
-	}
-	if (Array.isArray(intention.agentTip) && intention.agentTip.length > 0) {
-		throw new Error('AssignDeposit agentTip must be empty if provided')
-	}
-
-	for (let i = 0; i < intention.inputs.length; i++) {
-		const input: IntentionInput = intention.inputs[i]
-		const output: IntentionOutput = intention.outputs[i]
-
-		if (!output || (output.to === undefined && !output.to_external)) {
-			throw new Error('AssignDeposit requires outputs[].to (vault ID)')
-		}
-		if (output.to_external !== undefined) {
-			throw new Error('AssignDeposit does not support to_external')
-		}
-
-		if (input.asset.toLowerCase() !== output.asset.toLowerCase()) {
-			throw new Error('AssignDeposit input/output asset mismatch at index ' + i)
-		}
-		if (input.amount !== output.amount) {
-			throw new Error(
-				'AssignDeposit input/output amount mismatch at index ' + i
-			)
-		}
-		if (input.chain_id !== output.chain_id) {
-			throw new Error(
-				'AssignDeposit input/output chain_id mismatch at index ' + i
-			)
-		}
-
-		// Validate on-chain vault existence
-		await validateVaultIdOnChain(Number(output.to))
-	}
+): Promise<void> => {
+	await baseValidateAssignDepositStructure(intention, async (id: number) =>
+		validateVaultIdOnChain(id)
+	)
 }
 
 /**
@@ -817,8 +749,8 @@ async function publishBundle(data: string, signature: string, from: string) {
 					await updateBalance(proof.to, proof.token, newBalance)
 				}
 			} else {
-			for (const proof of execution.proof) {
-				await updateBalances(proof.from, proof.to, proof.token, proof.amount)
+				for (const proof of execution.proof) {
+					await updateBalances(proof.from, proof.to, proof.token, proof.amount)
 				}
 			}
 		}
