@@ -445,28 +445,28 @@ export function handleValidationError(error: unknown): {
  */
 export async function validateVaultIdOnChain(
 	vaultId: number,
-  getNextVaultId: () => Promise<number>
+	getNextVaultId: () => Promise<number>
 ): Promise<void> {
-  if (!Number.isInteger(vaultId) || vaultId < 0) {
-    throw new ValidationError('Invalid vault ID', 'vaultId', vaultId)
-  }
+	if (!Number.isInteger(vaultId) || vaultId < 0) {
+		throw new ValidationError('Invalid vault ID', 'vaultId', vaultId)
+	}
 
-  const nextIdNumber = await getNextVaultId()
-  if (!Number.isFinite(nextIdNumber)) {
-    throw new ValidationError(
-      'Could not determine nextVaultId from chain',
-      'nextVaultId',
-      nextIdNumber
-    )
-  }
-  if (vaultId >= nextIdNumber) {
-    throw new ValidationError(
-      'Vault ID does not exist on-chain',
-      'vaultId',
-      vaultId,
-      { nextVaultId: nextIdNumber }
-    )
-  }
+	const nextIdNumber = await getNextVaultId()
+	if (!Number.isFinite(nextIdNumber)) {
+		throw new ValidationError(
+			'Could not determine nextVaultId from chain',
+			'nextVaultId',
+			nextIdNumber
+		)
+	}
+	if (vaultId >= nextIdNumber) {
+		throw new ValidationError(
+			'Vault ID does not exist on-chain',
+			'vaultId',
+			vaultId,
+			{ nextVaultId: nextIdNumber }
+		)
+	}
 }
 
 /**
@@ -479,102 +479,108 @@ export async function validateVaultIdOnChain(
  * Accepts a dependency to validate vault IDs on-chain.
  */
 export async function validateAssignDepositStructure(
-  intention: Intention,
-  validateVaultId: (vaultId: number) => Promise<void>
+	intention: Intention,
+	validateVaultId: (vaultId: number) => Promise<void>
 ): Promise<void> {
-  if (!Array.isArray(intention.inputs) || !Array.isArray(intention.outputs)) {
-    throw new ValidationError(
-      'AssignDeposit requires inputs and outputs arrays',
-      'intention',
-      intention
-    )
-  }
-  if (intention.inputs.length !== intention.outputs.length) {
-    throw new ValidationError(
-      'AssignDeposit requires 1:1 mapping between inputs and outputs',
-      'intention',
-      { inputs: intention.inputs.length, outputs: intention.outputs.length }
-    )
-  }
+	if (!Array.isArray(intention.inputs) || !Array.isArray(intention.outputs)) {
+		throw new ValidationError(
+			'AssignDeposit requires inputs and outputs arrays',
+			'intention',
+			intention
+		)
+	}
+	if (intention.inputs.length !== intention.outputs.length) {
+		throw new ValidationError(
+			'AssignDeposit requires 1:1 mapping between inputs and outputs',
+			'intention',
+			{ inputs: intention.inputs.length, outputs: intention.outputs.length }
+		)
+	}
 
-  if (!Array.isArray(intention.totalFee) || intention.totalFee.length === 0) {
-    throw new ValidationError(
-      'AssignDeposit requires totalFee with zero amount',
-      'intention.totalFee',
-      intention.totalFee
-    )
-  }
-  const allTotalZero = intention.totalFee.every((f) => f.amount === '0')
-  if (!allTotalZero) {
-    throw new ValidationError(
-      'AssignDeposit totalFee must be zero',
-      'intention.totalFee',
-      intention.totalFee
-    )
-  }
-  if (Array.isArray(intention.proposerTip) && intention.proposerTip.length > 0) {
-    throw new ValidationError(
-      'AssignDeposit proposerTip must be empty',
-      'intention.proposerTip',
-      intention.proposerTip
-    )
-  }
-  if (Array.isArray(intention.protocolFee) && intention.protocolFee.length > 0) {
-    throw new ValidationError(
-      'AssignDeposit protocolFee must be empty',
-      'intention.protocolFee',
-      intention.protocolFee
-    )
-  }
-  if (Array.isArray(intention.agentTip) && intention.agentTip.length > 0) {
-    throw new ValidationError(
-      'AssignDeposit agentTip must be empty if provided',
-      'intention.agentTip',
-      intention.agentTip
-    )
-  }
+	if (!Array.isArray(intention.totalFee) || intention.totalFee.length === 0) {
+		throw new ValidationError(
+			'AssignDeposit requires totalFee with zero amount',
+			'intention.totalFee',
+			intention.totalFee
+		)
+	}
+	const allTotalZero = intention.totalFee.every((f) => f.amount === '0')
+	if (!allTotalZero) {
+		throw new ValidationError(
+			'AssignDeposit totalFee must be zero',
+			'intention.totalFee',
+			intention.totalFee
+		)
+	}
+	if (
+		Array.isArray(intention.proposerTip) &&
+		intention.proposerTip.length > 0
+	) {
+		throw new ValidationError(
+			'AssignDeposit proposerTip must be empty',
+			'intention.proposerTip',
+			intention.proposerTip
+		)
+	}
+	if (
+		Array.isArray(intention.protocolFee) &&
+		intention.protocolFee.length > 0
+	) {
+		throw new ValidationError(
+			'AssignDeposit protocolFee must be empty',
+			'intention.protocolFee',
+			intention.protocolFee
+		)
+	}
+	if (Array.isArray(intention.agentTip) && intention.agentTip.length > 0) {
+		throw new ValidationError(
+			'AssignDeposit agentTip must be empty if provided',
+			'intention.agentTip',
+			intention.agentTip
+		)
+	}
 
-  for (let i = 0; i < intention.inputs.length; i++) {
-    const input = intention.inputs[i]
-    const output = intention.outputs[i]
+	for (let i = 0; i < intention.inputs.length; i++) {
+		const input = intention.inputs[i]
+		const output = intention.outputs[i]
 
-    if (!output || (output.to === undefined && !output.to_external)) {
-      throw new ValidationError(
-        'AssignDeposit requires outputs[].to (vault ID)',
-        `intention.outputs[${i}].to`,
-        output
-      )
-    }
-    if (output.to_external !== undefined) {
-      throw new ValidationError(
-        'AssignDeposit does not support to_external',
-        `intention.outputs[${i}].to_external`,
-        output.to_external
-      )
-    }
+		if (!output || (output.to === undefined && !output.to_external)) {
+			throw new ValidationError(
+				'AssignDeposit requires outputs[].to (vault ID)',
+				`intention.outputs[${i}].to`,
+				output
+			)
+		}
+		if (output.to_external !== undefined) {
+			throw new ValidationError(
+				'AssignDeposit does not support to_external',
+				`intention.outputs[${i}].to_external`,
+				output.to_external
+			)
+		}
 
-    if (input.asset.toLowerCase() !== output.asset.toLowerCase()) {
-      throw new ValidationError(
-        'AssignDeposit input/output asset mismatch',
-        `intention.inputs[${i}].asset`,
-        { input: input.asset, output: output.asset }
-      )
-    }
-    if (input.amount !== output.amount) {
-      throw new ValidationError(
-        'AssignDeposit input/output amount mismatch',
-        `intention.inputs[${i}].amount`,
-        { input: input.amount, output: output.amount }
-      )
-    }
-    if (input.chain_id !== output.chain_id) {
-      throw new ValidationError(
-        'AssignDeposit input/output chain_id mismatch',
-        `intention.inputs[${i}].chain_id`,
-        { input: input.chain_id, output: output.chain_id }
-      )
-    }
+		if (input.asset.toLowerCase() !== output.asset.toLowerCase()) {
+			throw new ValidationError(
+				'AssignDeposit input/output asset mismatch',
+				`intention.inputs[${i}].asset`,
+				{ input: input.asset, output: output.asset }
+			)
+		}
+		if (input.amount !== output.amount) {
+			throw new ValidationError(
+				'AssignDeposit input/output amount mismatch',
+				`intention.inputs[${i}].amount`,
+				{ input: input.amount, output: output.amount }
+			)
+		}
+		if (input.chain_id !== output.chain_id) {
+			throw new ValidationError(
+				'AssignDeposit input/output chain_id mismatch',
+				`intention.inputs[${i}].chain_id`,
+				{ input: input.chain_id, output: output.chain_id }
+			)
+		}
 
-    await validateVaultId(Number(output.to))
-  }
+		await validateVaultId(Number(output.to))
+	}
 }

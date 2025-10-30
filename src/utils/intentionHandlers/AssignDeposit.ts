@@ -12,14 +12,12 @@ import type {
 type AssignDepositContext = {
 	validateAssignDepositStructure: (intention: Intention) => Promise<void>
 	discoverAndIngestErc20Deposits: (args: {
-		controller: string
 		token: string
 		chainId: number
 		fromBlockHex?: string
 		toBlockHex?: string
 	}) => Promise<void>
 	discoverAndIngestEthDeposits: (args: {
-		controller: string
 		chainId: number
 		fromBlockHex?: string
 		toBlockHex?: string
@@ -69,14 +67,12 @@ export async function handleAssignDeposit(params: {
 		const isEth = input.asset.toLowerCase() === zeroAddress
 		if (isEth) {
 			await context.discoverAndIngestEthDeposits({
-				controller: validatedController,
 				chainId: input.chain_id,
 				fromBlockHex,
 				toBlockHex,
 			})
 		} else {
 			await context.discoverAndIngestErc20Deposits({
-				controller: validatedController,
 				token: input.asset,
 				chainId: input.chain_id,
 				fromBlockHex,

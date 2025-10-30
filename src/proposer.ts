@@ -42,8 +42,8 @@ import {
 	validateAddress,
 	validateSignature,
 	validateId,
-  validateAssignDepositStructure as baseValidateAssignDepositStructure,
-  validateVaultIdOnChain as baseValidateVaultIdOnChain,
+	validateAssignDepositStructure as baseValidateAssignDepositStructure,
+	validateVaultIdOnChain as baseValidateVaultIdOnChain,
 } from './utils/validator.js'
 import {
 	pinBundleToFilecoin,
@@ -134,6 +134,9 @@ let isInitialized = false
 
 // ~7 days at ~12s blocks
 const APPROX_7D_BLOCKS = 50400
+
+// In-memory discovery cursors per chainId (last checked block number)
+const lastCheckedBlockByChain: Record<number, number> = {}
 // Wrapper to use validator's on-chain vault ID validation with contract dependency
 const validateVaultIdOnChain = async (vaultId: number): Promise<void> => {
 	if (!vaultTrackerContract) {
@@ -149,17 +152,23 @@ const validateVaultIdOnChain = async (vaultId: number): Promise<void> => {
  * defaulting to a ~7 day lookback if not provided.
  */
 async function computeBlockRange(
-	fromBlockHex?: string,
-	toBlockHex?: string
-): Promise<{ fromBlockHex: string; toBlockHex: string }> {
+  chainId: number,
+  fromBlockHex?: string,
+  toBlockHex?: string
+): Promise<{ fromBlockHex: string; toBlockHex: string; toBlockNum: number }> {
 	const provider = (await sepoliaAlchemy.config.getProvider()) as unknown as {
 		getBlockNumber: () => Promise<number>
 	}
 	const latest = await provider.getBlockNumber()
-	const resolvedTo = toBlockHex ?? '0x' + latest.toString(16)
-	const fromBlock = Math.max(0, latest - APPROX_7D_BLOCKS)
-	const resolvedFrom = fromBlockHex ?? '0x' + fromBlock.toString(16)
-	return { fromBlockHex: resolvedFrom, toBlockHex: resolvedTo }
+  const resolvedTo = toBlockHex ?? '0x' + latest.toString(16)
+  const toBlockNum = parseInt(resolvedTo, 16)
+  const defaultFrom = Math.max(0, latest - APPROX_7D_BLOCKS)
+  const cursorFrom =
+    lastCheckedBlockByChain[chainId] !== undefined
+      ? Math.min(toBlockNum, lastCheckedBlockByChain[chainId] + 1)
+      : defaultFrom
+  const resolvedFrom = fromBlockHex ?? '0x' + cursorFrom.toString(16)
+  return { fromBlockHex: resolvedFrom, toBlockHex: resolvedTo, toBlockNum }
 }
 
 /**
@@ -168,14 +177,12 @@ async function computeBlockRange(
  */
 
 async function discoverAndIngestDeposits(params: {
-	controller: string
-	chainId: number
-	categories: Array<'erc20' | 'internal' | 'external'>
-	token?: string
-	fromBlockHex?: string
-	toBlockHex?: string
+  chainId: number
+  categories: Array<'erc20' | 'internal' | 'external'>
+  token?: string
+  fromBlockHex?: string
+  toBlockHex?: string
 }): Promise<void> {
-	const controller = validateAddress(params.controller, 'controller')
 
 	if (!isInitialized) {
 		throw new Error('Proposer not initialized')
@@ -184,10 +191,11 @@ async function discoverAndIngestDeposits(params: {
 		throw new Error('Unsupported chain_id for discovery')
 	}
 
-	const { fromBlockHex, toBlockHex } = await computeBlockRange(
-		params.fromBlockHex,
-		params.toBlockHex
-	)
+	const { fromBlockHex, toBlockHex, toBlockNum } = await computeBlockRange(
+    params.chainId,
+    params.fromBlockHex,
+    params.toBlockHex
+  )
 
 	let pageKey: string | undefined = undefined
 	do {
@@ -195,7 +203,6 @@ async function discoverAndIngestDeposits(params: {
 		const req: any = {
 			fromBlock: fromBlockHex,
 			toBlock: toBlockHex,
-			fromAddress: controller,
 			toAddress: VAULT_TRACKER_ADDRESS,
 			category: params.categories,
 			withMetadata: true,
@@ -234,6 +241,9 @@ async function discoverAndIngestDeposits(params: {
 		}
 		pageKey = res?.pageKey
 	} while (pageKey)
+
+  // Advance cursor for this chain to the block we just scanned up to
+  lastCheckedBlockByChain[params.chainId] = toBlockNum
 }
 
 /**
@@ -267,14 +277,12 @@ const validateAssignDepositStructure = async (
  * of ~7 days by subtracting ~50,400 blocks from the latest block.
  */
 async function discoverAndIngestErc20Deposits(params: {
-	controller: string
-	token: string
-	chainId: number
-	fromBlockHex?: string
-	toBlockHex?: string
+  token: string
+  chainId: number
+  fromBlockHex?: string
+  toBlockHex?: string
 }): Promise<void> {
 	await discoverAndIngestDeposits({
-		controller: params.controller,
 		chainId: params.chainId,
 		categories: ['erc20'],
 		token: params.token,
@@ -288,13 +296,11 @@ async function discoverAndIngestErc20Deposits(params: {
  * and ingests them into the local `deposits` table via idempotent inserts.
  */
 async function discoverAndIngestEthDeposits(params: {
-	controller: string
-	chainId: number
-	fromBlockHex?: string
-	toBlockHex?: string
+  chainId: number
+  fromBlockHex?: string
+  toBlockHex?: string
 }): Promise<void> {
 	await discoverAndIngestDeposits({
-		controller: params.controller,
 		chainId: params.chainId,
 		categories: ['internal', 'external'],
 		fromBlockHex: params.fromBlockHex,
