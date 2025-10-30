@@ -76,7 +76,6 @@ CREATE TABLE IF NOT EXISTS deposits (
   depositor TEXT NOT NULL,
   token TEXT NOT NULL,
   amount NUMERIC(78, 0) NOT NULL,
-  credited_vault TEXT,
   assigned_at TIMESTAMPTZ
 );
 
@@ -107,8 +106,7 @@ CREATE INDEX IF NOT EXISTS idx_vaults_controllers ON vaults USING GIN (controlle
 -- Create indexes for deposits table
 CREATE INDEX IF NOT EXISTS idx_deposits_tx_hash ON deposits(tx_hash);
 CREATE INDEX IF NOT EXISTS idx_deposits_depositor ON deposits(depositor, chain_id);
-CREATE INDEX IF NOT EXISTS idx_deposits_token ON deposits(token);
-CREATE INDEX IF NOT EXISTS idx_deposits_vault ON deposits(credited_vault);
+CREATE INDEX IF NOT EXISTS idx_deposits_token ON deposits(token, chain_id);
 
 -- Create indexes for deposit_assignment_events table
 CREATE INDEX IF NOT EXISTS idx_assignment_deposit ON deposit_assignment_events(deposit_id);
@@ -168,8 +166,8 @@ export async function setupDatabase(options) {
 			console.log(chalk.red('⚠️  Dropping existing tables...'))
 
 			if (!forceDropConfirm) {
-            console.log(chalk.red('\n⚠️  WARNING: This will DELETE ALL DATA in the following tables:'))
-            console.log(chalk.red('  - bundles, cids, balances, proposers, vaults, deposits, deposit_assignment_events'))
+				console.log(chalk.red('\n⚠️  WARNING: This will DELETE ALL DATA in the following tables:'))
+				console.log(chalk.red('  - bundles, cids, balances, vaults, proposers, deposits, deposit_assignment_events'))
 				console.log(chalk.yellow('\nTo confirm, set FORCE_DROP=true or remove --drop-existing flag'))
 				await pool.end()
 				process.exit(1)

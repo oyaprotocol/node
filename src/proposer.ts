@@ -42,6 +42,8 @@ import {
 	validateAddress,
 	validateSignature,
 	validateId,
+	validateAssignDepositStructure as baseValidateAssignDepositStructure,
+	validateVaultIdOnChain as baseValidateVaultIdOnChain,
 } from './utils/validator.js'
 import {
 	pinBundleToFilecoin,
@@ -132,27 +134,17 @@ let isInitialized = false
 
 // ~7 days at ~12s blocks
 const APPROX_7D_BLOCKS = 50400
-/**
- * Validates that a vault ID exists on-chain by checking it is within range
- * [1, nextVaultId - 1]. Throws if invalid or out of range.
- */
-export async function validateVaultIdOnChain(vaultId: number): Promise<void> {
-	// Basic sanity
-	if (!Number.isInteger(vaultId) || vaultId < 1) {
-		throw new Error('Invalid vault ID')
-	}
-	// Ensure contracts are initialized
+
+// In-memory discovery cursors per chainId (last checked block number)
+const lastCheckedBlockByChain: Record<number, number> = {}
+// Wrapper to use validator's on-chain vault ID validation with contract dependency
+const validateVaultIdOnChain = async (vaultId: number): Promise<void> => {
 	if (!vaultTrackerContract) {
 		throw new Error('VaultTracker contract not initialized')
 	}
 	const nextId = await vaultTrackerContract.nextVaultId()
 	const nextIdNumber = Number(nextId)
-	if (!Number.isFinite(nextIdNumber)) {
-		throw new Error('Could not determine nextVaultId from chain')
-	}
-	if (vaultId >= nextIdNumber) {
-		throw new Error('Vault ID does not exist on-chain')
-	}
+	await baseValidateVaultIdOnChain(vaultId, async () => nextIdNumber)
 }
 
 /**
@@ -160,17 +152,23 @@ export async function validateVaultIdOnChain(vaultId: number): Promise<void> {
  * defaulting to a ~7 day lookback if not provided.
  */
 async function computeBlockRange(
+	chainId: number,
 	fromBlockHex?: string,
 	toBlockHex?: string
-): Promise<{ fromBlockHex: string; toBlockHex: string }> {
+): Promise<{ fromBlockHex: string; toBlockHex: string; toBlockNum: number }> {
 	const provider = (await sepoliaAlchemy.config.getProvider()) as unknown as {
 		getBlockNumber: () => Promise<number>
 	}
 	const latest = await provider.getBlockNumber()
 	const resolvedTo = toBlockHex ?? '0x' + latest.toString(16)
-	const fromBlock = Math.max(0, latest - APPROX_7D_BLOCKS)
-	const resolvedFrom = fromBlockHex ?? '0x' + fromBlock.toString(16)
-	return { fromBlockHex: resolvedFrom, toBlockHex: resolvedTo }
+	const toBlockNum = parseInt(resolvedTo, 16)
+	const defaultFrom = Math.max(0, latest - APPROX_7D_BLOCKS)
+	const cursorFrom =
+		lastCheckedBlockByChain[chainId] !== undefined
+			? Math.min(toBlockNum, lastCheckedBlockByChain[chainId] + 1)
+			: defaultFrom
+	const resolvedFrom = fromBlockHex ?? '0x' + cursorFrom.toString(16)
+	return { fromBlockHex: resolvedFrom, toBlockHex: resolvedTo, toBlockNum }
 }
 
 /**
@@ -179,15 +177,12 @@ async function computeBlockRange(
  */
 
 async function discoverAndIngestDeposits(params: {
-	controller: string
 	chainId: number
 	categories: Array<'erc20' | 'internal' | 'external'>
 	token?: string
 	fromBlockHex?: string
 	toBlockHex?: string
 }): Promise<void> {
-	const controller = validateAddress(params.controller, 'controller')
-
 	if (!isInitialized) {
 		throw new Error('Proposer not initialized')
 	}
@@ -195,7 +190,8 @@ async function discoverAndIngestDeposits(params: {
 		throw new Error('Unsupported chain_id for discovery')
 	}
 
-	const { fromBlockHex, toBlockHex } = await computeBlockRange(
+	const { fromBlockHex, toBlockHex, toBlockNum } = await computeBlockRange(
+		params.chainId,
 		params.fromBlockHex,
 		params.toBlockHex
 	)
@@ -206,7 +202,6 @@ async function discoverAndIngestDeposits(params: {
 		const req: any = {
 			fromBlock: fromBlockHex,
 			toBlock: toBlockHex,
-			fromAddress: controller,
 			toAddress: VAULT_TRACKER_ADDRESS,
 			category: params.categories,
 			withMetadata: true,
@@ -245,6 +240,9 @@ async function discoverAndIngestDeposits(params: {
 		}
 		pageKey = res?.pageKey
 	} while (pageKey)
+
+	// Advance cursor for this chain to the block we just scanned up to
+	lastCheckedBlockByChain[params.chainId] = toBlockNum
 }
 
 /**
@@ -260,70 +258,13 @@ async function discoverAndIngestDeposits(params: {
  *   - agentTip must be undefined or empty
  */
 
-export async function validateAssignDepositStructure(
+// Wrapper to use validator's AssignDeposit structural validation with on-chain vault check
+const validateAssignDepositStructure = async (
 	intention: Intention
-): Promise<void> {
-	if (!Array.isArray(intention.inputs) || !Array.isArray(intention.outputs)) {
-		throw new Error('AssignDeposit requires inputs and outputs arrays')
-	}
-	if (intention.inputs.length !== intention.outputs.length) {
-		throw new Error(
-			'AssignDeposit requires 1:1 mapping between inputs and outputs'
-		)
-	}
-
-	// Zero-fee enforcement
-	if (!Array.isArray(intention.totalFee) || intention.totalFee.length === 0) {
-		throw new Error('AssignDeposit requires totalFee with zero amount')
-	}
-	const allTotalZero = intention.totalFee.every((f) => f.amount === '0')
-	if (!allTotalZero) {
-		throw new Error('AssignDeposit totalFee must be zero')
-	}
-	if (
-		Array.isArray(intention.proposerTip) &&
-		intention.proposerTip.length > 0
-	) {
-		throw new Error('AssignDeposit proposerTip must be empty')
-	}
-	if (
-		Array.isArray(intention.protocolFee) &&
-		intention.protocolFee.length > 0
-	) {
-		throw new Error('AssignDeposit protocolFee must be empty')
-	}
-	if (Array.isArray(intention.agentTip) && intention.agentTip.length > 0) {
-		throw new Error('AssignDeposit agentTip must be empty if provided')
-	}
-
-	for (let i = 0; i < intention.inputs.length; i++) {
-		const input: IntentionInput = intention.inputs[i]
-		const output: IntentionOutput = intention.outputs[i]
-
-		if (!output || (output.to === undefined && !output.to_external)) {
-			throw new Error('AssignDeposit requires outputs[].to (vault ID)')
-		}
-		if (output.to_external !== undefined) {
-			throw new Error('AssignDeposit does not support to_external')
-		}
-
-		if (input.asset.toLowerCase() !== output.asset.toLowerCase()) {
-			throw new Error('AssignDeposit input/output asset mismatch at index ' + i)
-		}
-		if (input.amount !== output.amount) {
-			throw new Error(
-				'AssignDeposit input/output amount mismatch at index ' + i
-			)
-		}
-		if (input.chain_id !== output.chain_id) {
-			throw new Error(
-				'AssignDeposit input/output chain_id mismatch at index ' + i
-			)
-		}
-
-		// Validate on-chain vault existence
-		await validateVaultIdOnChain(Number(output.to))
-	}
+): Promise<void> => {
+	await baseValidateAssignDepositStructure(intention, async (id: number) =>
+		validateVaultIdOnChain(id)
+	)
 }
 
 /**
@@ -335,14 +276,12 @@ export async function validateAssignDepositStructure(
  * of ~7 days by subtracting ~50,400 blocks from the latest block.
  */
 async function discoverAndIngestErc20Deposits(params: {
-	controller: string
 	token: string
 	chainId: number
 	fromBlockHex?: string
 	toBlockHex?: string
 }): Promise<void> {
 	await discoverAndIngestDeposits({
-		controller: params.controller,
 		chainId: params.chainId,
 		categories: ['erc20'],
 		token: params.token,
@@ -356,13 +295,11 @@ async function discoverAndIngestErc20Deposits(params: {
  * and ingests them into the local `deposits` table via idempotent inserts.
  */
 async function discoverAndIngestEthDeposits(params: {
-	controller: string
 	chainId: number
 	fromBlockHex?: string
 	toBlockHex?: string
 }): Promise<void> {
 	await discoverAndIngestDeposits({
-		controller: params.controller,
 		chainId: params.chainId,
 		categories: ['internal', 'external'],
 		fromBlockHex: params.fromBlockHex,
@@ -1342,9 +1279,6 @@ export async function initializeProposer() {
 
 	logger.info('Initializing proposer module...')
 
-	// Seed the proposer's own vault-to-controller mapping
-	await seedProposerVaultMapping()
-
 	// Initialize wallet and contract
 	await initializeWalletAndContract()
 
@@ -1373,23 +1307,8 @@ export function getSepoliaAlchemy() {
 	return sepoliaAlchemy
 }
 
-/**
- * Ensures the proposer's vault-to-controller mapping is seeded in the database.
- * This is crucial for allowing the proposer to sign and submit seeding intentions.
- */
-async function seedProposerVaultMapping() {
-	try {
-		await updateVaultControllers(PROPOSER_VAULT_ID.value, [PROPOSER_ADDRESS])
-		logger.info(
-			`Proposer vault mapping seeded: Vault ${PROPOSER_VAULT_ID.value} -> Controller ${PROPOSER_ADDRESS}`
-		)
-	} catch (error) {
-		logger.error('Failed to seed proposer vault mapping:', error)
-		// We throw here because if the proposer can't control its own vault,
-		// it won't be able to perform critical functions like seeding new vaults.
-		throw new Error('Could not seed proposer vault mapping')
-	}
-}
+// Removed explicit seedProposerVaultMapping. Vault-controller associations are
+// discovered from on-chain events and should not be force-seeded at runtime.
 
 /**
  * Exports IPFS node for health checks
