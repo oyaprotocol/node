@@ -38,19 +38,10 @@ export const TEST_CID =
 
 /**
  * All POST endpoints that require authentication.
- * Used for testing that auth middleware protects state-modifying operations.
+ * Only /intention is publicly accessible via POST.
+ * Other write operations are internal-only (not exposed via HTTP).
  */
-export const POST_ENDPOINTS = [
-	'/intention',
-	'/bundle',
-	'/cid',
-	'/balance',
-	`/nonce/${TEST_VAULT_ID}`,
-	`/vault/${TEST_VAULT_ID}`,
-	`/vault/${TEST_VAULT_ID}/controllers/add`,
-	`/vault/${TEST_VAULT_ID}/controllers/remove`,
-	`/vault/${TEST_VAULT_ID}/rules`,
-]
+export const POST_ENDPOINTS = ['/intention']
 
 /**
  * All GET endpoints that should NOT require authentication.

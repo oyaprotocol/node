@@ -21,16 +21,12 @@
 import { Router } from 'express'
 import type { RouteMount } from './types/routes.js'
 import {
-	saveBundle,
 	getBundle,
 	getAllBundles,
-	saveCID,
 	getCIDsByNonce,
-	updateBalanceForOneToken,
 	getBalanceForOneToken,
 	getBalanceForAllTokens,
 	getVaultNonce,
-	setVaultNonce,
 	healthCheck,
 	detailedHealthCheck,
 	getInfo,
@@ -40,10 +36,6 @@ import {
 	getVaultIdsByController,
 	getControllersByVaultId,
 	getRulesByVaultId,
-	addControllerToVault,
-	removeControllerFromVault,
-	setRulesForVault,
-	createVault,
 } from './controllers.js'
 
 /**
@@ -79,26 +71,22 @@ export const routeMounts: RouteMount[] = [
 	{
 		basePath: '/bundle',
 		router: Router()
-			.post('/', saveBundle)
 			.get('/:nonce', getBundle)
 			.get('/', getAllBundles),
 	},
 	{
 		basePath: '/cid',
-		router: Router().post('/', saveCID).get('/:nonce', getCIDsByNonce),
+		router: Router().get('/:nonce', getCIDsByNonce),
 	},
 	{
 		basePath: '/balance',
 		router: Router()
-			.post('/', updateBalanceForOneToken)
 			.get('/:vault/:token', getBalanceForOneToken)
 			.get('/:vault', getBalanceForAllTokens),
 	},
 	{
 		basePath: '/nonce',
-		router: Router()
-			.get('/:vault', getVaultNonce)
-			.post('/:vault', setVaultNonce),
+		router: Router().get('/:vault', getVaultNonce),
 	},
 	{
 		basePath: '/filecoin',
@@ -107,12 +95,8 @@ export const routeMounts: RouteMount[] = [
 	{
 		basePath: '/vault',
 		router: Router()
-			.post('/:vaultId', createVault)
 			.get('/by-controller/:address', getVaultIdsByController)
 			.get('/:vaultId/controllers', getControllersByVaultId)
-			.get('/:vaultId/rules', getRulesByVaultId)
-			.post('/:vaultId/controllers/add', addControllerToVault)
-			.post('/:vaultId/controllers/remove', removeControllerFromVault)
-			.post('/:vaultId/rules', setRulesForVault),
+			.get('/:vaultId/rules', getRulesByVaultId),
 	},
 ]
