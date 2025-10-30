@@ -44,6 +44,7 @@ import {
 	validateId,
 	validateAssignDepositStructure as baseValidateAssignDepositStructure,
 	validateVaultIdOnChain as baseValidateVaultIdOnChain,
+	validateCreateVaultStructure,
 } from './utils/validator.js'
 import {
 	pinBundleToFilecoin,
@@ -1023,6 +1024,7 @@ async function handleIntention(
 
 	// Handle CreateVault intention and trigger seeding
 	if (validatedIntention.action === 'CreateVault') {
+		validateCreateVaultStructure(validatedIntention)
 		await handleCreateVault({
 			intention: validatedIntention,
 			validatedController,
@@ -1033,6 +1035,8 @@ async function handleIntention(
 				logger,
 			},
 		})
+		// CreateVault doesn't need balance checks or bundling - return empty execution object
+		return { execution: [] }
 	}
 
 	// Check for expiry
