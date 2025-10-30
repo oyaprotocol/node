@@ -70,9 +70,7 @@ export const routeMounts: RouteMount[] = [
 	},
 	{
 		basePath: '/bundle',
-		router: Router()
-			.get('/:nonce', getBundle)
-			.get('/', getAllBundles),
+		router: Router().get('/:nonce', getBundle).get('/', getAllBundles),
 	},
 	{
 		basePath: '/cid',
