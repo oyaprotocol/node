@@ -18,7 +18,7 @@ import {
 	POST_ENDPOINTS,
 	GET_ENDPOINTS,
 	SAMPLE_INTENTION,
-} from '../helpers/fixtures.js'
+} from '../helpers/testFixtures.js'
 import type { Server } from 'http'
 
 describe('Authentication Middleware', () => {
