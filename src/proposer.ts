@@ -817,8 +817,8 @@ async function publishBundle(data: string, signature: string, from: string) {
 					await updateBalance(proof.to, proof.token, newBalance)
 				}
 			} else {
-				for (const proof of execution.proof) {
-					await updateBalances(proof.from, proof.to, proof.token, proof.amount)
+			for (const proof of execution.proof) {
+				await updateBalances(proof.from, proof.to, proof.token, proof.amount)
 				}
 			}
 		}
