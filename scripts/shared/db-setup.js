@@ -74,6 +74,27 @@ CREATE TABLE IF NOT EXISTS vaults (
   rules TEXT,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Create the deposits table (tracks on-chain deposits to VaultTracker)
+CREATE TABLE IF NOT EXISTS deposits (
+  id SERIAL PRIMARY KEY,
+  tx_hash TEXT NOT NULL,
+  transfer_uid TEXT NOT NULL UNIQUE,
+  chain_id INTEGER NOT NULL,
+  depositor TEXT NOT NULL,
+  token TEXT NOT NULL,
+  amount NUMERIC(78, 0) NOT NULL,
+  assigned_at TIMESTAMPTZ
+);
+
+-- Create the deposit_assignment_events table (supports partial assignments)
+CREATE TABLE IF NOT EXISTS deposit_assignment_events (
+  id SERIAL PRIMARY KEY,
+  deposit_id INTEGER NOT NULL REFERENCES deposits(id) ON DELETE CASCADE,
+  amount NUMERIC(78, 0) NOT NULL,
+  credited_vault TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
 `
 
 /**
@@ -90,12 +111,23 @@ CREATE INDEX IF NOT EXISTS idx_bundles_ipfs_cid ON bundles(ipfs_cid);
 
 -- Create GIN index on vaults controllers array for efficient lookups
 CREATE INDEX IF NOT EXISTS idx_vaults_controllers ON vaults USING GIN (controllers);
+
+-- Create indexes for deposits table
+CREATE INDEX IF NOT EXISTS idx_deposits_tx_hash ON deposits(tx_hash);
+CREATE INDEX IF NOT EXISTS idx_deposits_depositor ON deposits(depositor, chain_id);
+CREATE INDEX IF NOT EXISTS idx_deposits_token ON deposits(token, chain_id);
+
+-- Create indexes for deposit_assignment_events table
+CREATE INDEX IF NOT EXISTS idx_assignment_deposit ON deposit_assignment_events(deposit_id);
+CREATE INDEX IF NOT EXISTS idx_assignment_credited_vault ON deposit_assignment_events(credited_vault);
 `
 
 /**
  * SQL statements for dropping tables
  */
 export const dropTablesSql = `
+DROP TABLE IF EXISTS deposit_assignment_events CASCADE;
+DROP TABLE IF EXISTS deposits CASCADE;
 DROP TABLE IF EXISTS bundles CASCADE;
 DROP TABLE IF EXISTS cids CASCADE;
 DROP TABLE IF EXISTS balances CASCADE;
@@ -145,7 +177,7 @@ export async function setupDatabase(options) {
 
 			if (!forceDropConfirm) {
 				console.log(chalk.red('\n⚠️  WARNING: This will DELETE ALL DATA in the following tables:'))
-				console.log(chalk.red('  - bundles, cids, balances, nonces, proposers, vaults'))
+				console.log(chalk.red('  - bundles, cids, balances, vaults, proposers, deposits, deposit_assignment_events'))
 				console.log(chalk.yellow('\nTo confirm, set FORCE_DROP=true or remove --drop-existing flag'))
 				await pool.end()
 				process.exit(1)
@@ -171,7 +203,7 @@ export async function setupDatabase(options) {
 			SELECT table_name
 			FROM information_schema.tables
 			WHERE table_schema = 'public'
-			AND table_name IN ('bundles', 'cids', 'balances', 'nonces', 'proposers', 'vaults')
+			AND table_name IN ('bundles', 'cids', 'balances', 'nonces', 'proposers', 'vaults', 'deposits', 'deposit_assignment_events')
 			ORDER BY table_name
 		`)
 

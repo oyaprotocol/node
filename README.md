@@ -141,6 +141,8 @@ The setup script creates the following tables:
 - **nonces:** Tracks the latest nonce for each vault.
 - **proposers:** Records block proposers.
 - **vaults:** Maps vault IDs to controller addresses and optional rules.
+- **deposits:** Records on-chain deposits for assignment to vault balances.
+- **deposit_assignment_events:** Records partial or full assignment events against deposits. A deposit becomes fully assigned when the sum of its assignment events equals its original amount; in that case, `deposits.assigned_at` is set automatically.
 
 If deploying to Heroku, run the migration script as follows:
 
@@ -150,6 +152,10 @@ chmod +x migrations/1_createTable.sh
 ```
 
 Alternatively, execute the SQL commands manually in your PostgreSQL instance.
+
+### Partial Deposit Assignments
+
+The `deposits` table records raw on-chain deposits, and `deposit_assignment_events` records partial or full assignments against those deposits. A deposit’s remaining amount is `deposits.amount - SUM(deposit_assignment_events.amount)`; when it reaches zero, `deposits.assigned_at` is set.
 
 ## Filecoin Pin Setup (Optional)
 

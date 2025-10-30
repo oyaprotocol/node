@@ -34,7 +34,7 @@ import { resolveIntentionENS } from './utils/ensResolver.js'
 import {
 	getControllersForVault,
 	getVaultsForController,
-	createVaultRow,
+	updateVaultControllers,
 } from './utils/vaults.js'
 import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
 import {
@@ -42,12 +42,21 @@ import {
 	validateAddress,
 	validateSignature,
 	validateId,
+	validateAssignDepositStructure as baseValidateAssignDepositStructure,
+	validateVaultIdOnChain as baseValidateVaultIdOnChain,
 } from './utils/validator.js'
 import {
 	pinBundleToFilecoin,
 	initializeFilecoinPin,
 } from './utils/filecoinPin.js'
 import { sendWebhook } from './utils/webhook.js'
+import {
+	insertDepositIfMissing,
+	findDepositWithSufficientRemaining,
+	createAssignmentEventTransactional,
+} from './utils/deposits.js'
+import { handleAssignDeposit } from './utils/intentionHandlers/AssignDeposit.js'
+import { handleCreateVault } from './utils/intentionHandlers/CreateVault.js'
 import type {
 	Intention,
 	BundleData,
@@ -106,6 +115,8 @@ export interface VaultTrackerContract extends ethers.BaseContract {
 		_controller: string,
 		overrides?: ethers.Overrides
 	): Promise<ethers.ContractTransactionResponse>
+	/** Returns the next unassigned vault ID (acts as current vault count). */
+	nextVaultId(): Promise<bigint>
 }
 
 let cachedIntentions: ExecutionObject[] = []
@@ -120,6 +131,181 @@ let s: ReturnType<typeof strings>
 
 // Initialization flag
 let isInitialized = false
+
+// ~7 days at ~12s blocks
+const APPROX_7D_BLOCKS = 50400
+
+// In-memory discovery cursors per chainId (last checked block number)
+const lastCheckedBlockByChain: Record<number, number> = {}
+// Wrapper to use validator's on-chain vault ID validation with contract dependency
+const validateVaultIdOnChain = async (vaultId: number): Promise<void> => {
+	if (!vaultTrackerContract) {
+		throw new Error('VaultTracker contract not initialized')
+	}
+	const nextId = await vaultTrackerContract.nextVaultId()
+	const nextIdNumber = Number(nextId)
+	await baseValidateVaultIdOnChain(vaultId, async () => nextIdNumber)
+}
+
+/**
+ * Computes block range hex strings for Alchemy getAssetTransfers requests,
+ * defaulting to a ~7 day lookback if not provided.
+ */
+async function computeBlockRange(
+	chainId: number,
+	fromBlockHex?: string,
+	toBlockHex?: string
+): Promise<{ fromBlockHex: string; toBlockHex: string; toBlockNum: number }> {
+	const provider = (await sepoliaAlchemy.config.getProvider()) as unknown as {
+		getBlockNumber: () => Promise<number>
+	}
+	const latest = await provider.getBlockNumber()
+	const resolvedTo = toBlockHex ?? '0x' + latest.toString(16)
+	const toBlockNum = parseInt(resolvedTo, 16)
+	const defaultFrom = Math.max(0, latest - APPROX_7D_BLOCKS)
+	const cursorFrom =
+		lastCheckedBlockByChain[chainId] !== undefined
+			? Math.min(toBlockNum, lastCheckedBlockByChain[chainId] + 1)
+			: defaultFrom
+	const resolvedFrom = fromBlockHex ?? '0x' + cursorFrom.toString(16)
+	return { fromBlockHex: resolvedFrom, toBlockHex: resolvedTo, toBlockNum }
+}
+
+/**
+ * Generic discovery for deposits into VaultTracker using Alchemy's decoded
+ * asset transfers. Supports ERC-20 and ETH (internal/external) categories.
+ */
+
+async function discoverAndIngestDeposits(params: {
+	chainId: number
+	categories: Array<'erc20' | 'internal' | 'external'>
+	token?: string
+	fromBlockHex?: string
+	toBlockHex?: string
+}): Promise<void> {
+	if (!isInitialized) {
+		throw new Error('Proposer not initialized')
+	}
+	if (params.chainId !== 11155111) {
+		throw new Error('Unsupported chain_id for discovery')
+	}
+
+	const { fromBlockHex, toBlockHex, toBlockNum } = await computeBlockRange(
+		params.chainId,
+		params.fromBlockHex,
+		params.toBlockHex
+	)
+
+	let pageKey: string | undefined = undefined
+	do {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const req: any = {
+			fromBlock: fromBlockHex,
+			toBlock: toBlockHex,
+			toAddress: VAULT_TRACKER_ADDRESS,
+			category: params.categories,
+			withMetadata: true,
+			excludeZeroValue: true,
+		}
+		if (params.token) {
+			req.contractAddresses = [validateAddress(params.token, 'token')]
+		}
+		if (pageKey) req.pageKey = pageKey
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const res: any = await sepoliaAlchemy.core.getAssetTransfers(req)
+		const transfers = res?.transfers ?? []
+		for (const t of transfers) {
+			const txHash: string = t.hash
+			const raw = t.rawContract || {}
+			const rawAddr: string | undefined = raw.address
+			const rawValueHex: string | undefined = raw.value
+			if (!rawValueHex) continue
+
+			// Determine token address: ERC-20 uses raw.address; ETH uses zero address
+			const tokenAddr = rawAddr ?? '0x0000000000000000000000000000000000000000'
+
+			// Deterministic transfer UID to avoid dependency on provider-specific IDs
+			const transferUid = `${txHash}:${tokenAddr}:${rawValueHex}`
+			const amountWei = BigInt(rawValueHex).toString()
+
+			await insertDepositIfMissing({
+				tx_hash: txHash,
+				transfer_uid: transferUid,
+				chain_id: params.chainId,
+				depositor: t.from,
+				token: tokenAddr,
+				amount: amountWei,
+			})
+		}
+		pageKey = res?.pageKey
+	} while (pageKey)
+
+	// Advance cursor for this chain to the block we just scanned up to
+	lastCheckedBlockByChain[params.chainId] = toBlockNum
+}
+
+/**
+ * Validates structural and fee constraints for AssignDeposit intentions.
+ * Rules:
+ * - inputs.length === outputs.length
+ * - For each index i: asset/amount/chain_id must match between input and output
+ * - outputs[i].to must be provided (no to_external) and must be a valid on-chain vault ID
+ * - Fees must be zero:
+ *   - totalFee amounts must all be "0"
+ *   - proposerTip must be empty
+ *   - protocolFee must be empty
+ *   - agentTip must be undefined or empty
+ */
+
+// Wrapper to use validator's AssignDeposit structural validation with on-chain vault check
+const validateAssignDepositStructure = async (
+	intention: Intention
+): Promise<void> => {
+	await baseValidateAssignDepositStructure(intention, async (id: number) =>
+		validateVaultIdOnChain(id)
+	)
+}
+
+/**
+ * Discovers ERC-20 deposits made by `controller` into the VaultTracker and
+ * ingests them into the local `deposits` table. Uses Alchemy's decoded
+ * getAssetTransfers API for reliability and simplicity.
+ *
+ * If fromBlock/toBlock are not provided, computes a default lookback window
+ * of ~7 days by subtracting ~50,400 blocks from the latest block.
+ */
+async function discoverAndIngestErc20Deposits(params: {
+	token: string
+	chainId: number
+	fromBlockHex?: string
+	toBlockHex?: string
+}): Promise<void> {
+	await discoverAndIngestDeposits({
+		chainId: params.chainId,
+		categories: ['erc20'],
+		token: params.token,
+		fromBlockHex: params.fromBlockHex,
+		toBlockHex: params.toBlockHex,
+	})
+}
+
+/**
+ * Discovers ETH (internal) deposits made by `controller` into the VaultTracker
+ * and ingests them into the local `deposits` table via idempotent inserts.
+ */
+async function discoverAndIngestEthDeposits(params: {
+	chainId: number
+	fromBlockHex?: string
+	toBlockHex?: string
+}): Promise<void> {
+	await discoverAndIngestDeposits({
+		chainId: params.chainId,
+		categories: ['internal', 'external'],
+		fromBlockHex: params.fromBlockHex,
+		toBlockHex: params.toBlockHex,
+	})
+}
 
 /**
  * Initializes the BundleTracker contract with ABI and provider.
@@ -550,8 +736,27 @@ async function publishBundle(data: string, signature: string, from: string) {
 				logger.error('Invalid proof structure in execution:', execution)
 				throw new Error('Invalid proof structure')
 			}
-			for (const proof of execution.proof) {
-				await updateBalances(proof.from, proof.to, proof.token, proof.amount)
+
+			if (execution.intention?.action === 'AssignDeposit') {
+				// Publish-time crediting for AssignDeposit
+				for (const proof of execution.proof) {
+					// Create a transactional assignment event (partial or full)
+					await createAssignmentEventTransactional(
+						proof.deposit_id,
+						proof.amount,
+						String(proof.to)
+					)
+
+					// Credit the destination vault balance
+					const current = await getBalance(proof.to, proof.token)
+					const increment = safeBigInt(proof.amount)
+					const newBalance = current + increment
+					await updateBalance(proof.to, proof.token, newBalance)
+				}
+			} else {
+				for (const proof of execution.proof) {
+					await updateBalances(proof.from, proof.to, proof.token, proof.amount)
+				}
 			}
 		}
 		logger.info('Balances updated successfully')
@@ -794,57 +999,38 @@ async function handleIntention(
 		JSON.stringify(validatedIntention)
 	)
 
+	// Handle AssignDeposit intention (bypass generic balance checks)
+	if (validatedIntention.action === 'AssignDeposit') {
+		const executionObject = await handleAssignDeposit({
+			intention: validatedIntention,
+			validatedController,
+			validatedSignature,
+			context: {
+				validateAssignDepositStructure,
+				discoverAndIngestErc20Deposits,
+				discoverAndIngestEthDeposits,
+				findDepositWithSufficientRemaining,
+				validateVaultIdOnChain,
+				logger,
+				diagnostic,
+			},
+		})
+		cachedIntentions.push(executionObject)
+		return executionObject
+	}
+
 	// Handle CreateVault intention and trigger seeding
 	if (validatedIntention.action === 'CreateVault') {
-		try {
-			// This is the entry point for creating and seeding a new vault.
-			logger.info('Processing CreateVault intention...')
-
-			// 1. Call the on-chain contract to create the vault.
-			// The `validatedController` address becomes the controller of the new vault.
-			const tx = await vaultTrackerContract.createVault(validatedController)
-			const receipt = await tx.wait() // Wait for the transaction to be mined
-
-			if (!receipt) {
-				throw new Error('Transaction receipt is null, mining may have failed.')
-			}
-
-			// 2. Find and parse the VaultCreated event to get the new vault ID.
-			let newVaultId: number | null = null
-			for (const log of receipt.logs) {
-				try {
-					const parsedLog = vaultTrackerContract.interface.parseLog(log)
-					if (parsedLog && parsedLog.name === 'VaultCreated') {
-						// The first argument of the event is the vaultId
-						newVaultId = Number(parsedLog.args[0])
-						break
-					}
-				} catch {
-					// Ignore logs that are not from the VaultTracker ABI
-				}
-			}
-
-			if (newVaultId === null) {
-				throw new Error(
-					'Could not find VaultCreated event in transaction logs.'
-				)
-			}
-
-			logger.info(`On-chain vault created with ID: ${newVaultId}`)
-
-			// 3. Persist the new vault-to-controller mapping to the database.
-			// This is the canonical source of truth for vault ownership.
-			// Prefer insert-only creation; falls back to update-only seeding elsewhere if needed
-			await createVaultRow(newVaultId, validatedController, null)
-
-			// 4. After the vault is created and its controller is mapped,
-			// submit an intention to seed it with initial balances.
-			await createAndSubmitSeedingIntention(newVaultId)
-		} catch (error) {
-			logger.error('Failed to process CreateVault intention:', error)
-			// Re-throw or handle the error as appropriate for your application
-			throw error
-		}
+		await handleCreateVault({
+			intention: validatedIntention,
+			validatedController,
+			deps: {
+				vaultTrackerContract,
+				updateVaultControllers,
+				createAndSubmitSeedingIntention,
+				logger,
+			},
+		})
 	}
 
 	// Check for expiry
@@ -1091,8 +1277,6 @@ export async function initializeProposer() {
 
 	logger.info('Initializing proposer module...')
 
-	// Note: Vault-controller mapping is created from on-chain VaultCreated events
-
 	// Initialize wallet and contract
 	await initializeWalletAndContract()
 
@@ -1121,11 +1305,8 @@ export function getSepoliaAlchemy() {
 	return sepoliaAlchemy
 }
 
-/**
- * Ensures the proposer's vault-to-controller mapping is seeded in the database.
- * This is crucial for allowing the proposer to sign and submit seeding intentions.
- */
-// Removed seedProposerVaultMapping(); creation is handled via on-chain events
+// Removed explicit seedProposerVaultMapping. Vault-controller associations are
+// discovered from on-chain events and should not be force-seeded at runtime.
 
 /**
  * Exports IPFS node for health checks
