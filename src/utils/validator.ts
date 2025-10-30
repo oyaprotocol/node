@@ -475,7 +475,7 @@ export async function validateVaultIdOnChain(
  * - inputs.length === outputs.length
  * - For each index i: asset/amount/chain_id must match between input and output
  * - outputs[i].to must be provided (no to_external) and must be a valid on-chain vault ID
- * - Fees must be zero (totalFee amounts zero; proposerTip/protocolFee empty; agentTip empty)
+ * - Fees must be zero (totalFee empty or amounts zero; proposerTip/protocolFee empty; agentTip empty)
  * Accepts a dependency to validate vault IDs on-chain.
  */
 export async function validateAssignDepositStructure(
@@ -497,20 +497,23 @@ export async function validateAssignDepositStructure(
 		)
 	}
 
-	if (!Array.isArray(intention.totalFee) || intention.totalFee.length === 0) {
+	if (!Array.isArray(intention.totalFee)) {
 		throw new ValidationError(
-			'AssignDeposit requires totalFee with zero amount',
+			'AssignDeposit totalFee must be an array',
 			'intention.totalFee',
 			intention.totalFee
 		)
 	}
-	const allTotalZero = intention.totalFee.every((f) => f.amount === '0')
-	if (!allTotalZero) {
-		throw new ValidationError(
-			'AssignDeposit totalFee must be zero',
-			'intention.totalFee',
-			intention.totalFee
-		)
+	// If totalFee is not empty, all amounts must be zero
+	if (intention.totalFee.length > 0) {
+		const allTotalZero = intention.totalFee.every((f) => f.amount === '0')
+		if (!allTotalZero) {
+			throw new ValidationError(
+				'AssignDeposit totalFee must be zero',
+				'intention.totalFee',
+				intention.totalFee
+			)
+		}
 	}
 	if (
 		Array.isArray(intention.proposerTip) &&

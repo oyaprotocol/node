@@ -252,7 +252,7 @@ async function discoverAndIngestDeposits(params: {
  * - For each index i: asset/amount/chain_id must match between input and output
  * - outputs[i].to must be provided (no to_external) and must be a valid on-chain vault ID
  * - Fees must be zero:
- *   - totalFee amounts must all be "0"
+ *   - totalFee must be empty or all amounts must be "0"
  *   - proposerTip must be empty
  *   - protocolFee must be empty
  *   - agentTip must be undefined or empty
