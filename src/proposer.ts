@@ -141,8 +141,9 @@ const lastCheckedBlockByChain: Record<number, number> = {}
 
 // Validator functions (initialized after contract setup)
 let validateVaultIdOnChain: ((vaultId: number) => Promise<void>) | null = null
-let validateAssignDepositStructure: ((intention: Intention) => Promise<void>) | null =
-	null
+let validateAssignDepositStructure:
+	| ((intention: Intention) => Promise<void>)
+	| null = null
 
 /**
  * Computes block range hex strings for Alchemy getAssetTransfers requests,
