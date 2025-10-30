@@ -42,9 +42,9 @@ import {
 	validateAddress,
 	validateSignature,
 	validateId,
-	validateAssignDepositStructure as baseValidateAssignDepositStructure,
-	validateVaultIdOnChain as baseValidateVaultIdOnChain,
 	validateCreateVaultStructure,
+	createValidators,
+	type VaultIdValidator,
 } from './utils/validator.js'
 import {
 	pinBundleToFilecoin,
@@ -138,15 +138,11 @@ const APPROX_7D_BLOCKS = 50400
 
 // In-memory discovery cursors per chainId (last checked block number)
 const lastCheckedBlockByChain: Record<number, number> = {}
-// Wrapper to use validator's on-chain vault ID validation with contract dependency
-const validateVaultIdOnChain = async (vaultId: number): Promise<void> => {
-	if (!vaultTrackerContract) {
-		throw new Error('VaultTracker contract not initialized')
-	}
-	const nextId = await vaultTrackerContract.nextVaultId()
-	const nextIdNumber = Number(nextId)
-	await baseValidateVaultIdOnChain(vaultId, async () => nextIdNumber)
-}
+
+// Validator functions (initialized after contract setup)
+let validateVaultIdOnChain: ((vaultId: number) => Promise<void>) | null = null
+let validateAssignDepositStructure: ((intention: Intention) => Promise<void>) | null =
+	null
 
 /**
  * Computes block range hex strings for Alchemy getAssetTransfers requests,
@@ -244,28 +240,6 @@ async function discoverAndIngestDeposits(params: {
 
 	// Advance cursor for this chain to the block we just scanned up to
 	lastCheckedBlockByChain[params.chainId] = toBlockNum
-}
-
-/**
- * Validates structural and fee constraints for AssignDeposit intentions.
- * Rules:
- * - inputs.length === outputs.length
- * - For each index i: asset/amount/chain_id must match between input and output
- * - outputs[i].to must be provided (no to_external) and must be a valid on-chain vault ID
- * - Fees must be zero:
- *   - totalFee must be empty or all amounts must be "0"
- *   - proposerTip must be empty
- *   - protocolFee must be empty
- *   - agentTip must be undefined or empty
- */
-
-// Wrapper to use validator's AssignDeposit structural validation with on-chain vault check
-const validateAssignDepositStructure = async (
-	intention: Intention
-): Promise<void> => {
-	await baseValidateAssignDepositStructure(intention, async (id: number) =>
-		validateVaultIdOnChain(id)
-	)
 }
 
 /**
@@ -1004,6 +978,11 @@ async function handleIntention(
 
 	// Handle AssignDeposit intention (bypass generic balance checks)
 	if (validatedIntention.action === 'AssignDeposit') {
+		if (!validateAssignDepositStructure || !validateVaultIdOnChain) {
+			throw new Error(
+				'Validators not initialized. Call initializeProposer() first.'
+			)
+		}
 		const executionObject = await handleAssignDeposit({
 			intention: validatedIntention,
 			validatedController,
@@ -1340,6 +1319,17 @@ async function initializeWalletAndContract() {
 	wallet = walletInstance
 	bundleTrackerContract = await buildBundleTrackerContract()
 	vaultTrackerContract = await buildVaultTrackerContract()
+
+	// Initialize validators with contract dependency
+	const contractValidator: VaultIdValidator = {
+		getNextVaultId: async () => {
+			const nextId = await vaultTrackerContract.nextVaultId()
+			return Number(nextId)
+		},
+	}
+	const validators = createValidators(contractValidator)
+	validateVaultIdOnChain = validators.validateVaultIdOnChain
+	validateAssignDepositStructure = validators.validateAssignDepositStructure
 }
 
 /**

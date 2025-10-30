@@ -771,3 +771,41 @@ export function validateCreateVaultStructure(intention: Intention): void {
 		)
 	}
 }
+
+/**
+ * Contract interface for vault ID validation.
+ * Provides a method to get the next unassigned vault ID from the chain.
+ */
+export interface VaultIdValidator {
+	getNextVaultId: () => Promise<number>
+}
+
+/**
+ * Creates configured validator functions that use the provided contract for on-chain validation.
+ * Returns validators that can check vault IDs and validate AssignDeposit structures.
+ *
+ * @param contract - Contract interface that provides nextVaultId
+ * @returns Configured validator functions
+ */
+export function createValidators(contract: VaultIdValidator) {
+	/**
+	 * Validates that a vault ID exists on-chain using the provided contract.
+	 */
+	const vaultIdValidator = async (vaultId: number): Promise<void> => {
+		await validateVaultIdOnChain(vaultId, contract.getNextVaultId)
+	}
+
+	/**
+	 * Validates AssignDeposit intention structure with on-chain vault ID validation.
+	 */
+	const assignDepositValidator = async (
+		intention: Intention
+	): Promise<void> => {
+		await validateAssignDepositStructure(intention, vaultIdValidator)
+	}
+
+	return {
+		validateVaultIdOnChain: vaultIdValidator,
+		validateAssignDepositStructure: assignDepositValidator,
+	}
+}
