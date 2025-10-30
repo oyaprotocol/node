@@ -357,11 +357,7 @@ function validateIntentionInputsOptional(
 	fieldName: string
 ): IntentionInput[] {
 	if (!Array.isArray(inputs)) {
-		throw new ValidationError(
-			'Inputs must be an array',
-			fieldName,
-			inputs
-		)
+		throw new ValidationError('Inputs must be an array', fieldName, inputs)
 	}
 	if (inputs.length === 0) {
 		return []
@@ -394,11 +390,7 @@ function validateIntentionOutputsOptional(
 	fieldName: string
 ): IntentionOutput[] {
 	if (!Array.isArray(outputs)) {
-		throw new ValidationError(
-			'Outputs must be an array',
-			fieldName,
-			outputs
-		)
+		throw new ValidationError('Outputs must be an array', fieldName, outputs)
 	}
 	if (outputs.length === 0) {
 		return []
