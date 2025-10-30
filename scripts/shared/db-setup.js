@@ -51,15 +51,6 @@ CREATE TABLE IF NOT EXISTS balances (
   UNIQUE (vault, token)
 );
 
--- Create the nonces table (tracks vault nonces)
-CREATE TABLE IF NOT EXISTS nonces (
-  id SERIAL PRIMARY KEY,
-  vault TEXT NOT NULL,
-  nonce INTEGER NOT NULL,
-  timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (vault)
-);
-
 -- Create the proposers table (records block proposers)
 CREATE TABLE IF NOT EXISTS proposers (
   id SERIAL PRIMARY KEY,
@@ -71,6 +62,7 @@ CREATE TABLE IF NOT EXISTS proposers (
 CREATE TABLE IF NOT EXISTS vaults (
   vault TEXT PRIMARY KEY,
   controllers TEXT[] NOT NULL,
+  nonce INTEGER NOT NULL DEFAULT 0,
   rules TEXT,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
@@ -102,7 +94,6 @@ CREATE TABLE IF NOT EXISTS deposit_assignment_events (
  */
 export const createIndexesSql = `
 -- Create case-insensitive unique indexes for vault/token lookups
-CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_vault_nonces ON nonces (LOWER(vault));
 CREATE UNIQUE INDEX IF NOT EXISTS unique_lower_vault_token_balances ON balances (LOWER(vault), LOWER(token));
 
 -- Create indexes for Filecoin tracking
@@ -131,7 +122,6 @@ DROP TABLE IF EXISTS deposits CASCADE;
 DROP TABLE IF EXISTS bundles CASCADE;
 DROP TABLE IF EXISTS cids CASCADE;
 DROP TABLE IF EXISTS balances CASCADE;
-DROP TABLE IF EXISTS nonces CASCADE;
 DROP TABLE IF EXISTS proposers CASCADE;
 DROP TABLE IF EXISTS vaults CASCADE;
 `
@@ -199,11 +189,11 @@ export async function setupDatabase(options) {
 
 		// Verify tables were created
 		console.log(chalk.yellow('\nVerifying database schema...'))
-		const result = await pool.query(`
+        const result = await pool.query(`
 			SELECT table_name
 			FROM information_schema.tables
 			WHERE table_schema = 'public'
-			AND table_name IN ('bundles', 'cids', 'balances', 'nonces', 'proposers', 'vaults', 'deposits', 'deposit_assignment_events')
+            AND table_name IN ('bundles', 'cids', 'balances', 'proposers', 'vaults', 'deposits', 'deposit_assignment_events')
 			ORDER BY table_name
 		`)
 
@@ -214,15 +204,12 @@ export async function setupDatabase(options) {
 		})
 
 		// Check if we need to update existing data to lowercase
-		const balancesCount = await pool.query('SELECT COUNT(*) FROM balances')
-		const noncesCount = await pool.query('SELECT COUNT(*) FROM nonces')
-
-		if (parseInt(balancesCount.rows[0].count) > 0 || parseInt(noncesCount.rows[0].count) > 0) {
-			console.log(chalk.yellow('\nUpdating existing data to lowercase...'))
-			await pool.query('UPDATE nonces SET vault = LOWER(vault)')
-			await pool.query('UPDATE balances SET vault = LOWER(vault), token = LOWER(token)')
-			console.log(chalk.green('✓ Existing data updated'))
-		}
+        const balancesCount = await pool.query('SELECT COUNT(*) FROM balances')
+        if (parseInt(balancesCount.rows[0].count) > 0) {
+            console.log(chalk.yellow('\nUpdating existing data to lowercase...'))
+            await pool.query('UPDATE balances SET vault = LOWER(vault), token = LOWER(token)')
+            console.log(chalk.green('✓ Existing data updated'))
+        }
 
 		console.log(chalk.green(`\n✅ ${environment} database is ready for use!\n`))
 

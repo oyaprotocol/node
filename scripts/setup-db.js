@@ -50,9 +50,8 @@ ${chalk.yellow('Tables Created:')}
   - bundles   : Stores bundle data with IPFS CIDs
   - cids      : Tracks submitted CIDs
   - balances  : Manages vault token balances
-  - nonces    : Tracks vault nonces
   - proposers : Records block proposers
-  - vaults    : Maps vault IDs to controllers and rules
+  - vaults    : Maps vault IDs to controllers and rules; stores nonce
 
 ${chalk.red('Warning:')} Using --drop-existing will DELETE ALL EXISTING DATA!
 `)
