@@ -991,6 +991,7 @@ async function handleIntention(
 				discoverAndIngestEthDeposits,
 				findDepositWithSufficientRemaining,
 				validateVaultIdOnChain,
+				getVaultsForController,
 				logger,
 				diagnostic,
 			},

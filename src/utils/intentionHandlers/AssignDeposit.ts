@@ -29,6 +29,7 @@ type AssignDepositContext = {
 		minAmount: string
 	}) => Promise<{ id: number; remaining: string } | null>
 	validateVaultIdOnChain: (vaultId: number) => Promise<void>
+	getVaultsForController: (controller: string) => Promise<string[]>
 	logger: { info: (...args: unknown[]) => void }
 	diagnostic: { info: (...args: unknown[]) => void }
 }
@@ -42,6 +43,40 @@ export async function handleAssignDeposit(params: {
 	const { intention, validatedController, validatedSignature, context } = params
 
 	await context.validateAssignDepositStructure(intention)
+
+	// Determine submitter vault for nonce tracking
+	// 1. If inputs have `from` field, use that (all inputs must have the same `from` value per validator)
+	// 2. If no `from` field, determine from controller by querying vaults
+	let submitterVaultId: number | 0 = 0
+	const inputsWithFrom = intention.inputs.filter((input) => input.from !== undefined)
+	if (inputsWithFrom.length > 0) {
+		// All inputs should have the same `from` value per validator, but double-check
+		const fromValues = new Set(inputsWithFrom.map((input) => input.from))
+		if (fromValues.size > 1) {
+			throw new Error(
+				'AssignDeposit requires all inputs to have the same `from` vault ID'
+			)
+		}
+		submitterVaultId = inputsWithFrom[0].from as number
+	} else {
+		// No `from` field in inputs, determine from controller
+		const vaults = await context.getVaultsForController(validatedController)
+		if (vaults.length === 1) {
+			submitterVaultId = parseInt(vaults[0])
+		} else if (vaults.length > 1) {
+			// Multiple vaults controlled by this controller - use the first one
+			context.logger.info(
+				`Controller ${validatedController} controls multiple vaults, using first vault ${vaults[0]} for nonce tracking`
+			)
+			submitterVaultId = parseInt(vaults[0])
+		} else {
+			// No vaults found - cannot determine submitter vault, use 0 (no nonce update)
+			context.logger.info(
+				`Controller ${validatedController} does not control any vaults, using from=0 (no nonce update)`
+			)
+			submitterVaultId = 0
+		}
+	}
 
 	const zeroAddress = '0x0000000000000000000000000000000000000000'
 	const proof: unknown[] = []
@@ -104,14 +139,17 @@ export async function handleAssignDeposit(params: {
 	context.diagnostic.info('AssignDeposit intention processed', {
 		controller: validatedController,
 		count: intention.inputs.length,
+		submitterVaultId,
 	})
-	context.logger.info('AssignDeposit cached with proof count:', proof.length)
+	context.logger.info(
+		`AssignDeposit cached with proof count: ${proof.length}, submitter vault: ${submitterVaultId}`
+	)
 
 	return {
 		execution: [
 			{
 				intention,
-				from: 0,
+				from: submitterVaultId,
 				proof,
 				signature: validatedSignature,
 			},
