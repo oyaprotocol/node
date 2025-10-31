@@ -48,7 +48,9 @@ export async function handleAssignDeposit(params: {
 	// 1. If inputs have `from` field, use that (all inputs must have the same `from` value per validator)
 	// 2. If no `from` field, determine from controller by querying vaults
 	let submitterVaultId: number | 0 = 0
-	const inputsWithFrom = intention.inputs.filter((input) => input.from !== undefined)
+	const inputsWithFrom = intention.inputs.filter(
+		(input) => input.from !== undefined
+	)
 	if (inputsWithFrom.length > 0) {
 		// All inputs should have the same `from` value per validator, but double-check
 		const fromValues = new Set(inputsWithFrom.map((input) => input.from))
