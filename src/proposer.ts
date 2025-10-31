@@ -818,19 +818,32 @@ async function updateBalances(
 
 /**
  * Creates and submits a signed intention to seed a new vault with initial tokens.
- * This creates an auditable record of the seeding transaction.
+ * Uses AssignDeposit to assign deposits directly to the new vault.
+ * Only seeds if VAULT_SEEDING is enabled.
  */
 async function createAndSubmitSeedingIntention(
 	newVaultId: number
 ): Promise<void> {
-	logger.info(`Creating seeding intention for new vault ${newVaultId}...`)
+	const { VAULT_SEEDING } = getEnvConfig()
+
+	// Skip seeding if VAULT_SEEDING is not enabled
+	if (!VAULT_SEEDING) {
+		logger.info(
+			`Vault seeding is disabled (VAULT_SEEDING=false), skipping seeding for vault ${newVaultId}`
+		)
+		return
+	}
+
+	logger.info(
+		`Creating AssignDeposit seeding intention for new vault ${newVaultId}...`
+	)
+
+	const submitterVaultId = PROPOSER_VAULT_ID.value
+	const currentNonce = await getVaultNonce(submitterVaultId)
+	const nextNonce = currentNonce + 1
 
 	const inputs: IntentionInput[] = []
 	const outputs: IntentionOutput[] = []
-	const tokenSummary = SEED_CONFIG.map(
-		(token) => `${token.amount} ${token.symbol}`
-	).join(', ')
-	const action = `Transfer ${tokenSummary} to vault #${newVaultId}`
 
 	for (const token of SEED_CONFIG) {
 		const tokenDecimals = await getSepoliaTokenDecimals(token.address)
@@ -839,7 +852,6 @@ async function createAndSubmitSeedingIntention(
 		inputs.push({
 			asset: token.address,
 			amount: seedAmount.toString(),
-			from: PROPOSER_VAULT_ID.value,
 			chain_id: 11155111, // Sepolia
 		})
 
@@ -851,41 +863,26 @@ async function createAndSubmitSeedingIntention(
 		})
 	}
 
-	const currentNonce = await getVaultNonce(PROPOSER_VAULT_ID.value)
-	const nextNonce = currentNonce + 1
-	const feeAmountInWei = parseUnits('0.0001', 18).toString()
-
 	const intention: Intention = {
-		action: action,
+		action: 'AssignDeposit',
 		nonce: nextNonce,
 		expiry: Math.floor(Date.now() / 1000) + 300, // 5 minute expiry
 		inputs,
 		outputs,
-		totalFee: [
-			{
-				asset: ['ETH'],
-				amount: '0.0001',
-			},
-		],
-		proposerTip: [], // 0 tip for internal seeding
-		protocolFee: [
-			{
-				asset: '0x0000000000000000000000000000000000000000', // ETH
-				amount: feeAmountInWei,
-				chain_id: 11155111, // Sepolia
-			},
-		],
+		totalFee: [], // Empty for AssignDeposit
+		proposerTip: [], // Empty for AssignDeposit
+		protocolFee: [], // Empty for AssignDeposit
 	}
 
 	// Proposer signs the intention with its wallet
 	const signature = await wallet.signMessage(JSON.stringify(intention))
 
 	// Submit the intention to be processed and bundled
-	// The controller is the proposer's own address
+	// The controller is the proposer's own address (who made the deposits)
 	await handleIntention(intention, signature, PROPOSER_ADDRESS)
 
 	logger.info(
-		`Successfully submitted seeding intention for vault ${newVaultId}.`
+		`Successfully submitted AssignDeposit seeding intention for vault ${newVaultId} (nonce: ${nextNonce}, submitter vault: ${submitterVaultId}).`
 	)
 }
 
