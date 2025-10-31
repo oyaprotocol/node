@@ -139,6 +139,98 @@ export async function findDepositWithSufficientRemaining(
 	return null
 }
 
+export interface FindDepositWithAnyRemainingParams {
+	depositor: string
+	token: string
+	chain_id: number
+}
+
+/**
+ * Finds the oldest deposit for a depositor/token/chain with any remaining balance \> 0.
+ * Returns the first deposit found (oldest by ID) that has remaining \> 0, or null if none found.
+ */
+export async function findNextDepositWithAnyRemaining(
+	params: FindDepositWithAnyRemainingParams
+): Promise<{ id: number; remaining: string } | null> {
+	const depositor = params.depositor.toLowerCase()
+	const token = params.token.toLowerCase()
+	const chainId = params.chain_id
+
+	const result = await pool.query(
+		`SELECT d.id,
+                d.amount::numeric(78,0) AS total,
+                COALESCE(SUM(e.amount)::numeric(78,0), 0) AS assigned
+         FROM deposits d
+         LEFT JOIN deposit_assignment_events e ON e.deposit_id = d.id
+         WHERE d.depositor = $1
+           AND LOWER(d.token) = LOWER($2)
+           AND d.chain_id = $3
+         GROUP BY d.id
+         HAVING (d.amount::numeric(78,0) - COALESCE(SUM(e.amount)::numeric(78,0), 0)) > 0
+         ORDER BY d.id ASC
+         LIMIT 1`,
+		[depositor, token, chainId]
+	)
+
+	if (result.rows.length === 0) {
+		return null
+	}
+
+	const row = result.rows[0]
+	const total = BigInt((row.total as string) ?? '0')
+	const assigned = BigInt((row.assigned as string) ?? '0')
+	const remaining = total - assigned
+
+	// Safety check: should never be <= 0 due to HAVING clause, but check anyway
+	if (remaining <= 0n) {
+		return null
+	}
+
+	return { id: row.id as number, remaining: remaining.toString() }
+}
+
+export interface GetTotalAvailableDepositsParams {
+	depositor: string
+	token: string
+	chain_id: number
+}
+
+/**
+ * Computes the total available (unassigned) amount across all deposits for a depositor/token/chain.
+ * Returns the sum as a decimal string (wei).
+ */
+export async function getTotalAvailableDeposits(
+	params: GetTotalAvailableDepositsParams
+): Promise<string> {
+	const depositor = params.depositor.toLowerCase()
+	const token = params.token.toLowerCase()
+	const chainId = params.chain_id
+
+	const result = await pool.query(
+		`SELECT COALESCE(SUM(remaining), 0) AS total_available
+         FROM (
+           SELECT d.amount::numeric(78,0) - COALESCE(SUM(e.amount)::numeric(78,0), 0) AS remaining
+           FROM deposits d
+           LEFT JOIN deposit_assignment_events e ON e.deposit_id = d.id
+           WHERE d.depositor = $1
+             AND LOWER(d.token) = LOWER($2)
+             AND d.chain_id = $3
+           GROUP BY d.id
+           HAVING (d.amount::numeric(78,0) - COALESCE(SUM(e.amount)::numeric(78,0), 0)) > 0
+         ) AS remaining_deposits`,
+		[depositor, token, chainId]
+	)
+
+	const totalAvailable = BigInt(
+		(result.rows[0].total_available as string) ?? '0'
+	)
+	// Ensure non-negative (should never be negative, but safety check)
+	if (totalAvailable < 0n) {
+		return '0'
+	}
+	return totalAvailable.toString()
+}
+
 /**
  * Creates a partial/full assignment event for a deposit within a transaction.
  * Ensures we do not over-assign by locking the deposit row and recomputing remaining.

@@ -99,6 +99,10 @@ PROPOSER_KEY=your_private_key
 FILECOIN_PIN_ENABLED=false  # Set to true to enable Filecoin pinning
 FILECOIN_PIN_PRIVATE_KEY=your_filecoin_private_key
 FILECOIN_PIN_RPC_URL=https://api.calibration.node.glif.io/rpc/v1  # Calibration testnet
+
+# Optional: Vault seeding configuration
+VAULT_SEEDING=false  # Set to true to enable automatic vault seeding with AssignDeposit
+PROPOSER_VAULT_ID=1  # The internal vault ID used by the proposer for seeding
 ```
 
 See `.env.example` for a complete list of available configuration options including optional variables like `PORT`, `LOG_LEVEL`, `DATABASE_SSL`, and `DIAGNOSTIC_LOGGER`.
@@ -138,9 +142,8 @@ The setup script creates the following tables:
 - **bundles:** Stores bundle data and nonce.
 - **cids:** Stores IPFS CIDs corresponding to bundles.
 - **balances:** Tracks token balances per vault.
-- **nonces:** Tracks the latest nonce for each vault.
 - **proposers:** Records block proposers.
-- **vaults:** Maps vault IDs to controller addresses and optional rules.
+- **vaults:** Maps vault IDs to controller addresses, optional rules, and nonce tracking.
 - **deposits:** Records on-chain deposits for assignment to vault balances.
 - **deposit_assignment_events:** Records partial or full assignment events against deposits. A deposit becomes fully assigned when the sum of its assignment events equals its original amount; in that case, `deposits.assigned_at` is set automatically.
 
@@ -155,7 +158,40 @@ Alternatively, execute the SQL commands manually in your PostgreSQL instance.
 
 ### Partial Deposit Assignments
 
-The `deposits` table records raw on-chain deposits, and `deposit_assignment_events` records partial or full assignments against those deposits. A deposit’s remaining amount is `deposits.amount - SUM(deposit_assignment_events.amount)`; when it reaches zero, `deposits.assigned_at` is set.
+The `deposits` table records raw on-chain deposits, and `deposit_assignment_events` records partial or full assignments against those deposits. A deposit's remaining amount is `deposits.amount - SUM(deposit_assignment_events.amount)`; when it reaches zero, `deposits.assigned_at` is set.
+
+## Vault Seeding
+
+When enabled, the node automatically seeds newly created vaults with initial token balances using the `AssignDeposit` intention. This allows new users to receive (testnet) tokens immediately upon vault creation.
+
+
+### Configuration & Prerequisites
+
+Before enabling vault seeding, ensure:
+1. Your `PROPOSER_ADDRESS` has made on-chain deposits to the VaultTracker contract
+2. Deposits exist for each token/amount specified in `src/config/seedingConfig.ts` via the `SEED_CONFIG` array.
+3. The deposits are on the same chain as configured (default: Sepolia, chain ID 11155111)
+4. Your `.env` file contains the following:
+
+```ini
+VAULT_SEEDING=true
+PROPOSER_VAULT_ID=1  # Your proposer's vault ID
+```
+
+### How It Works
+
+1. **Operational Precondition:** The `PROPOSER_ADDRESS` must have sufficient on-chain deposits for each token specified in `SEED_CONFIG`. These deposits are made directly to the VaultTracker contract on-chain.
+
+2. **Seeding Flow:**
+   - When a `CreateVault` intention is processed and a new vault is created on-chain
+   - If `VAULT_SEEDING=true`, the node automatically creates an `AssignDeposit` intention
+   - The intention assigns deposits directly from the proposer's on-chain deposits to the new vault
+   - The seeding intention is bundled and published like any other intention
+   - At publish time, deposits are assigned and balances are credited to the new vault
+
+3. **Resilience:**
+   - Vault creation succeeds even if seeding fails (best-effort seeding)
+   - If a selected deposit is exhausted between intention time and publish time, the system automatically falls back to combining multiple deposits
 
 ## Filecoin Pin Setup (Optional)
 

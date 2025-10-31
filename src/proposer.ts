@@ -54,6 +54,8 @@ import { sendWebhook } from './utils/webhook.js'
 import {
 	insertDepositIfMissing,
 	findDepositWithSufficientRemaining,
+	findNextDepositWithAnyRemaining,
+	getTotalAvailableDeposits,
 	createAssignmentEventTransactional,
 } from './utils/deposits.js'
 import { handleAssignDeposit } from './utils/intentionHandlers/AssignDeposit.js'
@@ -64,6 +66,7 @@ import type {
 	ExecutionObject,
 	IntentionInput,
 	IntentionOutput,
+	AssignDepositProof,
 } from './types/core.js'
 
 const gzip = promisify(zlib.gzip)
@@ -579,6 +582,16 @@ async function saveBundleData(
 
 	if (Array.isArray(bundleData.bundle)) {
 		for (const execution of bundleData.bundle) {
+			// Skip nonce updates for CreateVault (no vault exists yet)
+			if (execution.intention.action === 'CreateVault') {
+				continue
+			}
+
+			// Skip nonce updates if from is 0 (edge case safety)
+			if (execution.from === 0) {
+				continue
+			}
+
 			const vaultNonce = execution.intention.nonce
 			const vault = execution.from
 			const updateResult = await pool.query(
@@ -718,18 +731,134 @@ async function publishBundle(data: string, signature: string, from: string) {
 			if (execution.intention?.action === 'AssignDeposit') {
 				// Publish-time crediting for AssignDeposit
 				for (const proof of execution.proof) {
-					// Create a transactional assignment event (partial or full)
-					await createAssignmentEventTransactional(
-						proof.deposit_id,
-						proof.amount,
-						String(proof.to)
-					)
+					// Type assertion: proof should have AssignDepositProof structure
+					const proofObj = proof as AssignDepositProof
 
-					// Credit the destination vault balance
-					const current = await getBalance(proof.to, proof.token)
-					const increment = safeBigInt(proof.amount)
-					const newBalance = current + increment
-					await updateBalance(proof.to, proof.token, newBalance)
+					const targetAmount = safeBigInt(proofObj.amount)
+					let remainingToAssign = targetAmount
+
+					// Get chain_id from the corresponding input/output (they should match)
+					const inputIndex = execution.intention.inputs.findIndex(
+						(input: IntentionInput) =>
+							input.asset.toLowerCase() === proofObj.token.toLowerCase()
+					)
+					const chainId =
+						inputIndex >= 0
+							? execution.intention.inputs[inputIndex].chain_id
+							: execution.intention.outputs.find(
+									(output: IntentionOutput) =>
+										output.asset.toLowerCase() === proofObj.token.toLowerCase()
+								)?.chain_id || 11155111 // Default to Sepolia if not found
+
+					// If deposit_id exists, try to use it first
+					if (proofObj.deposit_id !== undefined) {
+						try {
+							await createAssignmentEventTransactional(
+								proofObj.deposit_id,
+								proofObj.amount,
+								String(proofObj.to)
+							)
+
+							// Credit the destination vault balance
+							const current = await getBalance(proofObj.to, proofObj.token)
+							const increment = safeBigInt(proofObj.amount)
+							const newBalance = current + increment
+							await updateBalance(proofObj.to, proofObj.token, newBalance)
+
+							// Successfully assigned, log and move to next proof
+							logger.info(
+								`Vault ${proofObj.to} seeded successfully: ${proofObj.amount} ${proofObj.token} assigned from deposit ${proofObj.deposit_id}`
+							)
+							continue
+						} catch (error) {
+							// Check if error is "Not enough remaining"
+							if (
+								error instanceof Error &&
+								error.message.includes('Not enough remaining')
+							) {
+								logger.warn(
+									`Deposit ${proofObj.deposit_id} exhausted for token ${proofObj.token}, falling back to multi-deposit combination (required: ${proofObj.amount})`
+								)
+								// Fall through to multi-deposit combination path
+							} else {
+								// Re-throw other errors
+								throw error
+							}
+						}
+					}
+
+					// Multi-deposit combination path (for deferred selection or fallback)
+					// This path is used when deposit_id is undefined (deferred selection) or
+					// when the specified deposit_id was exhausted (fallback from catch block)
+					const isDeferredSelection = proofObj.deposit_id === undefined
+					if (isDeferredSelection) {
+						logger.info(
+							`Using deferred deposit selection for token ${proofObj.token}, vault ${proofObj.to}: combining deposits to fulfill ${proofObj.amount}`
+						)
+					}
+					let depositsCombined = 0
+					let totalCredited = 0n
+
+					while (remainingToAssign > 0n) {
+						const deposit = await findNextDepositWithAnyRemaining({
+							depositor: proofObj.depositor,
+							token: proofObj.token,
+							chain_id: chainId,
+						})
+
+						if (!deposit) {
+							// No more deposits available - compute total available for error message
+							const totalAvailable = await getTotalAvailableDeposits({
+								depositor: proofObj.depositor,
+								token: proofObj.token,
+								chain_id: chainId,
+							})
+							const errorMessage = `Insufficient deposits for token ${proofObj.token}: required ${remainingToAssign.toString()}, available ${totalAvailable}`
+							logger.error(errorMessage, {
+								token: proofObj.token,
+								required: remainingToAssign.toString(),
+								available: totalAvailable,
+								vaultId: proofObj.to,
+								depositor: proofObj.depositor,
+								chainId,
+							})
+							throw new Error(errorMessage)
+						}
+
+						const depositRemaining = BigInt(deposit.remaining)
+						const chunk =
+							remainingToAssign < depositRemaining
+								? remainingToAssign
+								: depositRemaining
+
+						// Create assignment event for this chunk
+						await createAssignmentEventTransactional(
+							deposit.id,
+							chunk.toString(),
+							String(proofObj.to)
+						)
+
+						remainingToAssign -= chunk
+						totalCredited += chunk
+						depositsCombined++
+					}
+
+					// Credit the destination vault balance once after all assignments
+					if (totalCredited > 0n) {
+						const current = await getBalance(proofObj.to, proofObj.token)
+						const newBalance = current + totalCredited
+						await updateBalance(proofObj.to, proofObj.token, newBalance)
+					}
+
+					if (depositsCombined > 1) {
+						logger.info(
+							`Combined ${depositsCombined} deposits to fulfill ${proofObj.amount} ${proofObj.token} for vault ${proofObj.to}`
+						)
+					} else if (depositsCombined === 1) {
+						logger.info(
+							`Vault ${proofObj.to} seeded successfully: ${proofObj.amount} ${proofObj.token} assigned via deferred deposit selection`
+						)
+					}
 				}
 			} else {
 				for (const proof of execution.proof) {
@@ -818,19 +947,37 @@ async function updateBalances(
 
 /**
  * Creates and submits a signed intention to seed a new vault with initial tokens.
- * This creates an auditable record of the seeding transaction.
+ * Uses AssignDeposit to assign deposits directly to the new vault.
+ * Only seeds if VAULT_SEEDING is enabled.
  */
 async function createAndSubmitSeedingIntention(
 	newVaultId: number
 ): Promise<void> {
-	logger.info(`Creating seeding intention for new vault ${newVaultId}...`)
+	const { VAULT_SEEDING } = getEnvConfig()
+
+	// Skip seeding if VAULT_SEEDING is not enabled
+	if (!VAULT_SEEDING) {
+		logger.info(
+			`Vault seeding is disabled (VAULT_SEEDING=false), skipping seeding for vault ${newVaultId}`
+		)
+		return
+	}
+
+	const submitterVaultId = PROPOSER_VAULT_ID.value
+	const currentNonce = await getVaultNonce(submitterVaultId)
+	const nextNonce = currentNonce + 1
+
+	// Build token summary for logging
+	const tokenSummary = SEED_CONFIG.map(
+		(token) => `${token.amount} ${token.symbol || token.address}`
+	).join(', ')
+
+	logger.info(
+		`Seeding requested for vault ${newVaultId}: controller=${PROPOSER_ADDRESS}, submitterVaultId=${submitterVaultId}, nonce=${nextNonce}, tokens=[${tokenSummary}]`
+	)
 
 	const inputs: IntentionInput[] = []
 	const outputs: IntentionOutput[] = []
-	const tokenSummary = SEED_CONFIG.map(
-		(token) => `${token.amount} ${token.symbol}`
-	).join(', ')
-	const action = `Transfer ${tokenSummary} to vault #${newVaultId}`
 
 	for (const token of SEED_CONFIG) {
 		const tokenDecimals = await getSepoliaTokenDecimals(token.address)
@@ -839,7 +986,6 @@ async function createAndSubmitSeedingIntention(
 		inputs.push({
 			asset: token.address,
 			amount: seedAmount.toString(),
-			from: PROPOSER_VAULT_ID.value,
 			chain_id: 11155111, // Sepolia
 		})
 
@@ -851,41 +997,26 @@ async function createAndSubmitSeedingIntention(
 		})
 	}
 
-	const currentNonce = await getVaultNonce(PROPOSER_VAULT_ID.value)
-	const nextNonce = currentNonce + 1
-	const feeAmountInWei = parseUnits('0.0001', 18).toString()
-
 	const intention: Intention = {
-		action: action,
+		action: 'AssignDeposit',
 		nonce: nextNonce,
 		expiry: Math.floor(Date.now() / 1000) + 300, // 5 minute expiry
 		inputs,
 		outputs,
-		totalFee: [
-			{
-				asset: ['ETH'],
-				amount: '0.0001',
-			},
-		],
-		proposerTip: [], // 0 tip for internal seeding
-		protocolFee: [
-			{
-				asset: '0x0000000000000000000000000000000000000000', // ETH
-				amount: feeAmountInWei,
-				chain_id: 11155111, // Sepolia
-			},
-		],
+		totalFee: [], // Empty for AssignDeposit
+		proposerTip: [], // Empty for AssignDeposit
+		protocolFee: [], // Empty for AssignDeposit
 	}
 
 	// Proposer signs the intention with its wallet
 	const signature = await wallet.signMessage(JSON.stringify(intention))
 
 	// Submit the intention to be processed and bundled
-	// The controller is the proposer's own address
+	// The controller is the proposer's own address (who made the deposits)
 	await handleIntention(intention, signature, PROPOSER_ADDRESS)
 
 	logger.info(
-		`Successfully submitted seeding intention for vault ${newVaultId}.`
+		`Successfully submitted AssignDeposit seeding intention for vault ${newVaultId} (nonce: ${nextNonce}, submitter vault: ${submitterVaultId}).`
 	)
 }
 
@@ -994,6 +1125,7 @@ async function handleIntention(
 				discoverAndIngestEthDeposits,
 				findDepositWithSufficientRemaining,
 				validateVaultIdOnChain,
+				getVaultsForController,
 				logger,
 				diagnostic,
 			},

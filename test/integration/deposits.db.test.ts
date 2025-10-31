@@ -15,6 +15,8 @@ import {
 	insertDepositIfMissing,
 	getDepositRemaining,
 	findDepositWithSufficientRemaining,
+	findNextDepositWithAnyRemaining,
+	getTotalAvailableDeposits,
 	createAssignmentEventTransactional,
 } from '../../src/utils/deposits.js'
 
@@ -188,5 +190,181 @@ describe('Partial assignment events (DB)', () => {
 		await createAssignmentEventTransactional(ins.id, '50', '9003')
 		const remaining2 = await getDepositRemaining(ins.id)
 		expect(remaining2).toBe('0')
+	})
+})
+
+describe('Multi-deposit combination helpers (DB)', () => {
+	test('findNextDepositWithAnyRemaining: finds oldest deposit with any remaining', async () => {
+		// Create multiple deposits for the same token
+		const deposit1 = await insertDepositIfMissing({
+			tx_hash: TEST_TX,
+			transfer_uid: TEST_UID(200),
+			chain_id: 11155111,
+			depositor: CTRL,
+			token: TOKEN,
+			amount: '1000',
+		})
+
+		const deposit2 = await insertDepositIfMissing({
+			tx_hash: TEST_TX,
+			transfer_uid: TEST_UID(201),
+			chain_id: 11155111,
+			depositor: CTRL,
+			token: TOKEN,
+			amount: '500',
+		})
+
+		// Should find the oldest (first) deposit
+		const found = await findNextDepositWithAnyRemaining({
+			depositor: CTRL,
+			token: TOKEN,
+			chain_id: 11155111,
+		})
+		expect(found?.id).toBe(deposit1.id)
+		expect(found?.remaining).toBe('1000')
+
+		// Partially assign deposit1
+		await createAssignmentEventTransactional(deposit1.id, '300', '10001')
+		const remaining1 = await getDepositRemaining(deposit1.id)
+		expect(remaining1).toBe('700')
+
+		// Still finds deposit1 (oldest with remaining > 0)
+		const found2 = await findNextDepositWithAnyRemaining({
+			depositor: CTRL,
+			token: TOKEN,
+			chain_id: 11155111,
+		})
+		expect(found2?.id).toBe(deposit1.id)
+		expect(found2?.remaining).toBe('700')
+
+		// Fully assign deposit1
+		await createAssignmentEventTransactional(deposit1.id, '700', '10002')
+		const remaining1Final = await getDepositRemaining(deposit1.id)
+		expect(remaining1Final).toBe('0')
+
+		// Now should find deposit2 (oldest remaining)
+		const found3 = await findNextDepositWithAnyRemaining({
+			depositor: CTRL,
+			token: TOKEN,
+			chain_id: 11155111,
+		})
+		expect(found3?.id).toBe(deposit2.id)
+		expect(found3?.remaining).toBe('500')
+	})
+
+	test('findNextDepositWithAnyRemaining: returns null when no deposits available', async () => {
+		const found = await findNextDepositWithAnyRemaining({
+			depositor: CTRL,
+			token: TOKEN,
+			chain_id: 11155111,
+		})
+		expect(found).toBeNull()
+	})
+
+	test('getTotalAvailableDeposits: sums all remaining deposits', async () => {
+		// Create multiple deposits
+		const deposit1 = await insertDepositIfMissing({
+			tx_hash: TEST_TX,
+			transfer_uid: TEST_UID(300),
+			chain_id: 11155111,
+			depositor: CTRL,
+			token: TOKEN,
+			amount: '1000',
+		})
+
+		const deposit2 = await insertDepositIfMissing({
+			tx_hash: TEST_TX,
+			transfer_uid: TEST_UID(301),
+			chain_id: 11155111,
+			depositor: CTRL,
+			token: TOKEN,
+			amount: '500',
+		})
+
+		const deposit3 = await insertDepositIfMissing({
+			tx_hash: TEST_TX,
+			transfer_uid: TEST_UID(302),
+			chain_id: 11155111,
+			depositor: CTRL,
+			token: TOKEN,
+			amount: '200',
+		})
+
+		// Total should be sum of all deposits
+		const total1 = await getTotalAvailableDeposits({
+			depositor: CTRL,
+			token: TOKEN,
+			chain_id: 11155111,
+		})
+		expect(total1).toBe('1700') // 1000 + 500 + 200
+
+		// Partially assign deposit1
+		await createAssignmentEventTransactional(deposit1.id, '300', '20001')
+		const total2 = await getTotalAvailableDeposits({
+			depositor: CTRL,
+			token: TOKEN,
+			chain_id: 11155111,
+		})
+		expect(total2).toBe('1400') // 700 + 500 + 200
+
+		// Fully assign deposit1
+		await createAssignmentEventTransactional(deposit1.id, '700', '20002')
+		const total3 = await getTotalAvailableDeposits({
+			depositor: CTRL,
+			token: TOKEN,
+			chain_id: 11155111,
+		})
+		expect(total3).toBe('700') // 0 + 500 + 200
+
+		// Assign all remaining
+		await createAssignmentEventTransactional(deposit2.id, '500', '20003')
+		await createAssignmentEventTransactional(deposit3.id, '200', '20004')
+		const total4 = await getTotalAvailableDeposits({
+			depositor: CTRL,
+			token: TOKEN,
+			chain_id: 11155111,
+		})
+		expect(total4).toBe('0')
+	})
+
+	test('getTotalAvailableDeposits: returns 0 for non-existent deposits', async () => {
+		const total = await getTotalAvailableDeposits({
+			depositor: '0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF',
+			token: TOKEN,
+			chain_id: 11155111,
+		})
+		expect(total).toBe('0')
+	})
+
+	test('getTotalAvailableDeposits: handles multiple deposits with partial assignments', async () => {
+		// Create deposits with different amounts
+		const deposit1 = await insertDepositIfMissing({
+			tx_hash: TEST_TX,
+			transfer_uid: TEST_UID(400),
+			chain_id: 11155111,
+			depositor: CTRL,
+			token: TOKEN,
+			amount: '1000',
+		})
+
+		const deposit2 = await insertDepositIfMissing({
+			tx_hash: TEST_TX,
+			transfer_uid: TEST_UID(401),
+			chain_id: 11155111,
+			depositor: CTRL,
+			token: TOKEN,
+			amount: '800',
+		})
+
+		// Partially assign both
+		await createAssignmentEventTransactional(deposit1.id, '600', '30001')
+		await createAssignmentEventTransactional(deposit2.id, '200', '30002')
+
+		const total = await getTotalAvailableDeposits({
+			depositor: CTRL,
+			token: TOKEN,
+			chain_id: 11155111,
+		})
+		expect(total).toBe('1000') // 400 + 600
 	})
 })
