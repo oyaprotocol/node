@@ -142,9 +142,8 @@ The setup script creates the following tables:
 - **bundles:** Stores bundle data and nonce.
 - **cids:** Stores IPFS CIDs corresponding to bundles.
 - **balances:** Tracks token balances per vault.
-- **nonces:** Tracks the latest nonce for each vault.
 - **proposers:** Records block proposers.
-- **vaults:** Maps vault IDs to controller addresses and optional rules.
+- **vaults:** Maps vault IDs to controller addresses, optional rules, and nonce tracking.
 - **deposits:** Records on-chain deposits for assignment to vault balances.
 - **deposit_assignment_events:** Records partial or full assignment events against deposits. A deposit becomes fully assigned when the sum of its assignment events equals its original amount; in that case, `deposits.assigned_at` is set automatically.
 
@@ -165,6 +164,20 @@ The `deposits` table records raw on-chain deposits, and `deposit_assignment_even
 
 When enabled, the node automatically seeds newly created vaults with initial token balances using the `AssignDeposit` intention. This allows new users to receive (testnet) tokens immediately upon vault creation.
 
+
+### Configuration & Prerequisites
+
+Before enabling vault seeding, ensure:
+1. Your `PROPOSER_ADDRESS` has made on-chain deposits to the VaultTracker contract
+2. Deposits exist for each token/amount specified in `src/config/seedingConfig.ts` via the `SEED_CONFIG` array.
+3. The deposits are on the same chain as configured (default: Sepolia, chain ID 11155111)
+4. Your `.env` file contains the following:
+
+```ini
+VAULT_SEEDING=true
+PROPOSER_VAULT_ID=1  # Your proposer's vault ID
+```
+
 ### How It Works
 
 1. **Operational Precondition:** The `PROPOSER_ADDRESS` must have sufficient on-chain deposits for each token specified in `SEED_CONFIG`. These deposits are made directly to the VaultTracker contract on-chain.
@@ -179,32 +192,6 @@ When enabled, the node automatically seeds newly created vaults with initial tok
 3. **Resilience:**
    - Vault creation succeeds even if seeding fails (best-effort seeding)
    - If a selected deposit is exhausted between intention time and publish time, the system automatically falls back to combining multiple deposits
-
-### Configuration
-
-Enable vault seeding by setting in your `.env`:
-
-```ini
-VAULT_SEEDING=true
-PROPOSER_VAULT_ID=1  # Your proposer's vault ID
-```
-
-The tokens and amounts to seed are configured in `src/config/seedingConfig.ts` via the `SEED_CONFIG` array. Each entry specifies:
-- `address`: ERC20 token contract address
-- `amount`: Amount to seed (as a decimal string, e.g., "1000.0")
-- `symbol`: Token symbol for logging (optional)
-
-### Prerequisites
-
-Before enabling vault seeding, ensure:
-1. Your `PROPOSER_ADDRESS` has made on-chain deposits to the VaultTracker contract
-2. Deposits exist for each token/amount specified in `SEED_CONFIG`
-3. The deposits are on the same chain as configured (default: Sepolia, chain ID 11155111)
-
-### Seeding Behavior
-
-- **Disabled (`VAULT_SEEDING=false`):** No seeding occurs. Vaults are created without initial balances.
-- **Enabled (`VAULT_SEEDING=true`):** Automatic seeding occurs for all newly created vaults. If seeding fails, vault creation still succeeds.
 
 ## Filecoin Pin Setup (Optional)
 
