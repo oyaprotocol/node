@@ -765,7 +765,10 @@ async function publishBundle(data: string, signature: string, from: string) {
 							const newBalance = current + increment
 							await updateBalance(proofObj.to, proofObj.token, newBalance)
 
-							// Successfully assigned, move to next proof
+							// Successfully assigned, log and move to next proof
+							logger.info(
+								`Vault ${proofObj.to} seeded successfully: ${proofObj.amount} ${proofObj.token} assigned from deposit ${proofObj.deposit_id}`
+							)
 							continue
 						} catch (error) {
 							// Check if error is "Not enough remaining"
@@ -774,7 +777,7 @@ async function publishBundle(data: string, signature: string, from: string) {
 								error.message.includes('Not enough remaining')
 							) {
 								logger.warn(
-									`Deposit ${proofObj.deposit_id} exhausted, falling back to multi-deposit combination for token ${proofObj.token}`
+									`Deposit ${proofObj.deposit_id} exhausted for token ${proofObj.token}, falling back to multi-deposit combination (required: ${proofObj.amount})`
 								)
 								// Fall through to multi-deposit combination path
 							} else {
@@ -785,6 +788,14 @@ async function publishBundle(data: string, signature: string, from: string) {
 					}
 
 					// Multi-deposit combination path (for deferred selection or fallback)
+					// This path is used when deposit_id is undefined (deferred selection) or
+					// when the specified deposit_id was exhausted (fallback from catch block)
+					const isDeferredSelection = proofObj.deposit_id === undefined
+					if (isDeferredSelection) {
+						logger.info(
+							`Using deferred deposit selection for token ${proofObj.token}, vault ${proofObj.to}: combining deposits to fulfill ${proofObj.amount}`
+						)
+					}
 					let depositsCombined = 0
 					let totalCredited = 0n
 
@@ -802,9 +813,16 @@ async function publishBundle(data: string, signature: string, from: string) {
 								token: proofObj.token,
 								chain_id: chainId,
 							})
-							throw new Error(
-								`Insufficient deposits for token ${proofObj.token}: required ${remainingToAssign.toString()}, available ${totalAvailable}`
-							)
+							const errorMessage = `Insufficient deposits for token ${proofObj.token}: required ${remainingToAssign.toString()}, available ${totalAvailable}`
+							logger.error(errorMessage, {
+								token: proofObj.token,
+								required: remainingToAssign.toString(),
+								available: totalAvailable,
+								vaultId: proofObj.to,
+								depositor: proofObj.depositor,
+								chainId,
+							})
+							throw new Error(errorMessage)
 						}
 
 						const depositRemaining = BigInt(deposit.remaining)
@@ -835,6 +853,10 @@ async function publishBundle(data: string, signature: string, from: string) {
 					if (depositsCombined > 1) {
 						logger.info(
 							`Combined ${depositsCombined} deposits to fulfill ${proofObj.amount} ${proofObj.token} for vault ${proofObj.to}`
+						)
+					} else if (depositsCombined === 1) {
+						logger.info(
+							`Vault ${proofObj.to} seeded successfully: ${proofObj.amount} ${proofObj.token} assigned via deferred deposit selection`
 						)
 					}
 				}
@@ -941,13 +963,18 @@ async function createAndSubmitSeedingIntention(
 		return
 	}
 
-	logger.info(
-		`Creating AssignDeposit seeding intention for new vault ${newVaultId}...`
-	)
-
 	const submitterVaultId = PROPOSER_VAULT_ID.value
 	const currentNonce = await getVaultNonce(submitterVaultId)
 	const nextNonce = currentNonce + 1
+
+	// Build token summary for logging
+	const tokenSummary = SEED_CONFIG.map(
+		(token) => `${token.amount} ${token.symbol || token.address}`
+	).join(', ')
+
+	logger.info(
+		`Seeding requested for vault ${newVaultId}: controller=${PROPOSER_ADDRESS}, submitterVaultId=${submitterVaultId}, nonce=${nextNonce}, tokens=[${tokenSummary}]`
+	)
 
 	const inputs: IntentionInput[] = []
 	const outputs: IntentionOutput[] = []

@@ -59,6 +59,9 @@ export async function handleCreateVault(params: {
 		// Seeding failures should not prevent vault creation from succeeding.
 		try {
 			await deps.createAndSubmitSeedingIntention(newVaultId)
+			deps.logger.info(
+				`Seeding intention scheduled successfully for vault ${newVaultId}`
+			)
 		} catch (seedingError) {
 			deps.logger.error(
 				`Seeding scheduling failed for vault ${newVaultId}:`,
