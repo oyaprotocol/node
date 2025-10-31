@@ -582,6 +582,16 @@ async function saveBundleData(
 
 	if (Array.isArray(bundleData.bundle)) {
 		for (const execution of bundleData.bundle) {
+			// Skip nonce updates for CreateVault (no vault exists yet)
+			if (execution.intention.action === 'CreateVault') {
+				continue
+			}
+
+			// Skip nonce updates if from is 0 (edge case safety)
+			if (execution.from === 0) {
+				continue
+			}
+
 			const vaultNonce = execution.intention.nonce
 			const vault = execution.from
 			const updateResult = await pool.query(
