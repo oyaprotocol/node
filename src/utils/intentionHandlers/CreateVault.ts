@@ -55,8 +55,17 @@ export async function handleCreateVault(params: {
 		// 3. Persist the new vault-to-controller mapping to the database.
 		await deps.updateVaultControllers(newVaultId, [validatedController])
 
-		// 4. Submit an intention to seed it with initial balances.
-		await deps.createAndSubmitSeedingIntention(newVaultId)
+		// 4. Submit an intention to seed it with initial balances (best-effort).
+		// Seeding failures should not prevent vault creation from succeeding.
+		try {
+			await deps.createAndSubmitSeedingIntention(newVaultId)
+		} catch (seedingError) {
+			deps.logger.error(
+				`Seeding scheduling failed for vault ${newVaultId}:`,
+				seedingError
+			)
+			// Continue - vault creation succeeded, seeding can be retried later if needed
+		}
 	} catch (error) {
 		deps.logger.error('Failed to process CreateVault intention:', error)
 		throw error
