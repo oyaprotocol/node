@@ -213,12 +213,19 @@ export function validateIntention(intention: Intention): Intention {
 		)
 	}
 
+	// CreateVault allows empty inputs/outputs
+	const isCreateVault = intention.action === 'CreateVault'
+
 	const validated: Intention = {
 		action: intention.action,
 		nonce: validateNonce(intention.nonce, 'intention.nonce'),
 		expiry: validateTimestamp(intention.expiry, 'intention.expiry'),
-		inputs: validateIntentionInputs(intention.inputs, 'intention.inputs'),
-		outputs: validateIntentionOutputs(intention.outputs, 'intention.outputs'),
+		inputs: isCreateVault
+			? validateIntentionInputsOptional(intention.inputs, 'intention.inputs')
+			: validateIntentionInputs(intention.inputs, 'intention.inputs'),
+		outputs: isCreateVault
+			? validateIntentionOutputsOptional(intention.outputs, 'intention.outputs')
+			: validateIntentionOutputs(intention.outputs, 'intention.outputs'),
 		totalFee: validateTotalFeeAmounts(intention.totalFee, 'intention.totalFee'),
 		proposerTip: validateFeeAmounts(
 			intention.proposerTip,
@@ -330,6 +337,99 @@ function validateIntentionOutputs(
 		if (hasToExternal) {
 			validated.to_external = validateAddress(
 				output.to_external as string,
+				`${fieldPath}.to_external`
+			)
+		}
+
+		if (output.data !== undefined) {
+			validated.data = output.data
+		}
+
+		return validated
+	})
+}
+
+/**
+ * Validates an array of intention inputs (allows empty arrays for CreateVault)
+ */
+function validateIntentionInputsOptional(
+	inputs: IntentionInput[],
+	fieldName: string
+): IntentionInput[] {
+	if (!Array.isArray(inputs)) {
+		throw new ValidationError('Inputs must be an array', fieldName, inputs)
+	}
+	if (inputs.length === 0) {
+		return []
+	}
+	return inputs.map((input, index) => {
+		const fieldPath = `${fieldName}[${index}]`
+		const validated: IntentionInput = {
+			asset: validateAddress(input.asset, `${fieldPath}.asset`),
+			amount: validateBalance(input.amount, `${fieldPath}.amount`),
+			chain_id: validateId(input.chain_id, `${fieldPath}.chain_id`),
+		}
+
+		if (input.from !== undefined) {
+			validated.from = validateId(input.from, `${fieldPath}.from`)
+		}
+
+		if (input.data !== undefined) {
+			validated.data = input.data
+		}
+
+		return validated
+	})
+}
+
+/**
+ * Validates an array of intention outputs (allows empty arrays for CreateVault)
+ */
+function validateIntentionOutputsOptional(
+	outputs: IntentionOutput[],
+	fieldName: string
+): IntentionOutput[] {
+	if (!Array.isArray(outputs)) {
+		throw new ValidationError('Outputs must be an array', fieldName, outputs)
+	}
+	if (outputs.length === 0) {
+		return []
+	}
+	return outputs.map((output, index) => {
+		const fieldPath = `${fieldName}[${index}]`
+		const validated: IntentionOutput = {
+			asset: validateAddress(output.asset, `${fieldPath}.asset`),
+			amount: validateBalance(output.amount, `${fieldPath}.amount`),
+			chain_id: validateId(output.chain_id, `${fieldPath}.chain_id`),
+		}
+
+		const hasTo = output.to !== undefined
+		const hasToExternal =
+			output.to_external !== undefined && output.to_external !== ''
+
+		if (hasTo && hasToExternal) {
+			throw new ValidationError(
+				'Fields "to" and "to_external" are mutually exclusive',
+				fieldPath,
+				output
+			)
+		}
+
+		if (!hasTo && !hasToExternal) {
+			throw new ValidationError(
+				'Either "to" or "to_external" must be provided',
+				fieldPath,
+				output
+			)
+		}
+
+		if (hasTo) {
+			validated.to = validateId(output.to, `${fieldPath}.to`)
+		}
+
+		if (hasToExternal) {
+			validated.to_external = validateAddress(
+				output.to_external!,
 				`${fieldPath}.to_external`
 			)
 		}
@@ -475,7 +575,7 @@ export async function validateVaultIdOnChain(
  * - inputs.length === outputs.length
  * - For each index i: asset/amount/chain_id must match between input and output
  * - outputs[i].to must be provided (no to_external) and must be a valid on-chain vault ID
- * - Fees must be zero (totalFee amounts zero; proposerTip/protocolFee empty; agentTip empty)
+ * - Fees must be zero (totalFee empty or amounts zero; proposerTip/protocolFee empty; agentTip empty)
  * Accepts a dependency to validate vault IDs on-chain.
  */
 export async function validateAssignDepositStructure(
@@ -497,20 +597,23 @@ export async function validateAssignDepositStructure(
 		)
 	}
 
-	if (!Array.isArray(intention.totalFee) || intention.totalFee.length === 0) {
+	if (!Array.isArray(intention.totalFee)) {
 		throw new ValidationError(
-			'AssignDeposit requires totalFee with zero amount',
+			'AssignDeposit totalFee must be an array',
 			'intention.totalFee',
 			intention.totalFee
 		)
 	}
-	const allTotalZero = intention.totalFee.every((f) => f.amount === '0')
-	if (!allTotalZero) {
-		throw new ValidationError(
-			'AssignDeposit totalFee must be zero',
-			'intention.totalFee',
-			intention.totalFee
-		)
+	// If totalFee is not empty, all amounts must be zero
+	if (intention.totalFee.length > 0) {
+		const allTotalZero = intention.totalFee.every((f) => f.amount === '0')
+		if (!allTotalZero) {
+			throw new ValidationError(
+				'AssignDeposit totalFee must be zero',
+				'intention.totalFee',
+				intention.totalFee
+			)
+		}
 	}
 	if (
 		Array.isArray(intention.proposerTip) &&
@@ -582,5 +685,127 @@ export async function validateAssignDepositStructure(
 		}
 
 		await validateVaultId(Number(output.to))
+	}
+}
+
+/**
+ * Validates structural and fee constraints for CreateVault intentions.
+ * Rules:
+ * - inputs must be empty (CreateVault doesn't transfer assets)
+ * - outputs must be empty (CreateVault doesn't transfer assets)
+ * - All fee arrays must be empty (totalFee, proposerTip, protocolFee, agentTip)
+ */
+export function validateCreateVaultStructure(intention: Intention): void {
+	if (!Array.isArray(intention.inputs)) {
+		throw new ValidationError(
+			'CreateVault inputs must be an array',
+			'intention.inputs',
+			intention.inputs
+		)
+	}
+	if (intention.inputs.length > 0) {
+		throw new ValidationError(
+			'CreateVault inputs must be empty',
+			'intention.inputs',
+			intention.inputs
+		)
+	}
+
+	if (!Array.isArray(intention.outputs)) {
+		throw new ValidationError(
+			'CreateVault outputs must be an array',
+			'intention.outputs',
+			intention.outputs
+		)
+	}
+	if (intention.outputs.length > 0) {
+		throw new ValidationError(
+			'CreateVault outputs must be empty',
+			'intention.outputs',
+			intention.outputs
+		)
+	}
+
+	if (!Array.isArray(intention.totalFee)) {
+		throw new ValidationError(
+			'CreateVault totalFee must be an array',
+			'intention.totalFee',
+			intention.totalFee
+		)
+	}
+	if (intention.totalFee.length > 0) {
+		throw new ValidationError(
+			'CreateVault totalFee must be empty',
+			'intention.totalFee',
+			intention.totalFee
+		)
+	}
+
+	if (
+		Array.isArray(intention.proposerTip) &&
+		intention.proposerTip.length > 0
+	) {
+		throw new ValidationError(
+			'CreateVault proposerTip must be empty',
+			'intention.proposerTip',
+			intention.proposerTip
+		)
+	}
+
+	if (
+		Array.isArray(intention.protocolFee) &&
+		intention.protocolFee.length > 0
+	) {
+		throw new ValidationError(
+			'CreateVault protocolFee must be empty',
+			'intention.protocolFee',
+			intention.protocolFee
+		)
+	}
+
+	if (Array.isArray(intention.agentTip) && intention.agentTip.length > 0) {
+		throw new ValidationError(
+			'CreateVault agentTip must be empty if provided',
+			'intention.agentTip',
+			intention.agentTip
+		)
+	}
+}
+
+/**
+ * Contract interface for vault ID validation.
+ * Provides a method to get the next unassigned vault ID from the chain.
+ */
+export interface VaultIdValidator {
+	getNextVaultId: () => Promise<number>
+}
+
+/**
+ * Creates configured validator functions that use the provided contract for on-chain validation.
+ * Returns validators that can check vault IDs and validate AssignDeposit structures.
+ *
+ * @param contract - Contract interface that provides nextVaultId
+ * @returns Configured validator functions
+ */
+export function createValidators(contract: VaultIdValidator) {
+	/**
+	 * Validates that a vault ID exists on-chain using the provided contract.
+	 */
+	const vaultIdValidator = async (vaultId: number): Promise<void> => {
+		await validateVaultIdOnChain(vaultId, contract.getNextVaultId)
+	}
+
+	/**
+	 * Validates AssignDeposit intention structure with on-chain vault ID validation.
+	 */
+	const assignDepositValidator = async (
+		intention: Intention
+	): Promise<void> => {
+		await validateAssignDepositStructure(intention, vaultIdValidator)
+	}
+
+	return {
+		validateVaultIdOnChain: vaultIdValidator,
+		validateAssignDepositStructure: assignDepositValidator,
 	}
 }
