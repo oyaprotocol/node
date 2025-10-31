@@ -1,5 +1,14 @@
 /**
  * CreateVault intention handler
+ *
+ * Processes CreateVault intentions by:
+ * 1. Calling the on-chain VaultTracker contract to create the vault
+ * 2. Parsing the VaultCreated event to get the new vault ID
+ * 3. Persisting the vault-to-controller mapping in the database
+ * 4. Optionally scheduling a seeding intention (if VAULT_SEEDING is enabled)
+ *
+ * Seeding is best-effort: vault creation succeeds even if seeding fails.
+ * This allows vaults to be created even when deposits are temporarily unavailable.
  */
 
 import type { Intention } from '../../types/core.js'

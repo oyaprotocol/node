@@ -24,8 +24,16 @@ export const PROPOSER_VAULT_ID = {
 }
 
 /**
- * Configuration for the specific ERC20 tokens and amounts to be transferred
- * from the proposer's vault to a new user's vault upon creation.
+ * Configuration for the specific ERC20 tokens and amounts to be assigned
+ * to new user vaults upon creation via AssignDeposit intentions.
+ *
+ * These tokens are assigned directly from on-chain deposits made by PROPOSER_ADDRESS
+ * to the VaultTracker contract. The proposer must have sufficient deposits for each
+ * token/amount listed here before seeding will work.
+ *
+ * When VAULT_SEEDING=true, a CreateVault intention automatically triggers an
+ * AssignDeposit intention that assigns these deposits to the new vault.
+ *
  * @internal
  */
 export const SEED_CONFIG = [

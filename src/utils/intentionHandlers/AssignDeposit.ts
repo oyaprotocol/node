@@ -1,5 +1,21 @@
 /**
  * AssignDeposit intention handler
+ *
+ * Processes AssignDeposit intentions which assign existing on-chain deposits to vaults.
+ *
+ * Key features:
+ * - Discovers deposits from on-chain events (ERC20 or ETH)
+ * - Selects deposits with sufficient remaining balance
+ * - Supports partial deposit assignments (can combine multiple deposits)
+ * - Determines submitter vault for nonce tracking:
+ *   - If inputs have `from` field: uses that vault ID
+ *   - If no `from` field: queries vaults controlled by the controller
+ *   - If no vaults found: uses from=0 (no nonce update)
+ * - Sets execution.from to the submitter vault ID for proper nonce tracking
+ *
+ * At publish time, deposits are assigned and balances are credited to destination vaults.
+ * If a selected deposit is exhausted, the system automatically falls back to combining
+ * multiple deposits to fulfill the requirement.
  */
 
 import type {
