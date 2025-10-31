@@ -54,6 +54,8 @@ import { sendWebhook } from './utils/webhook.js'
 import {
 	insertDepositIfMissing,
 	findDepositWithSufficientRemaining,
+	findNextDepositWithAnyRemaining,
+	getTotalAvailableDeposits,
 	createAssignmentEventTransactional,
 } from './utils/deposits.js'
 import { handleAssignDeposit } from './utils/intentionHandlers/AssignDeposit.js'
@@ -64,6 +66,7 @@ import type {
 	ExecutionObject,
 	IntentionInput,
 	IntentionOutput,
+	AssignDepositProof,
 } from './types/core.js'
 
 const gzip = promisify(zlib.gzip)
@@ -718,18 +721,112 @@ async function publishBundle(data: string, signature: string, from: string) {
 			if (execution.intention?.action === 'AssignDeposit') {
 				// Publish-time crediting for AssignDeposit
 				for (const proof of execution.proof) {
-					// Create a transactional assignment event (partial or full)
-					await createAssignmentEventTransactional(
-						proof.deposit_id,
-						proof.amount,
-						String(proof.to)
-					)
+					// Type assertion: proof should have AssignDepositProof structure
+					const proofObj = proof as AssignDepositProof
 
-					// Credit the destination vault balance
-					const current = await getBalance(proof.to, proof.token)
-					const increment = safeBigInt(proof.amount)
-					const newBalance = current + increment
-					await updateBalance(proof.to, proof.token, newBalance)
+					const targetAmount = safeBigInt(proofObj.amount)
+					let remainingToAssign = targetAmount
+
+					// Get chain_id from the corresponding input/output (they should match)
+					const inputIndex = execution.intention.inputs.findIndex(
+						(input: IntentionInput) =>
+							input.asset.toLowerCase() === proofObj.token.toLowerCase()
+					)
+					const chainId =
+						inputIndex >= 0
+							? execution.intention.inputs[inputIndex].chain_id
+							: execution.intention.outputs.find(
+									(output: IntentionOutput) =>
+										output.asset.toLowerCase() === proofObj.token.toLowerCase()
+								)?.chain_id || 11155111 // Default to Sepolia if not found
+
+					// If deposit_id exists, try to use it first
+					if (proofObj.deposit_id !== undefined) {
+						try {
+							await createAssignmentEventTransactional(
+								proofObj.deposit_id,
+								proofObj.amount,
+								String(proofObj.to)
+							)
+
+							// Credit the destination vault balance
+							const current = await getBalance(proofObj.to, proofObj.token)
+							const increment = safeBigInt(proofObj.amount)
+							const newBalance = current + increment
+							await updateBalance(proofObj.to, proofObj.token, newBalance)
+
+							// Successfully assigned, move to next proof
+							continue
+						} catch (error) {
+							// Check if error is "Not enough remaining"
+							if (
+								error instanceof Error &&
+								error.message.includes('Not enough remaining')
+							) {
+								logger.warn(
+									`Deposit ${proofObj.deposit_id} exhausted, falling back to multi-deposit combination for token ${proofObj.token}`
+								)
+								// Fall through to multi-deposit combination path
+							} else {
+								// Re-throw other errors
+								throw error
+							}
+						}
+					}
+
+					// Multi-deposit combination path (for deferred selection or fallback)
+					let depositsCombined = 0
+					let totalCredited = 0n
+
+					while (remainingToAssign > 0n) {
+						const deposit = await findNextDepositWithAnyRemaining({
+							depositor: proofObj.depositor,
+							token: proofObj.token,
+							chain_id: chainId,
+						})
+
+						if (!deposit) {
+							// No more deposits available - compute total available for error message
+							const totalAvailable = await getTotalAvailableDeposits({
+								depositor: proofObj.depositor,
+								token: proofObj.token,
+								chain_id: chainId,
+							})
+							throw new Error(
+								`Insufficient deposits for token ${proofObj.token}: required ${remainingToAssign.toString()}, available ${totalAvailable}`
+							)
+						}
+
+						const depositRemaining = BigInt(deposit.remaining)
+						const chunk =
+							remainingToAssign < depositRemaining
+								? remainingToAssign
+								: depositRemaining
+
+						// Create assignment event for this chunk
+						await createAssignmentEventTransactional(
+							deposit.id,
+							chunk.toString(),
+							String(proofObj.to)
+						)
+
+						remainingToAssign -= chunk
+						totalCredited += chunk
+						depositsCombined++
+					}
+
+					// Credit the destination vault balance once after all assignments
+					if (totalCredited > 0n) {
+						const current = await getBalance(proofObj.to, proofObj.token)
+						const newBalance = current + totalCredited
+						await updateBalance(proofObj.to, proofObj.token, newBalance)
+					}
+
+					if (depositsCombined > 1) {
+						logger.info(
+							`Combined ${depositsCombined} deposits to fulfill ${proofObj.amount} ${proofObj.token} for vault ${proofObj.to}`
+						)
+					}
 				}
 			} else {
 				for (const proof of execution.proof) {

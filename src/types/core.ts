@@ -85,6 +85,18 @@ export interface Execution {
 }
 
 /**
+ * Proof structure for AssignDeposit intentions.
+ * Contains deposit assignment information used at publish time.
+ */
+export interface AssignDepositProof {
+	token: string
+	to: number
+	amount: string
+	deposit_id?: number // Optional: present when deposit was selected at intention time
+	depositor: string
+}
+
+/**
  * Execution object that wraps verified intentions before bundling.
  * Used internally by the proposer to accumulate intentions.
  */
