@@ -17,7 +17,13 @@ import {
 	findDepositWithSufficientRemaining,
 	createAssignmentEventTransactional,
 } from '../../src/utils/deposits.js'
-import { TEST_TX, TEST_UID, CTRL, TOKEN, ZERO } from '../helpers/testFixtures.js'
+import {
+	TEST_TX,
+	TEST_UID,
+	CTRL,
+	TOKEN,
+	ZERO,
+} from '../helpers/testFixtures.js'
 
 beforeAll(async () => {
 	await pool.query('DELETE FROM deposits WHERE tx_hash = $1', [TEST_TX])
