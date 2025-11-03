@@ -72,3 +72,28 @@ export const SAMPLE_INTENTION = {
 	vaultId: TEST_VAULT_ID,
 	signature: '0x' + '0'.repeat(130), // Dummy signature
 }
+
+/**
+ * Test transaction hash for deposits tests.
+ */
+export const TEST_TX = '0xtest-deposit-tx'
+
+/**
+ * Generate test UID for deposits tests.
+ */
+export const TEST_UID = (n: number) => `${TEST_TX}:${n}`
+
+/**
+ * Controller address for deposits tests.
+ */
+export const CTRL = '0xCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCcCc'
+
+/**
+ * Token address for deposits tests.
+ */
+export const TOKEN = '0x1111111111111111111111111111111111111111'
+
+/**
+ * Zero address (ETH address).
+ */
+export const ZERO = '0x0000000000000000000000000000000000000000'
