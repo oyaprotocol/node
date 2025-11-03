@@ -76,6 +76,8 @@ export interface EnvironmentConfig {
 	PROPOSER_ADDRESS: string
 	/** The internal integer ID of the proposer vault */
 	PROPOSER_VAULT_ID: number
+	/** Enable vault seeding using AssignDeposit (default: false) */
+	VAULT_SEEDING: boolean
 	/** Private key of the bundle proposer account */
 	PROPOSER_KEY: string
 	/** Port number for the Express server (default: 3000) */

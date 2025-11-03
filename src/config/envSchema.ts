@@ -139,6 +139,15 @@ export const envSchema: EnvVariable[] = [
 		transformer: (value) => parseInt(value),
 	},
 	{
+		name: 'VAULT_SEEDING',
+		required: false,
+		type: 'boolean',
+		description:
+			'Enable vault seeding using AssignDeposit. When true, new vaults are automatically seeded with initial token balances via AssignDeposit intentions.',
+		defaultValue: false,
+		transformer: (value) => value === 'true',
+	},
+	{
 		name: 'PROPOSER_KEY',
 		required: true,
 		type: 'privateKey',

@@ -1,5 +1,14 @@
 /**
  * CreateVault intention handler
+ *
+ * Processes CreateVault intentions by:
+ * 1. Calling the on-chain VaultTracker contract to create the vault
+ * 2. Parsing the VaultCreated event to get the new vault ID
+ * 3. Persisting the vault-to-controller mapping in the database
+ * 4. Optionally scheduling a seeding intention (if VAULT_SEEDING is enabled)
+ *
+ * Seeding is best-effort: vault creation succeeds even if seeding fails.
+ * This allows vaults to be created even when deposits are temporarily unavailable.
  */
 
 import type { Intention } from '../../types/core.js'
@@ -55,8 +64,20 @@ export async function handleCreateVault(params: {
 		// 3. Persist the new vault-to-controller mapping to the database.
 		await deps.updateVaultControllers(newVaultId, [validatedController])
 
-		// 4. Submit an intention to seed it with initial balances.
-		await deps.createAndSubmitSeedingIntention(newVaultId)
+		// 4. Submit an intention to seed it with initial balances (best-effort).
+		// Seeding failures should not prevent vault creation from succeeding.
+		try {
+			await deps.createAndSubmitSeedingIntention(newVaultId)
+			deps.logger.info(
+				`Seeding intention scheduled successfully for vault ${newVaultId}`
+			)
+		} catch (seedingError) {
+			deps.logger.error(
+				`Seeding scheduling failed for vault ${newVaultId}:`,
+				seedingError
+			)
+			// Continue - vault creation succeeded, seeding can be retried later if needed
+		}
 	} catch (error) {
 		deps.logger.error('Failed to process CreateVault intention:', error)
 		throw error

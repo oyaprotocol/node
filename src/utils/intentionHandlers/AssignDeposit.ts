@@ -1,5 +1,18 @@
 /**
  * AssignDeposit intention handler
+ *
+ * Processes AssignDeposit intentions which assign existing on-chain deposits to vaults.
+ *
+ * Key features:
+ * - Discovers deposits from on-chain events (ERC20 or ETH)
+ * - Selects deposits with sufficient remaining balance
+ * - Supports partial deposit assignments (can combine multiple deposits)
+ * - AssignDeposit is a protocol-level action: always sets execution.from = 0 (protocol vault)
+ * - Nonces are not relevant for AssignDeposit; conflicts resolved by bundle inclusion order
+ *
+ * At publish time, deposits are assigned and balances are credited to destination vaults.
+ * If a selected deposit is exhausted, the system automatically falls back to combining
+ * multiple deposits to fulfill the requirement.
  */
 
 import type {
@@ -42,6 +55,10 @@ export async function handleAssignDeposit(params: {
 	const { intention, validatedController, validatedSignature, context } = params
 
 	await context.validateAssignDepositStructure(intention)
+
+	// AssignDeposit is a protocol-level action: always use from=0 (protocol vault)
+	// Nonces are not relevant for AssignDeposit; conflicts resolved by bundle inclusion order
+	const PROTOCOL_VAULT_ID = 0
 
 	const zeroAddress = '0x0000000000000000000000000000000000000000'
 	const proof: unknown[] = []
@@ -96,7 +113,6 @@ export async function handleAssignDeposit(params: {
 			token: isEth ? zeroAddress : input.asset,
 			to: output.to as number,
 			amount: input.amount,
-			deposit_id: match.id,
 			depositor: validatedController,
 		})
 	}
@@ -104,14 +120,17 @@ export async function handleAssignDeposit(params: {
 	context.diagnostic.info('AssignDeposit intention processed', {
 		controller: validatedController,
 		count: intention.inputs.length,
+		protocolVault: PROTOCOL_VAULT_ID,
 	})
-	context.logger.info('AssignDeposit cached with proof count:', proof.length)
+	context.logger.info(
+		`AssignDeposit cached with proof count: ${proof.length}, protocol-level action (from=0)`
+	)
 
 	return {
 		execution: [
 			{
 				intention,
-				from: 0,
+				from: PROTOCOL_VAULT_ID,
 				proof,
 				signature: validatedSignature,
 			},
