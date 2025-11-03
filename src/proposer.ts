@@ -36,7 +36,7 @@ import {
 	getVaultsForController,
 	updateVaultControllers,
 } from './utils/vaults.js'
-import { PROPOSER_VAULT_ID, SEED_CONFIG } from './config/seedingConfig.js'
+import { SEED_CONFIG } from './config/seedingConfig.js'
 import {
 	validateIntention,
 	validateAddress,
@@ -364,6 +364,7 @@ async function getLatestNonce(): Promise<number> {
  * Retrieves the latest nonce for a specific vault from the database.
  * Returns 0 if no nonce is found for the vault.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function getVaultNonce(vaultId: number | string): Promise<number> {
 	const result = await pool.query('SELECT nonce FROM vaults WHERE vault = $1', [
 		String(vaultId),
@@ -587,7 +588,7 @@ async function saveBundleData(
 				continue
 			}
 
-			// Skip nonce updates if from is 0 (edge case safety)
+			// Skip nonce updates for protocol-level actions (from=0, e.g., AssignDeposit)
 			if (execution.from === 0) {
 				continue
 			}
@@ -921,17 +922,13 @@ async function createAndSubmitSeedingIntention(
 		return
 	}
 
-	const submitterVaultId = PROPOSER_VAULT_ID.value
-	const currentNonce = await getVaultNonce(submitterVaultId)
-	const nextNonce = currentNonce + 1
-
 	// Build token summary for logging
 	const tokenSummary = SEED_CONFIG.map(
 		(token) => `${token.amount} ${token.symbol || token.address}`
 	).join(', ')
 
 	logger.info(
-		`Seeding requested for vault ${newVaultId}: controller=${PROPOSER_ADDRESS}, submitterVaultId=${submitterVaultId}, nonce=${nextNonce}, tokens=[${tokenSummary}]`
+		`Seeding requested for vault ${newVaultId}: controller=${PROPOSER_ADDRESS}, protocol-level AssignDeposit (nonce=0, from=0), tokens=[${tokenSummary}]`
 	)
 
 	const inputs: IntentionInput[] = []
@@ -957,7 +954,7 @@ async function createAndSubmitSeedingIntention(
 
 	const intention: Intention = {
 		action: 'AssignDeposit',
-		nonce: nextNonce,
+		nonce: 0, // Protocol-level action: nonce=0 (protocol vault)
 		expiry: Math.floor(Date.now() / 1000) + 300, // 5 minute expiry
 		inputs,
 		outputs,
@@ -974,7 +971,7 @@ async function createAndSubmitSeedingIntention(
 	await handleIntention(intention, signature, PROPOSER_ADDRESS)
 
 	logger.info(
-		`Successfully submitted AssignDeposit seeding intention for vault ${newVaultId} (nonce: ${nextNonce}, submitter vault: ${submitterVaultId}).`
+		`Successfully submitted AssignDeposit seeding intention for vault ${newVaultId} (protocol-level: nonce=0, from=0).`
 	)
 }
 
@@ -1083,7 +1080,6 @@ async function handleIntention(
 				discoverAndIngestEthDeposits,
 				findDepositWithSufficientRemaining,
 				validateVaultIdOnChain,
-				getVaultsForController,
 				logger,
 				diagnostic,
 			},

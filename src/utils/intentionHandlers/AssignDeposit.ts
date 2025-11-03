@@ -7,11 +7,8 @@
  * - Discovers deposits from on-chain events (ERC20 or ETH)
  * - Selects deposits with sufficient remaining balance
  * - Supports partial deposit assignments (can combine multiple deposits)
- * - Determines submitter vault for nonce tracking:
- *   - If inputs have `from` field: uses that vault ID
- *   - If no `from` field: queries vaults controlled by the controller
- *   - If no vaults found: uses from=0 (no nonce update)
- * - Sets execution.from to the submitter vault ID for proper nonce tracking
+ * - AssignDeposit is a protocol-level action: always sets execution.from = 0 (protocol vault)
+ * - Nonces are not relevant for AssignDeposit; conflicts resolved by bundle inclusion order
  *
  * At publish time, deposits are assigned and balances are credited to destination vaults.
  * If a selected deposit is exhausted, the system automatically falls back to combining
@@ -45,7 +42,6 @@ type AssignDepositContext = {
 		minAmount: string
 	}) => Promise<{ id: number; remaining: string } | null>
 	validateVaultIdOnChain: (vaultId: number) => Promise<void>
-	getVaultsForController: (controller: string) => Promise<string[]>
 	logger: { info: (...args: unknown[]) => void }
 	diagnostic: { info: (...args: unknown[]) => void }
 }
@@ -60,41 +56,9 @@ export async function handleAssignDeposit(params: {
 
 	await context.validateAssignDepositStructure(intention)
 
-	// Determine submitter vault for nonce tracking
-	// 1. If inputs have `from` field, use that (all inputs must have the same `from` value per validator)
-	// 2. If no `from` field, determine from controller by querying vaults
-	let submitterVaultId: number | 0 = 0
-	const inputsWithFrom = intention.inputs.filter(
-		(input) => input.from !== undefined
-	)
-	if (inputsWithFrom.length > 0) {
-		// All inputs should have the same `from` value per validator, but double-check
-		const fromValues = new Set(inputsWithFrom.map((input) => input.from))
-		if (fromValues.size > 1) {
-			throw new Error(
-				'AssignDeposit requires all inputs to have the same `from` vault ID'
-			)
-		}
-		submitterVaultId = inputsWithFrom[0].from as number
-	} else {
-		// No `from` field in inputs, determine from controller
-		const vaults = await context.getVaultsForController(validatedController)
-		if (vaults.length === 1) {
-			submitterVaultId = parseInt(vaults[0])
-		} else if (vaults.length > 1) {
-			// Multiple vaults controlled by this controller - use the first one
-			context.logger.info(
-				`Controller ${validatedController} controls multiple vaults, using first vault ${vaults[0]} for nonce tracking`
-			)
-			submitterVaultId = parseInt(vaults[0])
-		} else {
-			// No vaults found - cannot determine submitter vault, use 0 (no nonce update)
-			context.logger.info(
-				`Controller ${validatedController} does not control any vaults, using from=0 (no nonce update)`
-			)
-			submitterVaultId = 0
-		}
-	}
+	// AssignDeposit is a protocol-level action: always use from=0 (protocol vault)
+	// Nonces are not relevant for AssignDeposit; conflicts resolved by bundle inclusion order
+	const PROTOCOL_VAULT_ID = 0
 
 	const zeroAddress = '0x0000000000000000000000000000000000000000'
 	const proof: unknown[] = []
@@ -156,17 +120,17 @@ export async function handleAssignDeposit(params: {
 	context.diagnostic.info('AssignDeposit intention processed', {
 		controller: validatedController,
 		count: intention.inputs.length,
-		submitterVaultId,
+		protocolVault: PROTOCOL_VAULT_ID,
 	})
 	context.logger.info(
-		`AssignDeposit cached with proof count: ${proof.length}, submitter vault: ${submitterVaultId}`
+		`AssignDeposit cached with proof count: ${proof.length}, protocol-level action (from=0)`
 	)
 
 	return {
 		execution: [
 			{
 				intention,
-				from: submitterVaultId,
+				from: PROTOCOL_VAULT_ID,
 				proof,
 				signature: validatedSignature,
 			},

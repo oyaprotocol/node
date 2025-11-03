@@ -271,7 +271,7 @@ describe('AssignDeposit seeding flow (DB)', () => {
 		expect(errorThrown).toBe(true)
 	})
 
-	test('Nonce tracking: AssignDeposit updates submitter vault nonce at publish', async () => {
+	test('Nonce tracking: AssignDeposit does not update vault nonces (protocol-level action)', async () => {
 		// Create deposit
 		await insertDepositIfMissing({
 			tx_hash: TEST_TX,
@@ -290,12 +290,10 @@ describe('AssignDeposit seeding flow (DB)', () => {
 			'SELECT nonce FROM vaults WHERE vault = $1',
 			[String(PROPOSER_VAULT_ID)]
 		)
-		expect(initialNonce.rows[0].nonce).toBe(0)
+		const initialNonceValue = initialNonce.rows[0].nonce
 
-		// Simulate AssignDeposit intention with nonce = currentNonce + 1
-		const intentionNonce = initialNonce.rows[0].nonce + 1
-
-		// Simulate assignment and nonce update at publish
+		// AssignDeposit is protocol-level: intention has nonce=0 and from=0
+		// Simulate assignment (deposit assignment happens, but nonce should not be updated)
 		const deposit = await findNextDepositWithAnyRemaining({
 			depositor: PROPOSER_CONTROLLER,
 			token: TOKEN,
@@ -308,19 +306,16 @@ describe('AssignDeposit seeding flow (DB)', () => {
 			String(NEW_VAULT_ID)
 		)
 
-		// Update nonce (simulating publishBundle behavior)
-		await pool.query('UPDATE vaults SET nonce = $2 WHERE vault = $1', [
-			String(PROPOSER_VAULT_ID),
-			intentionNonce,
-		])
+		// AssignDeposit with from=0 should NOT update any vault nonce
+		// (saveBundleData skips nonce updates when execution.from === 0)
 
-		// Verify nonce was updated
-		const updatedNonce = await pool.query(
+		// Verify nonce was NOT updated (should remain unchanged)
+		const finalNonce = await pool.query(
 			'SELECT nonce FROM vaults WHERE vault = $1',
 			[String(PROPOSER_VAULT_ID)]
 		)
-		expect(updatedNonce.rows[0].nonce).toBe(intentionNonce)
-		expect(updatedNonce.rows[0].nonce).toBe(1)
+		expect(finalNonce.rows[0].nonce).toBe(initialNonceValue)
+		expect(finalNonce.rows[0].nonce).toBe(0)
 	})
 
 	test('findNextDepositWithAnyRemaining: Returns oldest deposit first', async () => {
