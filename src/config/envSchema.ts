@@ -143,7 +143,7 @@ export const envSchema: EnvVariable[] = [
 		required: false,
 		type: 'boolean',
 		description:
-			'Enable vault seeding using AssignDeposit (if true, uses AssignDeposit; if false, uses transfer-based seeding)',
+			'Enable vault seeding using AssignDeposit. When true, new vaults are automatically seeded with initial token balances via AssignDeposit intentions.',
 		defaultValue: false,
 		transformer: (value) => value === 'true',
 	},

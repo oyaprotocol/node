@@ -484,55 +484,6 @@ async function updateBalance(
 }
 
 /**
- * Seeds a new vault with initial token balances by transferring them from the
- * proposer's vault.
- * This is now a fallback/manual method. The primary path is via createAndSubmitSeedingIntention.
- */
-/*
-async function initializeBalancesForVault(newVaultId: number): Promise<void> {
-	logger.info(
-		`Directly seeding new vault (ID: ${newVaultId}) from proposer vault (ID: ${PROPOSER_VAULT_ID.value})...`
-	)
-
-	for (const token of SEED_CONFIG) {
-		try {
-			const tokenDecimals = await getSepoliaTokenDecimals(token.address)
-			const seedAmount = parseUnits(token.amount, Number(tokenDecimals))
-
-			const proposerBalance = await getBalance(
-				PROPOSER_VAULT_ID.value,
-				token.address
-			)
-
-			if (proposerBalance < seedAmount) {
-				logger.warn(
-					`- Insufficient proposer balance for ${token.address}. Have: ${proposerBalance}, Need: ${seedAmount}. Skipping.`
-				)
-				continue
-			}
-
-			// Use the single, updated function for the transfer
-			await updateBalances(
-				PROPOSER_VAULT_ID.value,
-				newVaultId,
-				token.address,
-				seedAmount.toString()
-			)
-
-			logger.info(
-				`- Successfully seeded vault ${newVaultId} with ${token.amount} of token ${token.address}`
-			)
-		} catch (error) {
-			logger.error(
-				`- Failed to seed vault ${newVaultId} with token ${token.address}:`,
-				error
-			)
-		}
-	}
-}
-*/
-
-/**
  * Records proposer activity in the database.
  * Updates last_seen timestamp for monitoring.
  */
