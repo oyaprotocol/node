@@ -20,59 +20,11 @@ import {
 	ValidationError,
 } from '../src/utils/validator.js'
 import type { Intention } from '../src/types/core.js'
+import { createMockValidIntention } from './helpers/testFixtures.js'
 
 // --- MOCK DATA FOR TESTS ---
 
-const mockValidIntention: Intention = {
-	action: 'Swap 1,000 USDC for 0.3 WETH with .016 WETH in fees',
-	nonce: 1,
-	expiry: Math.floor(Date.now() / 1000) + 3600, // Expires in 1 hour
-	inputs: [
-		{
-			asset: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
-			amount: '1000.0',
-			chain_id: 1,
-		},
-	],
-	outputs: [
-		{
-			asset: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
-			amount: '0.3',
-			to_external: '0xDB473D9716ac61dc4D4aeA6e4d691239DB84C77D',
-			chain_id: 1,
-		},
-	],
-	totalFee: [
-		{
-			asset: ['WETH'],
-			amount: '0.016',
-		},
-	],
-	proposerTip: [
-		{
-			asset: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
-			amount: '0.01',
-			to: 123, // Some vault ID
-			chain_id: 1,
-		},
-	],
-	agentTip: [
-		{
-			asset: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
-			amount: '0.005',
-			to: 456, // Some other vault ID
-			chain_id: 1,
-		},
-	],
-	protocolFee: [
-		{
-			asset: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
-			amount: '0.001',
-			to: 0, // Oya vault ID
-			chain_id: 1,
-		},
-	],
-}
+const mockValidIntention: Intention = createMockValidIntention()
 
 // --- TEST SUITES ---
 
