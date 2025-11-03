@@ -149,7 +149,6 @@ export async function handleAssignDeposit(params: {
 			token: isEth ? zeroAddress : input.asset,
 			to: output.to as number,
 			amount: input.amount,
-			deposit_id: match.id,
 			depositor: validatedController,
 		})
 	}

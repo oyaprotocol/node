@@ -750,52 +750,10 @@ async function publishBundle(data: string, signature: string, from: string) {
 										output.asset.toLowerCase() === proofObj.token.toLowerCase()
 								)?.chain_id || 11155111 // Default to Sepolia if not found
 
-					// If deposit_id exists, try to use it first
-					if (proofObj.deposit_id !== undefined) {
-						try {
-							await createAssignmentEventTransactional(
-								proofObj.deposit_id,
-								proofObj.amount,
-								String(proofObj.to)
-							)
-
-							// Credit the destination vault balance
-							const current = await getBalance(proofObj.to, proofObj.token)
-							const increment = safeBigInt(proofObj.amount)
-							const newBalance = current + increment
-							await updateBalance(proofObj.to, proofObj.token, newBalance)
-
-							// Successfully assigned, log and move to next proof
-							logger.info(
-								`Vault ${proofObj.to} seeded successfully: ${proofObj.amount} ${proofObj.token} assigned from deposit ${proofObj.deposit_id}`
-							)
-							continue
-						} catch (error) {
-							// Check if error is "Not enough remaining"
-							if (
-								error instanceof Error &&
-								error.message.includes('Not enough remaining')
-							) {
-								logger.warn(
-									`Deposit ${proofObj.deposit_id} exhausted for token ${proofObj.token}, falling back to multi-deposit combination (required: ${proofObj.amount})`
-								)
-								// Fall through to multi-deposit combination path
-							} else {
-								// Re-throw other errors
-								throw error
-							}
-						}
-					}
-
-					// Multi-deposit combination path (for deferred selection or fallback)
-					// This path is used when deposit_id is undefined (deferred selection) or
-					// when the specified deposit_id was exhausted (fallback from catch block)
-					const isDeferredSelection = proofObj.deposit_id === undefined
-					if (isDeferredSelection) {
-						logger.info(
-							`Using deferred deposit selection for token ${proofObj.token}, vault ${proofObj.to}: combining deposits to fulfill ${proofObj.amount}`
-						)
-					}
+					// Multi-deposit combination path: always combine deposits at publish time
+					logger.info(
+						`Assigning deposits for token ${proofObj.token}, vault ${proofObj.to}: combining deposits to fulfill ${proofObj.amount}`
+					)
 					let depositsCombined = 0
 					let totalCredited = 0n
 
@@ -856,7 +814,7 @@ async function publishBundle(data: string, signature: string, from: string) {
 						)
 					} else if (depositsCombined === 1) {
 						logger.info(
-							`Vault ${proofObj.to} seeded successfully: ${proofObj.amount} ${proofObj.token} assigned via deferred deposit selection`
+							`Vault ${proofObj.to} assigned successfully: ${proofObj.amount} ${proofObj.token} assigned from deposit`
 						)
 					}
 				}

@@ -92,7 +92,6 @@ export interface AssignDepositProof {
 	token: string
 	to: number
 	amount: string
-	deposit_id?: number // Optional: present when deposit was selected at intention time
 	depositor: string
 }
 
